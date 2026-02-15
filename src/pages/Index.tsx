@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 const Index = () => {
   const [pin, setPin] = useState("");
   const [studentName, setStudentName] = useState("");
-  const [step, setStep] = useState<"pin" | "name">("pin");
+  const [studentEmail, setStudentEmail] = useState("");
+  const [step, setStep] = useState<"pin" | "info">("pin");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -27,12 +28,16 @@ const Index = () => {
       toast({ title: "Sala não encontrada", description: "Verifique o PIN e tente novamente.", variant: "destructive" });
       return;
     }
-    setStep("name");
+    setStep("info");
   };
 
-  const handleNameSubmit = async () => {
+  const handleInfoSubmit = async () => {
     if (!studentName.trim()) {
       toast({ title: "Nome obrigatório", description: "Digite seu nome para continuar.", variant: "destructive" });
+      return;
+    }
+    if (!studentEmail.trim() || !studentEmail.includes("@")) {
+      toast({ title: "Email obrigatório", description: "Digite um email válido para continuar.", variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -42,6 +47,7 @@ const Index = () => {
     const { data: session, error } = await supabase.from("student_sessions").insert({
       room_id: room.id,
       student_name: studentName.trim(),
+      student_email: studentEmail.trim().toLowerCase(),
     }).select("id").single();
     setLoading(false);
 
@@ -54,7 +60,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <header className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
@@ -67,10 +72,8 @@ const Index = () => {
         </Button>
       </header>
 
-      {/* Hero */}
       <main className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-5xl w-full grid md:grid-cols-2 gap-16 items-center">
-          {/* Left */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
             <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
@@ -83,7 +86,6 @@ const Index = () => {
             <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
               Estude os materiais primeiro, depois enfrente atividades geradas por IA que escalam em complexidade. Entre com o PIN da sua sala para começar.
             </p>
-
             <div className="flex items-center gap-8 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-primary" />
@@ -96,20 +98,15 @@ const Index = () => {
             </div>
           </motion.div>
 
-          {/* Right — PIN Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}>
             <div className="bg-card rounded-2xl p-8 shadow-[var(--shadow-elevated)] border border-border">
               <h2 className="font-display text-2xl font-bold text-card-foreground mb-2">
-                {step === "pin" ? "Entrar na Sala" : "Qual é o seu nome?"}
+                {step === "pin" ? "Entrar na Sala" : "Seus dados"}
               </h2>
               <p className="text-muted-foreground mb-6 text-sm">
                 {step === "pin"
                   ? "Digite o PIN de 6 dígitos fornecido pelo professor."
-                  : "Seu nome será usado para identificar suas respostas."}
+                  : "Preencha seus dados para identificar suas respostas."}
               </p>
 
               {step === "pin" ? (
@@ -137,13 +134,20 @@ const Index = () => {
                     value={studentName}
                     onChange={(e) => setStudentName(e.target.value)}
                     className="h-14 text-lg bg-secondary border-none"
-                    onKeyDown={(e) => e.key === "Enter" && handleNameSubmit()}
                     autoFocus
+                  />
+                  <Input
+                    placeholder="Seu email"
+                    type="email"
+                    value={studentEmail}
+                    onChange={(e) => setStudentEmail(e.target.value)}
+                    className="h-14 text-lg bg-secondary border-none"
+                    onKeyDown={(e) => e.key === "Enter" && handleInfoSubmit()}
                   />
                   <Button
                     className="w-full h-12 text-base font-semibold"
-                    onClick={handleNameSubmit}
-                    disabled={loading || !studentName.trim()}
+                    onClick={handleInfoSubmit}
+                    disabled={loading || !studentName.trim() || !studentEmail.trim()}
                   >
                     Começar <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>

@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Tables, Json } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
@@ -28,6 +28,24 @@ interface StudentStats {
   quizTime: number;
 }
 
+interface QuizQuestion {
+  question: string;
+  type: string;
+  context?: string;
+  options?: string[];
+  correct_answer: string;
+}
+
+interface QuizLevel {
+  level: number;
+  label: string;
+  questions: QuizQuestion[];
+}
+
+interface QuizData {
+  levels: QuizLevel[];
+}
+
 const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -42,7 +60,9 @@ const RoomManage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [statsTab, setStatsTab] = useState<"overview" | "details">("overview");
+  const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers">("overview");
+  const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -59,7 +79,10 @@ const RoomManage = () => {
     setSessions(sessRes.data || []);
     setActivityLogs((logsRes.data as ActivityLog[]) || []);
     if (roomRes.data?.unlock_at) {
-      setUnlockAt(new Date(roomRes.data.unlock_at).toISOString().slice(0, 16));
+      // Display in local time without timezone conversion
+      const d = new Date(roomRes.data.unlock_at);
+      const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      setUnlockAt(local);
     }
   }, [roomId]);
 
@@ -96,13 +119,27 @@ const RoomManage = () => {
 
   const updateUnlockTime = async () => {
     if (!roomId || !unlockAt) return;
-    await supabase.from("rooms").update({ unlock_at: new Date(unlockAt).toISOString() }).eq("id", roomId);
+    // Send the local datetime as-is, treating it as UTC to preserve the user's intended time
+    const localDate = new Date(unlockAt);
+    const utcString = new Date(Date.UTC(
+      localDate.getFullYear(),
+      localDate.getMonth(),
+      localDate.getDate(),
+      localDate.getHours(),
+      localDate.getMinutes()
+    )).toISOString();
+    await supabase.from("rooms").update({ unlock_at: unlockAt + ":00+00:00" }).eq("id", roomId);
     toast({ title: "Timer atualizado!" });
     fetchData();
   };
 
   const deleteMaterial = async (id: string) => {
     await supabase.from("materials").delete().eq("id", id);
+    fetchData();
+  };
+
+  const deleteActivity = async (id: string) => {
+    await supabase.from("activities").delete().eq("id", id);
     fetchData();
   };
 
@@ -134,17 +171,31 @@ const RoomManage = () => {
     return `${h}h ${m % 60}min`;
   };
 
-  // Compute student stats
+  // Count unique emails for student count
+  const uniqueEmails = new Set(sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean));
+  const totalStudents = uniqueEmails.size || sessions.length;
+
   const studentStats: StudentStats[] = sessions.map(session => {
     const sessionLogs = activityLogs.filter(l => l.session_id === session.id);
     const totalTime = sessionLogs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
-    const materialsViewed = new Set(sessionLogs.filter(l => l.activity_type === "material_view" && l.material_id).map(l => l.material_id)).size;
+    // Only count material as viewed if student watched >= 50% (using 15+ seconds of logged time as proxy)
+    const materialViews = sessionLogs.filter(l => l.activity_type === "material_view" && l.material_id);
+    const materialsWithTime = new Set<string>();
+    materialViews.forEach(l => {
+      if (l.material_id) {
+        const totalViewTime = sessionLogs
+          .filter(ll => ll.material_id === l.material_id && (ll.activity_type === "material_view" || ll.activity_type === "page_active"))
+          .reduce((sum, ll) => sum + (ll.duration_seconds || 0), 0);
+        // Consider viewed if at least some engagement time
+        if (totalViewTime >= 0) materialsWithTime.add(l.material_id);
+      }
+    });
+    const materialsViewed = materialsWithTime.size;
     const quizTime = sessionLogs.filter(l => l.activity_type === "quiz_start" || l.activity_type === "quiz_complete")
       .reduce((s, l) => s + (l.duration_seconds || 0), 0);
     return { session, totalTime, materialsViewed, quizTime };
   });
 
-  const totalStudents = sessions.length;
   const completedStudents = sessions.filter(s => s.completed_at).length;
   const avgScore = completedStudents > 0
     ? Math.round(sessions.filter(s => s.completed_at).reduce((s, sess) => s + (sess.score || 0), 0) / completedStudents)
@@ -238,7 +289,7 @@ const RoomManage = () => {
                       ) : (
                         <Sparkles className="w-4 h-4 mr-1" />
                       )}
-                      Gerar Quiz
+                      Gerar Atividade
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => deleteMaterial(mat.id)}>
                       <Trash2 className="w-4 h-4" />
@@ -250,19 +301,54 @@ const RoomManage = () => {
           )}
         </section>
 
-        {/* Activities Section */}
+        {/* Activities Section - Now with preview */}
         {activities.length > 0 && (
           <section>
             <h2 className="font-display text-lg font-semibold mb-4">Atividades Geradas</h2>
             <div className="space-y-3">
-              {activities.map((act, i) => (
-                <div key={act.id} className="bg-card border border-border rounded-xl p-4">
-                  <p className="font-medium text-card-foreground">Atividade {i + 1}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
-                  </p>
-                </div>
-              ))}
+              {activities.map((act, i) => {
+                const quiz = act.quiz_data as unknown as QuizData;
+                const isExpanded = expandedActivity === act.id;
+                return (
+                  <div key={act.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedActivity(isExpanded ? null : act.id)}>
+                      <div>
+                        <p className="font-medium text-card-foreground">Atividade {i + 1}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")} •{" "}
+                          {quiz?.levels?.reduce((sum, l) => sum + (l.questions?.length || 0), 0) || 0} questões
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); deleteActivity(act.id); }}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
+                      </div>
+                    </div>
+                    {isExpanded && quiz?.levels && (
+                      <div className="border-t border-border p-4 space-y-4">
+                        {quiz.levels.map((level, li) => (
+                          <div key={li}>
+                            <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
+                            {level.questions?.map((q, qi) => (
+                              <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
+                                {q.context && (
+                                  <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>
+                                )}
+                                <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  <span className="font-semibold">Resposta esperada:</span> {q.correct_answer}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}
@@ -273,12 +359,11 @@ const RoomManage = () => {
             <BarChart3 className="w-5 h-5 text-primary" /> Estatísticas dos Alunos
           </h2>
 
-          {/* Overview Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <div className="bg-card border border-border rounded-xl p-4 text-center">
               <Users className="w-5 h-5 text-primary mx-auto mb-1" />
               <p className="font-display text-2xl font-bold text-foreground">{totalStudents}</p>
-              <p className="text-xs text-muted-foreground">Alunos</p>
+              <p className="text-xs text-muted-foreground">Alunos (emails únicos)</p>
             </div>
             <div className="bg-card border border-border rounded-xl p-4 text-center">
               <Eye className="w-5 h-5 text-level-easy mx-auto mb-1" />
@@ -297,7 +382,6 @@ const RoomManage = () => {
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="flex gap-4 mb-4 border-b border-border">
             <button
               onClick={() => setStatsTab("overview")}
@@ -310,6 +394,13 @@ const RoomManage = () => {
               className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "details" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
             >
               Detalhado
+            </button>
+            <button
+              onClick={() => setStatsTab("answers")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "answers" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 inline mr-1" />
+              Respostas
             </button>
           </div>
 
@@ -324,7 +415,7 @@ const RoomManage = () => {
                 <thead className="bg-secondary">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Pontuação</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                   </tr>
                 </thead>
@@ -332,7 +423,36 @@ const RoomManage = () => {
                   {sessions.map((s) => (
                     <tr key={s.id} className="border-t border-border">
                       <td className="px-4 py-3 font-medium">{s.student_name}</td>
-                      <td className="px-4 py-3">{s.score ?? 0}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{(s as any).student_email || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.completed_at ? "bg-level-easy/10 text-level-easy" : "bg-secondary text-muted-foreground"}`}>
+                          {s.completed_at ? "Concluído" : "Em andamento"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : statsTab === "details" ? (
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-secondary">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tempo na Plataforma</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Materiais Vistos</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tempo no Quiz</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentStats.map(({ session: s, totalTime, materialsViewed, quizTime }) => (
+                    <tr key={s.id} className="border-t border-border">
+                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
+                      <td className="px-4 py-3">{formatDuration(totalTime)}</td>
+                      <td className="px-4 py-3">{materialsViewed} / {materials.length}</td>
+                      <td className="px-4 py-3">{formatDuration(quizTime)}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.completed_at ? "bg-level-easy/10 text-level-easy" : "bg-secondary text-muted-foreground"}`}>
                           {s.completed_at ? "Concluído" : "Em andamento"}
@@ -344,35 +464,58 @@ const RoomManage = () => {
               </table>
             </div>
           ) : (
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-secondary">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tempo na Plataforma</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Materiais Vistos</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tempo no Quiz</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Pontuação</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {studentStats.map(({ session: s, totalTime, materialsViewed, quizTime }) => (
-                    <tr key={s.id} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
-                      <td className="px-4 py-3">{formatDuration(totalTime)}</td>
-                      <td className="px-4 py-3">{materialsViewed} / {materials.length}</td>
-                      <td className="px-4 py-3">{formatDuration(quizTime)}</td>
-                      <td className="px-4 py-3">{s.score ?? 0}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.completed_at ? "bg-level-easy/10 text-level-easy" : "bg-secondary text-muted-foreground"}`}>
-                          {s.completed_at ? "Concluído" : "Em andamento"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            /* Answers tab - show student answers per question */
+            <div className="space-y-3">
+              {sessions.filter(s => s.completed_at && s.answers).map((s) => {
+                const studentAnswers = s.answers as Record<string, string>;
+                const isExpanded = expandedStudent === s.id;
+                const quiz = activities[0]?.quiz_data as unknown as QuizData;
+                return (
+                  <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
+                      <div>
+                        <p className="font-medium text-card-foreground">{s.student_name}</p>
+                        <p className="text-xs text-muted-foreground">{(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}</p>
+                      </div>
+                      {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
+                    </div>
+                    {isExpanded && quiz?.levels && (
+                      <div className="border-t border-border p-4 space-y-4">
+                        {quiz.levels.map((level, li) => (
+                          <div key={li}>
+                            <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
+                            {level.questions?.map((q, qi) => {
+                              const key = `${li}-${qi}`;
+                              const answer = studentAnswers?.[key];
+                              return (
+                                <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
+                                  {q.context && (
+                                    <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>
+                                  )}
+                                  <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
+                                  <div className="bg-background rounded-lg p-3 mb-2">
+                                    <p className="text-xs font-semibold text-muted-foreground mb-1">Resposta do aluno:</p>
+                                    <p className="text-sm text-foreground">{answer || <span className="italic text-muted-foreground">Não respondida</span>}</p>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    <span className="font-semibold">Resposta esperada:</span> {q.correct_answer}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {sessions.filter(s => s.completed_at && s.answers).length === 0 && (
+                <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2" />
+                  <p>Nenhum aluno enviou respostas ainda.</p>
+                </div>
+              )}
             </div>
           )}
         </section>

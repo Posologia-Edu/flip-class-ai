@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -12,8 +12,8 @@ type Material = Tables<"materials">;
 
 interface QuizQuestion {
   question: string;
-  type: "true_false" | "multiple_choice" | "open_ended";
-  options?: string[];
+  type: "case_study" | "open_ended";
+  context?: string;
   correct_answer: string;
 }
 
@@ -29,6 +29,7 @@ interface QuizData {
 
 const StudentView = () => {
   const { roomId, sessionId } = useParams<{ roomId: string; sessionId: string }>();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [room, setRoom] = useState<Room | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -45,7 +46,6 @@ const StudentView = () => {
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Track activity
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
     try {
@@ -61,15 +61,11 @@ const StudentView = () => {
     }
   }, [sessionId, roomId]);
 
-  // Track time on platform
   useEffect(() => {
     if (!sessionId || !roomId) return;
-    
-    // Log page active every 30 seconds
     activeTimer.current = setInterval(() => {
       logActivity("page_active", undefined, 30);
     }, 30000);
-
     return () => {
       if (activeTimer.current) clearInterval(activeTimer.current);
     };
@@ -96,7 +92,6 @@ const StudentView = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Countdown timer
   useEffect(() => {
     if (!room?.unlock_at || unlocked) return;
     const interval = setInterval(() => {
@@ -121,20 +116,15 @@ const StudentView = () => {
   };
 
   const levelStyles = [
-    { border: "border-level-easy", bg: "bg-level-easy/10", text: "text-level-easy", label: "Nível 1 — Fácil" },
-    { border: "border-level-medium", bg: "bg-level-medium/10", text: "text-level-medium", label: "Nível 2 — Médio" },
-    { border: "border-level-hard", bg: "bg-level-hard/10", text: "text-level-hard", label: "Nível 3 — Difícil" },
+    { border: "border-level-easy", bg: "bg-level-easy/10", text: "text-level-easy", label: "Nível 1 — Aplicação Básica" },
+    { border: "border-level-medium", bg: "bg-level-medium/10", text: "text-level-medium", label: "Nível 2 — Caso Intermediário" },
+    { border: "border-level-hard", bg: "bg-level-hard/10", text: "text-level-hard", label: "Nível 3 — Caso Complexo" },
   ];
 
   const levels = quizData?.levels || [];
   const currentLevelData = levels[currentLevel];
   const currentQ = currentLevelData?.questions?.[currentQuestion];
   const qKey = `${currentLevel}-${currentQuestion}`;
-
-  const selectAnswer = (answer: string) => {
-    if (showResult) return;
-    setAnswers((prev) => ({ ...prev, [qKey]: answer }));
-  };
 
   const checkAnswer = () => {
     setShowResult(true);
@@ -166,43 +156,37 @@ const StudentView = () => {
   const submitQuiz = async () => {
     setSubmitted(true);
     const quizDuration = Math.round((Date.now() - quizStartTime.current) / 1000);
-    let score = 0;
-    levels.forEach((level, li) => {
-      level.questions.forEach((q, qi) => {
-        const key = `${li}-${qi}`;
-        if (answers[key]?.toLowerCase().trim() === q.correct_answer?.toLowerCase().trim()) {
-          score++;
-        }
-      });
-    });
-
     logActivity("quiz_complete", undefined, quizDuration);
 
     if (sessionId) {
       await supabase.from("student_sessions").update({
-        score,
+        score: Object.keys(answers).length,
         answers: answers as unknown as Json,
         completed_at: new Date().toISOString(),
       }).eq("id", sessionId);
     }
-    toast({ title: "Quiz concluído!", description: `Você acertou ${score} questões.` });
+    toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
 
   if (!room) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Carregando...</div>;
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 bg-card flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-          <BookOpen className="w-5 h-5 text-primary-foreground" />
+      <header className="border-b border-border px-6 py-4 bg-card flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+            <BookOpen className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="font-display text-lg font-bold">{room.title}</h1>
+            <p className="text-xs text-muted-foreground">Sala de Aula Invertida</p>
+          </div>
         </div>
-        <div>
-          <h1 className="font-display text-lg font-bold">{room.title}</h1>
-          <p className="text-xs text-muted-foreground">Sala de Aula Invertida</p>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+          <LogOut className="w-4 h-4 mr-2" /> Sair
+        </Button>
       </header>
 
-      {/* Tabs */}
       <div className="border-b border-border bg-card px-6">
         <div className="flex gap-6">
           <button
@@ -266,8 +250,9 @@ const StudentView = () => {
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
-            <h2 className="font-display text-2xl font-bold mb-2">Quiz Concluído!</h2>
-            <p className="text-muted-foreground">Suas respostas foram enviadas ao professor.</p>
+            <h2 className="font-display text-2xl font-bold mb-2">Atividade Concluída!</h2>
+            <p className="text-muted-foreground mb-6">Suas respostas foram enviadas ao professor para avaliação.</p>
+            <Button onClick={() => navigate("/")}>Voltar para Início</Button>
           </motion.div>
         ) : currentQ ? (
           <AnimatePresence mode="wait">
@@ -280,56 +265,35 @@ const StudentView = () => {
                 <p className="text-xs text-muted-foreground mb-2">
                   Questão {currentQuestion + 1} de {currentLevelData.questions.length}
                 </p>
+
+                {currentQ.context && (
+                  <div className="bg-secondary rounded-lg p-4 mb-4 text-sm text-foreground leading-relaxed">
+                    <p className="font-semibold text-xs text-muted-foreground uppercase mb-2">Contexto do Caso</p>
+                    {currentQ.context}
+                  </div>
+                )}
+
                 <h3 className="font-display text-xl font-semibold text-card-foreground mb-6">
                   {currentQ.question}
                 </h3>
 
-                {currentQ.type === "open_ended" ? (
-                  <div className="space-y-4">
-                    <textarea
-                      className="w-full p-4 bg-secondary rounded-lg border-none text-foreground resize-none min-h-[120px] focus:outline-none focus:ring-2 focus:ring-ring"
-                      placeholder="Digite sua resposta..."
-                      value={openAnswer}
-                      onChange={(e) => {
-                        setOpenAnswer(e.target.value);
-                        setAnswers((prev) => ({ ...prev, [qKey]: e.target.value }));
-                      }}
-                      disabled={showResult}
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {(currentQ.options || ["Verdadeiro", "Falso"]).map((opt) => {
-                      const selected = answers[qKey] === opt;
-                      const isCorrect = showResult && opt.toLowerCase().trim() === currentQ.correct_answer.toLowerCase().trim();
-                      const isWrong = showResult && selected && !isCorrect;
-                      return (
-                        <button
-                          key={opt}
-                          onClick={() => selectAnswer(opt)}
-                          className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all font-medium ${
-                            isCorrect ? "border-level-easy bg-level-easy/10 text-level-easy" :
-                            isWrong ? "border-level-hard bg-level-hard/10 text-level-hard" :
-                            selected ? "border-primary bg-primary/5 text-foreground" :
-                            "border-border hover:border-primary/30 text-foreground"
-                          }`}
-                          disabled={showResult}
-                        >
-                          <div className="flex items-center justify-between">
-                            {opt}
-                            {isCorrect && <CheckCircle2 className="w-5 h-5" />}
-                            {isWrong && <XCircle className="w-5 h-5" />}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="space-y-4">
+                  <textarea
+                    className="w-full p-4 bg-secondary rounded-lg border-none text-foreground resize-none min-h-[150px] focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Desenvolva sua resposta com base no caso apresentado..."
+                    value={answers[qKey] || openAnswer}
+                    onChange={(e) => {
+                      setOpenAnswer(e.target.value);
+                      setAnswers((prev) => ({ ...prev, [qKey]: e.target.value }));
+                    }}
+                    disabled={showResult}
+                  />
+                </div>
 
                 <div className="mt-6 flex justify-end">
                   {!showResult ? (
                     <Button onClick={checkAnswer} disabled={!answers[qKey]}>
-                      Verificar
+                      Enviar Resposta
                     </Button>
                   ) : (
                     <Button onClick={nextQuestion}>
