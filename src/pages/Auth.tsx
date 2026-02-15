@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,20 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const auth = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!auth.loading && auth.user) {
+      if (!auth.isApproved) {
+        navigate("/pending-approval");
+      } else if (auth.isAdmin) {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
+    }
+  }, [auth, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,9 +39,8 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         toast({ title: "Erro no login", description: error.message, variant: "destructive" });
-      } else {
-        navigate("/dashboard");
       }
+      // Redirect handled by useEffect
     } else {
       const { error } = await supabase.auth.signUp({
         email,
@@ -39,7 +53,7 @@ const Auth = () => {
       if (error) {
         toast({ title: "Erro no cadastro", description: error.message, variant: "destructive" });
       } else {
-        toast({ title: "Conta criada!", description: "Verifique seu email para confirmar o cadastro." });
+        toast({ title: "Conta criada!", description: "Verifique seu email para confirmar o cadastro. Após confirmação, um administrador aprovará seu acesso." });
       }
     }
     setLoading(false);
