@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -63,6 +64,9 @@ const RoomManage = () => {
   const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers">("overview");
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
+  const [manualTranscript, setManualTranscript] = useState("");
+  const [selectedMaterialForQuiz, setSelectedMaterialForQuiz] = useState<Material | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -143,88 +147,30 @@ const RoomManage = () => {
     fetchData();
   };
 
-  const fetchTranscriptFromBrowser = async (videoId: string): Promise<string> => {
-    // Use innertube API from the browser (no bot detection issues)
-    const playerPayload = {
-      context: {
-        client: {
-          clientName: "WEB",
-          clientVersion: "2.20250101.00.00",
-          hl: "pt",
-          gl: "BR",
-        },
-      },
-      videoId: videoId,
-    };
-
-    const playerRes = await fetch(
-      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(playerPayload),
-      }
-    );
-
-    if (!playerRes.ok) throw new Error("Não foi possível acessar os dados do vídeo.");
-    const playerData = await playerRes.json();
-    const captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-
-    if (!captionTracks || captionTracks.length === 0) {
-      throw new Error("Este vídeo não possui legendas/transcrição disponíveis no YouTube.");
-    }
-
-    const track =
-      captionTracks.find((t: any) => t.languageCode === "pt" && t.kind !== "asr") ||
-      captionTracks.find((t: any) => t.languageCode === "pt") ||
-      captionTracks.find((t: any) => t.languageCode?.startsWith("pt")) ||
-      captionTracks.find((t: any) => t.languageCode === "en") ||
-      captionTracks[0];
-
-    const captionRes = await fetch(track.baseUrl);
-    if (!captionRes.ok) throw new Error("Erro ao baixar a transcrição.");
-    const captionXml = await captionRes.text();
-
-    const textSegments = captionXml.match(/<text[^>]*>([\s\S]*?)<\/text>/g) || [];
-    const transcript = textSegments
-      .map((seg: string) =>
-        seg.replace(/<[^>]+>/g, "")
-          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
-          .replace(/\n/g, " ").trim()
-      )
-      .filter(Boolean)
-      .join(" ");
-
-    if (!transcript || transcript.length < 30) {
-      throw new Error("A transcrição encontrada está vazia ou muito curta.");
-    }
-
-    return transcript;
+  const openTranscriptDialog = (material: Material) => {
+    setSelectedMaterialForQuiz(material);
+    // If material already has a cached transcript, pre-fill it
+    const cached = material.content_text_for_ai || "";
+    const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
+    setManualTranscript(isPlaceholder ? "" : cached);
+    setTranscriptDialogOpen(true);
   };
 
-  const generateQuiz = async (material: Material) => {
-    setGeneratingQuiz(material.id);
+  const generateQuizFromTranscript = async () => {
+    if (!selectedMaterialForQuiz || !manualTranscript.trim()) {
+      toast({ title: "Transcrição vazia", description: "Cole a transcrição do vídeo antes de gerar.", variant: "destructive" });
+      return;
+    }
+    setTranscriptDialogOpen(false);
+    setGeneratingQuiz(selectedMaterialForQuiz.id);
     try {
-      // Step 1: Get transcript from browser (avoids YouTube server-side blocking)
-      let transcript = material.content_text_for_ai || "";
-      const isPlaceholder = !transcript || transcript.length < 100 || transcript.startsWith("YouTube video ID:");
+      // Cache the transcript for future use
+      await supabase.from("materials").update({ content_text_for_ai: manualTranscript.trim() }).eq("id", selectedMaterialForQuiz.id);
 
-      if (isPlaceholder && material.url) {
-        const ytId = extractYoutubeId(material.url);
-        if (ytId) {
-          toast({ title: "Buscando transcrição...", description: "Obtendo legendas do YouTube." });
-          transcript = await fetchTranscriptFromBrowser(ytId);
-          // Cache the transcript
-          await supabase.from("materials").update({ content_text_for_ai: transcript }).eq("id", material.id);
-        }
-      }
-
-      // Step 2: Send transcript to edge function for AI processing
       const response = await supabase.functions.invoke("generate-quiz", {
         body: {
-          materialId: material.id,
-          contentText: transcript,
+          materialId: selectedMaterialForQuiz.id,
+          contentText: manualTranscript.trim(),
           roomId: roomId,
         },
       });
@@ -235,6 +181,8 @@ const RoomManage = () => {
       toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
+    setSelectedMaterialForQuiz(null);
+    setManualTranscript("");
   };
 
   const formatDuration = (seconds: number) => {
@@ -356,7 +304,7 @@ const RoomManage = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => generateQuiz(mat)}
+                      onClick={() => openTranscriptDialog(mat)}
                       disabled={generatingQuiz === mat.id}
                     >
                       {generatingQuiz === mat.id ? (
@@ -376,7 +324,43 @@ const RoomManage = () => {
           )}
         </section>
 
-        {/* Activities Section - Now with preview */}
+        {/* Transcript Dialog */}
+        <Dialog open={transcriptDialogOpen} onOpenChange={setTranscriptDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="font-display flex items-center gap-2">
+                <FileEdit className="w-5 h-5" /> Transcrição do Vídeo
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Cole abaixo a transcrição/legendas do vídeo. A IA usará esse conteúdo para gerar os casos aplicados.
+                Você pode copiar a transcrição diretamente do YouTube (clique nos 3 pontos do vídeo → "Mostrar transcrição").
+              </p>
+              <Textarea
+                placeholder="Cole aqui a transcrição completa do vídeo..."
+                value={manualTranscript}
+                onChange={(e) => setManualTranscript(e.target.value)}
+                rows={12}
+                className="resize-y"
+              />
+              <div className="flex justify-between items-center">
+                <p className="text-xs text-muted-foreground">
+                  {manualTranscript.length > 0 ? `${manualTranscript.length} caracteres` : ""}
+                </p>
+                <Button onClick={generateQuizFromTranscript} disabled={!manualTranscript.trim() || !!generatingQuiz}>
+                  {generatingQuiz ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Gerando...</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-1" /> Gerar Atividade</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+
         {activities.length > 0 && (
           <section>
             <h2 className="font-display text-lg font-semibold mb-4">Atividades Geradas</h2>
