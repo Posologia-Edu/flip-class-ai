@@ -5,13 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
 type Activity = Tables<"activities">;
+
+interface ActivityLog {
+  activity_type: string;
+  material_id: string | null;
+  duration_seconds: number;
+  session_id: string;
+  created_at: string;
+}
+
+interface StudentStats {
+  session: Tables<"student_sessions">;
+  totalTime: number;
+  materialsViewed: number;
+  quizTime: number;
+}
 
 const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -26,19 +41,23 @@ const RoomManage = () => {
   const [generatingQuiz, setGeneratingQuiz] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [statsTab, setStatsTab] = useState<"overview" | "details">("overview");
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
-    const [roomRes, matRes, actRes, sessRes] = await Promise.all([
+    const [roomRes, matRes, actRes, sessRes, logsRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("id", roomId).single(),
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("activities").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_sessions").select("*").eq("room_id", roomId).order("created_at"),
+      supabase.from("student_activity_logs").select("activity_type, material_id, duration_seconds, session_id, created_at").eq("room_id", roomId),
     ]);
     setRoom(roomRes.data);
     setMaterials(matRes.data || []);
     setActivities(actRes.data || []);
     setSessions(sessRes.data || []);
+    setActivityLogs((logsRes.data as ActivityLog[]) || []);
     if (roomRes.data?.unlock_at) {
       setUnlockAt(new Date(roomRes.data.unlock_at).toISOString().slice(0, 16));
     }
@@ -105,6 +124,32 @@ const RoomManage = () => {
     }
     setGeneratingQuiz(null);
   };
+
+  const formatDuration = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    if (m < 60) return `${m}min ${s}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}min`;
+  };
+
+  // Compute student stats
+  const studentStats: StudentStats[] = sessions.map(session => {
+    const sessionLogs = activityLogs.filter(l => l.session_id === session.id);
+    const totalTime = sessionLogs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
+    const materialsViewed = new Set(sessionLogs.filter(l => l.activity_type === "material_view" && l.material_id).map(l => l.material_id)).size;
+    const quizTime = sessionLogs.filter(l => l.activity_type === "quiz_start" || l.activity_type === "quiz_complete")
+      .reduce((s, l) => s + (l.duration_seconds || 0), 0);
+    return { session, totalTime, materialsViewed, quizTime };
+  });
+
+  const totalStudents = sessions.length;
+  const completedStudents = sessions.filter(s => s.completed_at).length;
+  const avgScore = completedStudents > 0
+    ? Math.round(sessions.filter(s => s.completed_at).reduce((s, sess) => s + (sess.score || 0), 0) / completedStudents)
+    : 0;
+  const totalPlatformTime = studentStats.reduce((s, st) => s + st.totalTime, 0);
 
   if (!room) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Carregando...</div>;
 
@@ -222,10 +267,58 @@ const RoomManage = () => {
           </section>
         )}
 
-        {/* Students Section */}
-        {sessions.length > 0 && (
-          <section>
-            <h2 className="font-display text-lg font-semibold mb-4">Alunos ({sessions.length})</h2>
+        {/* Student Statistics Section */}
+        <section>
+          <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-primary" /> Estatísticas dos Alunos
+          </h2>
+
+          {/* Overview Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="bg-card border border-border rounded-xl p-4 text-center">
+              <Users className="w-5 h-5 text-primary mx-auto mb-1" />
+              <p className="font-display text-2xl font-bold text-foreground">{totalStudents}</p>
+              <p className="text-xs text-muted-foreground">Alunos</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 text-center">
+              <Eye className="w-5 h-5 text-level-easy mx-auto mb-1" />
+              <p className="font-display text-2xl font-bold text-foreground">{completedStudents}</p>
+              <p className="text-xs text-muted-foreground">Concluíram</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 text-center">
+              <BarChart3 className="w-5 h-5 text-accent mx-auto mb-1" />
+              <p className="font-display text-2xl font-bold text-foreground">{avgScore}</p>
+              <p className="text-xs text-muted-foreground">Média Pontos</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 text-center">
+              <Timer className="w-5 h-5 text-level-medium mx-auto mb-1" />
+              <p className="font-display text-2xl font-bold text-foreground">{formatDuration(totalPlatformTime)}</p>
+              <p className="text-xs text-muted-foreground">Tempo Total</p>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-4 mb-4 border-b border-border">
+            <button
+              onClick={() => setStatsTab("overview")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              Resumo
+            </button>
+            <button
+              onClick={() => setStatsTab("details")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "details" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              Detalhado
+            </button>
+          </div>
+
+          {sessions.length === 0 ? (
+            <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+              <Users className="w-8 h-8 mx-auto mb-2" />
+              <p>Nenhum aluno entrou nesta sala ainda.</p>
+            </div>
+          ) : statsTab === "overview" ? (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-secondary">
@@ -250,8 +343,39 @@ const RoomManage = () => {
                 </tbody>
               </table>
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-secondary">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tempo na Plataforma</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Materiais Vistos</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tempo no Quiz</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Pontuação</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentStats.map(({ session: s, totalTime, materialsViewed, quizTime }) => (
+                    <tr key={s.id} className="border-t border-border">
+                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
+                      <td className="px-4 py-3">{formatDuration(totalTime)}</td>
+                      <td className="px-4 py-3">{materialsViewed} / {materials.length}</td>
+                      <td className="px-4 py-3">{formatDuration(quizTime)}</td>
+                      <td className="px-4 py-3">{s.score ?? 0}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.completed_at ? "bg-level-easy/10 text-level-easy" : "bg-secondary text-muted-foreground"}`}>
+                          {s.completed_at ? "Concluído" : "Em andamento"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

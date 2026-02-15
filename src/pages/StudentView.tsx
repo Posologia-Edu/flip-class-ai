@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +42,38 @@ const StudentView = () => {
   const [submitted, setSubmitted] = useState(false);
   const [openAnswer, setOpenAnswer] = useState("");
   const [timeLeft, setTimeLeft] = useState("");
+  const quizStartTime = useRef<number>(0);
+  const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Track activity
+  const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
+    if (!sessionId || !roomId) return;
+    try {
+      await supabase.from("student_activity_logs").insert({
+        session_id: sessionId,
+        room_id: roomId,
+        activity_type: activityType,
+        material_id: materialId || null,
+        duration_seconds: durationSeconds || 0,
+      });
+    } catch (e) {
+      console.warn("Activity log failed", e);
+    }
+  }, [sessionId, roomId]);
+
+  // Track time on platform
+  useEffect(() => {
+    if (!sessionId || !roomId) return;
+    
+    // Log page active every 30 seconds
+    activeTimer.current = setInterval(() => {
+      logActivity("page_active", undefined, 30);
+    }, 30000);
+
+    return () => {
+      if (activeTimer.current) clearInterval(activeTimer.current);
+    };
+  }, [sessionId, roomId, logActivity]);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -121,8 +153,19 @@ const StudentView = () => {
     }
   };
 
+  const handleStartQuiz = () => {
+    setTab("activity");
+    quizStartTime.current = Date.now();
+    logActivity("quiz_start");
+  };
+
+  const handleViewMaterial = (materialId: string) => {
+    logActivity("material_view", materialId);
+  };
+
   const submitQuiz = async () => {
     setSubmitted(true);
+    const quizDuration = Math.round((Date.now() - quizStartTime.current) / 1000);
     let score = 0;
     levels.forEach((level, li) => {
       level.questions.forEach((q, qi) => {
@@ -132,6 +175,8 @@ const StudentView = () => {
         }
       });
     });
+
+    logActivity("quiz_complete", undefined, quizDuration);
 
     if (sessionId) {
       await supabase.from("student_sessions").update({
@@ -167,7 +212,7 @@ const StudentView = () => {
             <Video className="w-4 h-4 inline mr-1.5" /> Materiais
           </button>
           <button
-            onClick={() => unlocked && quizData && setTab("activity")}
+            onClick={() => unlocked && quizData && handleStartQuiz()}
             className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
               !unlocked || !quizData ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" :
               tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
@@ -193,7 +238,7 @@ const StudentView = () => {
             {materials.map((mat) => {
               const ytId = mat.url ? extractYoutubeId(mat.url) : null;
               return (
-                <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
                   {ytId && (
                     <div className="aspect-video">
                       <iframe
@@ -227,7 +272,6 @@ const StudentView = () => {
         ) : currentQ ? (
           <AnimatePresence mode="wait">
             <motion.div key={qKey} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              {/* Level indicator */}
               <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-6 ${levelStyles[currentLevel]?.bg} ${levelStyles[currentLevel]?.text}`}>
                 {levelStyles[currentLevel]?.label}
               </div>

@@ -2,3 +2,6 @@ project_id = "qxqvttkcemshgsdobgfe"
 
 [functions.generate-quiz]
 verify_jwt = false
+
+[functions.send-approval-email]
+verify_jwt = false
