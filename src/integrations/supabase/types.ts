@@ -96,18 +96,27 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
           full_name: string | null
           id: string
           user_id: string
         }
         Insert: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
           user_id: string
         }
         Update: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
@@ -141,6 +150,61 @@ export type Database = {
           unlock_at?: string | null
         }
         Relationships: []
+      }
+      student_activity_logs: {
+        Row: {
+          activity_type: string
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          material_id: string | null
+          metadata: Json | null
+          room_id: string
+          session_id: string
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          material_id?: string | null
+          metadata?: Json | null
+          room_id: string
+          session_id: string
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          material_id?: string | null
+          metadata?: Json | null
+          room_id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_activity_logs_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_logs_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_sessions: {
         Row: {
@@ -180,15 +244,42 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "teacher"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -315,6 +406,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "teacher"],
+    },
   },
 } as const
