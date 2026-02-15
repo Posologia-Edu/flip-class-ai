@@ -18,14 +18,12 @@ const Auth = () => {
   const { toast } = useToast();
   const auth = useAuth();
 
-  // Redirect if already logged in
   useEffect(() => {
     if (!auth.loading && auth.user) {
       if (!auth.isApproved) {
         navigate("/pending-approval");
-      } else if (auth.isAdmin) {
-        navigate("/admin");
       } else {
+        // Both admin and teacher go to dashboard
         navigate("/dashboard");
       }
     }
@@ -40,7 +38,6 @@ const Auth = () => {
       if (error) {
         toast({ title: "Erro no login", description: error.message, variant: "destructive" });
       }
-      // Redirect handled by useEffect
     } else {
       const { error } = await supabase.auth.signUp({
         email,
