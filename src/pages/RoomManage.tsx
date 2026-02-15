@@ -143,13 +143,88 @@ const RoomManage = () => {
     fetchData();
   };
 
+  const fetchTranscriptFromBrowser = async (videoId: string): Promise<string> => {
+    // Use innertube API from the browser (no bot detection issues)
+    const playerPayload = {
+      context: {
+        client: {
+          clientName: "WEB",
+          clientVersion: "2.20250101.00.00",
+          hl: "pt",
+          gl: "BR",
+        },
+      },
+      videoId: videoId,
+    };
+
+    const playerRes = await fetch(
+      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(playerPayload),
+      }
+    );
+
+    if (!playerRes.ok) throw new Error("Não foi possível acessar os dados do vídeo.");
+    const playerData = await playerRes.json();
+    const captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+
+    if (!captionTracks || captionTracks.length === 0) {
+      throw new Error("Este vídeo não possui legendas/transcrição disponíveis no YouTube.");
+    }
+
+    const track =
+      captionTracks.find((t: any) => t.languageCode === "pt" && t.kind !== "asr") ||
+      captionTracks.find((t: any) => t.languageCode === "pt") ||
+      captionTracks.find((t: any) => t.languageCode?.startsWith("pt")) ||
+      captionTracks.find((t: any) => t.languageCode === "en") ||
+      captionTracks[0];
+
+    const captionRes = await fetch(track.baseUrl);
+    if (!captionRes.ok) throw new Error("Erro ao baixar a transcrição.");
+    const captionXml = await captionRes.text();
+
+    const textSegments = captionXml.match(/<text[^>]*>([\s\S]*?)<\/text>/g) || [];
+    const transcript = textSegments
+      .map((seg: string) =>
+        seg.replace(/<[^>]+>/g, "")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+          .replace(/\n/g, " ").trim()
+      )
+      .filter(Boolean)
+      .join(" ");
+
+    if (!transcript || transcript.length < 30) {
+      throw new Error("A transcrição encontrada está vazia ou muito curta.");
+    }
+
+    return transcript;
+  };
+
   const generateQuiz = async (material: Material) => {
     setGeneratingQuiz(material.id);
     try {
+      // Step 1: Get transcript from browser (avoids YouTube server-side blocking)
+      let transcript = material.content_text_for_ai || "";
+      const isPlaceholder = !transcript || transcript.length < 100 || transcript.startsWith("YouTube video ID:");
+
+      if (isPlaceholder && material.url) {
+        const ytId = extractYoutubeId(material.url);
+        if (ytId) {
+          toast({ title: "Buscando transcrição...", description: "Obtendo legendas do YouTube." });
+          transcript = await fetchTranscriptFromBrowser(ytId);
+          // Cache the transcript
+          await supabase.from("materials").update({ content_text_for_ai: transcript }).eq("id", material.id);
+        }
+      }
+
+      // Step 2: Send transcript to edge function for AI processing
       const response = await supabase.functions.invoke("generate-quiz", {
         body: {
           materialId: material.id,
-          contentText: material.content_text_for_ai || material.title,
+          contentText: transcript,
           roomId: roomId,
         },
       });
