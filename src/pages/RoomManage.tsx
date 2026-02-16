@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import DiscussionForum from "@/components/DiscussionForum";
 import { PeerReviewTeacher } from "@/components/PeerReview";
@@ -98,6 +98,9 @@ const RoomManage = () => {
   const [bankTitle, setBankTitle] = useState("");
   const [saveBankDialogOpen, setSaveBankDialogOpen] = useState(false);
   const [activityToSave, setActivityToSave] = useState<Activity | null>(null);
+  const [aiGrading, setAiGrading] = useState<string | null>(null);
+  const [aiGradingAll, setAiGradingAll] = useState<string | null>(null);
+  const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string }>>({});
 
   // New material form state
   const [newMaterialType, setNewMaterialType] = useState("video");
@@ -422,6 +425,70 @@ const RoomManage = () => {
         [field]: value,
       },
     }));
+  };
+
+  const aiGradeQuestion = async (sessionId: string, questionKey: string, question: string, context: string | undefined, correctAnswer: string, studentAnswer: string) => {
+    const fbKey = `${sessionId}-${questionKey}`;
+    setAiGrading(fbKey);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-grade", {
+        body: { question, context: context || "", correctAnswer, studentAnswer },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const result = data.results?.[0];
+      if (!result) throw new Error("Sem resultado da IA");
+      
+      setAiResults(prev => ({ ...prev, [fbKey]: result }));
+      // Pre-fill feedback fields with AI suggestion
+      const feedbackText = `${result.feedback}\n\n✅ Pontos fortes: ${result.strengths.join("; ")}\n⚠️ A melhorar: ${result.weaknesses.join("; ")}\n💡 Sugestão: ${result.suggestion}`;
+      updateFeedbackField(sessionId, questionKey, "feedback_text", feedbackText);
+      updateFeedbackField(sessionId, questionKey, "grade", result.grade);
+      toast({ title: "Correção por IA concluída!", description: `Nota sugerida: ${result.grade}/10. Revise e salve.` });
+    } catch (err: any) {
+      toast({ title: "Erro na correção por IA", description: err.message, variant: "destructive" });
+    }
+    setAiGrading(null);
+  };
+
+  const aiGradeAllStudent = async (sessionId: string, quizData: QuizData, studentAnswers: Record<string, string>) => {
+    setAiGradingAll(sessionId);
+    try {
+      const batchItems: any[] = [];
+      const keys: string[] = [];
+      quizData.levels?.forEach((level, li) => {
+        level.questions?.forEach((q, qi) => {
+          const key = `${li}-${qi}`;
+          keys.push(key);
+          batchItems.push({
+            question: q.question,
+            context: q.context || "",
+            correctAnswer: q.correct_answer,
+            studentAnswer: studentAnswers[key] || "",
+          });
+        });
+      });
+
+      const { data, error } = await supabase.functions.invoke("ai-grade", {
+        body: { batchItems },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const results = data.results || [];
+      results.forEach((result: any, i: number) => {
+        const key = keys[i];
+        const fbKey = `${sessionId}-${key}`;
+        setAiResults(prev => ({ ...prev, [fbKey]: result }));
+        const feedbackText = `${result.feedback}\n\n✅ Pontos fortes: ${result.strengths.join("; ")}\n⚠️ A melhorar: ${result.weaknesses.join("; ")}\n💡 Sugestão: ${result.suggestion}`;
+        updateFeedbackField(sessionId, key, "feedback_text", feedbackText);
+        updateFeedbackField(sessionId, key, "grade", result.grade);
+      });
+      toast({ title: "Todas as respostas corrigidas!", description: `${results.length} questões avaliadas pela IA. Revise e salve.` });
+    } catch (err: any) {
+      toast({ title: "Erro na correção por IA", description: err.message, variant: "destructive" });
+    }
+    setAiGradingAll(null);
   };
 
   const openSaveToBankDialog = (activity: Activity) => {
@@ -992,7 +1059,28 @@ const RoomManage = () => {
                         <p className="font-medium text-card-foreground">{s.student_name}</p>
                         <p className="text-xs text-muted-foreground">{(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}</p>
                       </div>
-                      {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
+                      <div className="flex items-center gap-2">
+                        {isExpanded && quiz?.levels && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                            disabled={aiGradingAll === s.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              aiGradeAllStudent(s.id, quiz, studentAnswers || {});
+                            }}
+                          >
+                            {aiGradingAll === s.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                            ) : (
+                              <Bot className="w-3.5 h-3.5 mr-1" />
+                            )}
+                            Corrigir Todas com IA
+                          </Button>
+                        )}
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
+                      </div>
                     </div>
                     {isExpanded && quiz?.levels && (
                       <div className="border-t border-border p-4 space-y-4">
@@ -1017,12 +1105,54 @@ const RoomManage = () => {
                                   </p>
                                   {/* Feedback do professor */}
                                   <div className="border-t border-border pt-3 mt-3 space-y-3">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
-                                      {feedbacks[`${s.id}-${key}`]?.saved && (
-                                        <Check className="w-3.5 h-3.5 text-level-easy" />
-                                      )}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
+                                        {feedbacks[`${s.id}-${key}`]?.saved && (
+                                          <Check className="w-3.5 h-3.5 text-level-easy" />
+                                        )}
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-xs h-7 gap-1"
+                                        disabled={aiGrading === `${s.id}-${key}` || !answer}
+                                        onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
+                                      >
+                                        {aiGrading === `${s.id}-${key}` ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <Bot className="w-3.5 h-3.5" />
+                                        )}
+                                        Corrigir com IA
+                                      </Button>
                                     </div>
+                                    {aiResults[`${s.id}-${key}`] && (
+                                      <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs space-y-1.5">
+                                        <div className="flex items-center gap-2 font-semibold text-primary">
+                                          <Bot className="w-3.5 h-3.5" />
+                                          Sugestão da IA — Nota: {aiResults[`${s.id}-${key}`].grade}/10
+                                        </div>
+                                        {aiResults[`${s.id}-${key}`].strengths.length > 0 && (
+                                          <p className="text-foreground/80">
+                                            <ThumbsUp className="w-3 h-3 inline mr-1 text-primary" />
+                                            {aiResults[`${s.id}-${key}`].strengths.join("; ")}
+                                          </p>
+                                        )}
+                                        {aiResults[`${s.id}-${key}`].weaknesses.length > 0 && (
+                                          <p className="text-foreground/80">
+                                            <ThumbsDown className="w-3 h-3 inline mr-1 text-destructive" />
+                                            {aiResults[`${s.id}-${key}`].weaknesses.join("; ")}
+                                          </p>
+                                        )}
+                                        {aiResults[`${s.id}-${key}`].suggestion && (
+                                          <p className="text-foreground/80">
+                                            <Lightbulb className="w-3 h-3 inline mr-1 text-accent" />
+                                            {aiResults[`${s.id}-${key}`].suggestion}
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
                                     <Textarea
                                       placeholder="Escreva seu feedback para esta resposta..."
                                       value={feedbacks[`${s.id}-${key}`]?.feedback_text || ""}
