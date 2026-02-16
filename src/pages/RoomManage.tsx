@@ -273,18 +273,46 @@ const RoomManage = () => {
       const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
       setManualTranscript(isPlaceholder ? "" : cached);
       setTranscriptDialogOpen(true);
-    } else {
-      // Other types: check if content_text_for_ai is available
+    } else if (material.url && material.type !== "article") {
+      // File-based material (PDF, PPTX, etc.): AI reads it automatically
       const content = material.content_text_for_ai || "";
       if (content.length >= 50) {
-        // Has content, generate directly
         generateQuizDirect(material, content);
       } else {
-        // No content, ask teacher to paste it
+        // Let edge function extract content from file via AI multimodal
+        generateQuizFromFile(material);
+      }
+    } else {
+      // Article or text-based: check if content_text_for_ai is available
+      const content = material.content_text_for_ai || "";
+      if (content.length >= 50) {
+        generateQuizDirect(material, content);
+      } else {
         setManualTranscript("");
         setTranscriptDialogOpen(true);
       }
     }
+  };
+
+  const generateQuizFromFile = async (material: Material) => {
+    setGeneratingQuiz(material.id);
+    try {
+      const response = await supabase.functions.invoke("generate-quiz", {
+        body: {
+          materialId: material.id,
+          contentText: material.content_text_for_ai || "",
+          roomId: roomId,
+          materialType: material.type,
+          fileUrl: material.url,
+        },
+      });
+      if (response.error) throw response.error;
+      toast({ title: "Atividade gerada!", description: "A IA leu o documento e criou a atividade com sucesso." });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+    }
+    setGeneratingQuiz(null);
   };
 
   const generateQuizDirect = async (material: Material, content: string) => {
