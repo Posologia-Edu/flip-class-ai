@@ -76,7 +76,15 @@ async function extractTextFromFileUrl(fileUrl: string, materialType: string, api
   }
   
   const fileBuffer = await fileResponse.arrayBuffer();
-  const base64Data = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+  const uint8 = new Uint8Array(fileBuffer);
+  
+  // Chunked base64 encoding to avoid stack overflow on large files
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < uint8.length; i += chunkSize) {
+    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+  }
+  const base64Data = btoa(binary);
   
   const contentType = fileResponse.headers.get("content-type") || "application/octet-stream";
   console.log("File content-type:", contentType, "size:", fileBuffer.byteLength);
