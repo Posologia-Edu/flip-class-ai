@@ -241,11 +241,26 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
     console.log("AI response length:", content.length);
 
     let quizJson: any;
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      quizJson = JSON.parse(jsonMatch[0]);
-    } else {
+    // Clean AI response: remove markdown fences, fix common JSON issues
+    let cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
       throw new Error("Não foi possível interpretar a resposta da IA");
+    }
+    try {
+      quizJson = JSON.parse(jsonMatch[0]);
+    } catch {
+      // Try fixing common issues: unescaped quotes in strings, trailing commas
+      let fixedJson = jsonMatch[0]
+        .replace(/,\s*([\]}])/g, "$1") // remove trailing commas
+        .replace(/[\u201C\u201D]/g, '"') // smart quotes
+        .replace(/[\u2018\u2019]/g, "'"); // smart single quotes
+      try {
+        quizJson = JSON.parse(fixedJson);
+      } catch {
+        console.error("Failed to parse JSON even after cleanup. First 500 chars:", jsonMatch[0].substring(0, 500));
+        throw new Error("A IA retornou um formato inválido. Tente gerar novamente.");
+      }
     }
 
     // Save to database
