@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, LogOut, BookOpen, Users, Clock, Trash2, ShieldCheck, BarChart3, Eye, Target } from "lucide-react";
+import CrossRoomAnalytics from "@/components/CrossRoomAnalytics";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Tables } from "@/integrations/supabase/types";
@@ -178,6 +179,23 @@ const Dashboard = () => {
               </p>
             </div>
           </div>
+        )}
+
+        {/* Cross-Room Analytics */}
+        {rooms.length >= 2 && (
+          <CrossRoomAnalytics
+            data={rooms.map((r) => {
+              const stats = roomStats[r.id];
+              return {
+                roomId: r.id,
+                title: r.title,
+                studentCount: stats?.studentCount || 0,
+                completedCount: stats?.completedCount || 0,
+                avgScore: stats?.avgScore || 0,
+                completionRate: stats?.studentCount ? Math.round(((stats?.completedCount || 0) / stats.studentCount) * 100) : 0,
+              };
+            })}
+          />
         )}
 
         <div className="flex items-center justify-between mb-6">
