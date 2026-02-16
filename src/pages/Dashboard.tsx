@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, LogOut, BookOpen, Users, Clock, Trash2, ShieldCheck, BarChart3, Eye, Target, CalendarDays } from "lucide-react";
 import CrossRoomAnalytics from "@/components/CrossRoomAnalytics";
 import RoomCalendar from "@/components/RoomCalendar";
+import NotificationCenter from "@/components/NotificationCenter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Tables } from "@/integrations/supabase/types";
@@ -122,6 +123,7 @@ const Dashboard = () => {
           <span className="font-display text-xl font-bold">FlipClass</span>
         </div>
         <div className="flex items-center gap-2">
+          <NotificationCenter teacherId={auth.user?.id} />
           {auth.isAdmin && (
             <Button variant="outline" size="sm" onClick={() => navigate("/admin")}>
               <ShieldCheck className="w-4 h-4 mr-2" /> Admin
