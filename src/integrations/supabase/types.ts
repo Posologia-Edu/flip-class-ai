@@ -19,6 +19,8 @@ export type Database = {
           created_at: string
           id: string
           material_id: string | null
+          peer_review_criteria: Json
+          peer_review_enabled: boolean
           quiz_data: Json
           room_id: string
         }
@@ -26,6 +28,8 @@ export type Database = {
           created_at?: string
           id?: string
           material_id?: string | null
+          peer_review_criteria?: Json
+          peer_review_enabled?: boolean
           quiz_data?: Json
           room_id: string
         }
@@ -33,6 +37,8 @@ export type Database = {
           created_at?: string
           id?: string
           material_id?: string | null
+          peer_review_criteria?: Json
+          peer_review_enabled?: boolean
           quiz_data?: Json
           room_id?: string
         }
@@ -141,6 +147,87 @@ export type Database = {
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      peer_review_assignments: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          reviewee_session_id: string
+          reviewer_session_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          reviewee_session_id: string
+          reviewer_session_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          reviewee_session_id?: string
+          reviewer_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peer_review_assignments_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "peer_review_assignments_reviewee_session_id_fkey"
+            columns: ["reviewee_session_id"]
+            isOneToOne: false
+            referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "peer_review_assignments_reviewer_session_id_fkey"
+            columns: ["reviewer_session_id"]
+            isOneToOne: false
+            referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      peer_reviews: {
+        Row: {
+          assignment_id: string
+          comment: string | null
+          created_at: string
+          criteria_scores: Json
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          assignment_id: string
+          comment?: string | null
+          created_at?: string
+          criteria_scores?: Json
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          assignment_id?: string
+          comment?: string | null
+          created_at?: string
+          criteria_scores?: Json
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peer_reviews_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "peer_review_assignments"
             referencedColumns: ["id"]
           },
         ]

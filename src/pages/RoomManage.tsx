@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import DiscussionForum from "@/components/DiscussionForum";
+import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
@@ -1080,6 +1081,21 @@ const RoomManage = () => {
             </div>
           )}
         </section>
+
+        {/* Peer Review Section */}
+        {activities.length > 0 && (
+          <section className="bg-card rounded-xl border border-border p-6">
+            <PeerReviewTeacher
+              activityId={activities[0].id}
+              roomId={roomId!}
+              sessions={sessions}
+              quizData={activities[0].quiz_data as unknown as QuizData}
+              peerReviewEnabled={(activities[0] as any).peer_review_enabled || false}
+              peerReviewCriteria={((activities[0] as any).peer_review_criteria as any[]) || []}
+              onUpdate={fetchData}
+            />
+          </section>
+        )}
 
         {/* Discussion Forum Section */}
         <section>
