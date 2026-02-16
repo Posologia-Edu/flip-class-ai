@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import DiscussionForum from "@/components/DiscussionForum";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
@@ -247,7 +248,7 @@ const StudentView = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<"materials" | "activity" | "progress">("materials");
+  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -445,6 +446,14 @@ const StudentView = () => {
           >
             <Trophy className="w-4 h-4" /> Progresso
           </button>
+          <button
+            onClick={() => setTab("forum")}
+            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === "forum" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" /> Fórum
+          </button>
         </div>
       </div>
 
@@ -494,6 +503,12 @@ const StudentView = () => {
             sessionData={sessionData}
             quizData={quizData}
             answers={answers}
+          />
+        ) : tab === "forum" ? (
+          <DiscussionForum
+            roomId={roomId!}
+            studentName={sessionData?.student_name}
+            studentEmail={sessionData?.student_email || undefined}
           />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
