@@ -5,8 +5,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, LogOut, BookOpen, Users, Clock, Trash2, ShieldCheck, BarChart3, Eye, Target } from "lucide-react";
+import { Plus, LogOut, BookOpen, Users, Clock, Trash2, ShieldCheck, BarChart3, Eye, Target, CalendarDays } from "lucide-react";
 import CrossRoomAnalytics from "@/components/CrossRoomAnalytics";
+import RoomCalendar from "@/components/RoomCalendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Tables } from "@/integrations/supabase/types";
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [view, setView] = useState<"rooms" | "calendar">("rooms");
   const navigate = useNavigate();
   const { toast } = useToast();
   const auth = useAuth();
@@ -199,7 +201,23 @@ const Dashboard = () => {
         )}
 
         <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-xl font-semibold">Minhas Salas</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-display text-xl font-semibold">Minhas Salas</h2>
+            <div className="flex items-center bg-secondary rounded-lg p-0.5 ml-4">
+              <button
+                onClick={() => setView("rooms")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${view === "rooms" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <BookOpen className="w-3.5 h-3.5 inline mr-1" />Lista
+              </button>
+              <button
+                onClick={() => setView("calendar")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${view === "calendar" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <CalendarDays className="w-3.5 h-3.5 inline mr-1" />Agenda
+              </button>
+            </div>
+          </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button className="font-semibold">
@@ -230,6 +248,16 @@ const Dashboard = () => {
 
         {loading ? (
           <div className="text-center text-muted-foreground py-20">Carregando...</div>
+        ) : view === "calendar" ? (
+          <RoomCalendar
+            rooms={rooms.map((r) => ({
+              id: r.id,
+              title: r.title,
+              unlockAt: r.unlock_at ? new Date(r.unlock_at) : null,
+              pinCode: r.pin_code,
+            }))}
+            onRoomClick={(roomId) => navigate(`/dashboard/room/${roomId}`)}
+          />
         ) : rooms.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-4">
