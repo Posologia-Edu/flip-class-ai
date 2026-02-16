@@ -68,40 +68,7 @@ Regras:
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
 async function extractTextFromFileUrl(fileUrl: string, materialType: string, apiKey: string): Promise<string> {
-  console.log("Fetching file from URL:", fileUrl);
-  
-  const fileResponse = await fetch(fileUrl);
-  if (!fileResponse.ok) {
-    throw new Error(`Falha ao baixar arquivo: ${fileResponse.status}`);
-  }
-  
-  const fileBuffer = await fileResponse.arrayBuffer();
-  const uint8 = new Uint8Array(fileBuffer);
-  
-  // Chunked base64 encoding to avoid stack overflow on large files
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < uint8.length; i += chunkSize) {
-    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
-  }
-  const base64Data = btoa(binary);
-  
-  const contentType = fileResponse.headers.get("content-type") || "application/octet-stream";
-  console.log("File content-type:", contentType, "size:", fileBuffer.byteLength);
-
-  // Determine MIME type for Gemini
-  let mimeType = contentType;
-  if (materialType === "pdf" || fileUrl.endsWith(".pdf")) {
-    mimeType = "application/pdf";
-  } else if (materialType === "presentation" || fileUrl.endsWith(".pptx")) {
-    mimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-  } else if (fileUrl.endsWith(".ppt")) {
-    mimeType = "application/vnd.ms-powerpoint";
-  } else if (fileUrl.endsWith(".docx")) {
-    mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  } else if (fileUrl.endsWith(".doc")) {
-    mimeType = "application/msword";
-  }
+  console.log("Extracting content from file URL (passing URL directly to AI):", fileUrl);
 
   // Use Gemini multimodal to extract and understand the document content
   const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -123,7 +90,7 @@ async function extractTextFromFileUrl(fileUrl: string, materialType: string, api
             {
               type: "image_url",
               image_url: {
-                url: `data:${mimeType};base64,${base64Data}`
+                url: fileUrl
               }
             }
           ]
