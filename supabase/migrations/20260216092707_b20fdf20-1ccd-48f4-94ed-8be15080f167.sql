@@ -1,0 +1,2 @@
+ALTER TABLE public.materials DROP CONSTRAINT materials_type_check;
+ALTER TABLE public.materials ADD CONSTRAINT materials_type_check CHECK (type = ANY (ARRAY['video'::text, 'file'::text, 'pdf'::text, 'article'::text, 'podcast'::text, 'presentation'::text]));
