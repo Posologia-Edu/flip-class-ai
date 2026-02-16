@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -27,6 +27,218 @@ interface QuizData {
   levels: QuizLevel[];
 }
 
+// --- Progress Dashboard Component ---
+interface ProgressDashboardProps {
+  materials: Material[];
+  activityLogs: any[];
+  sessionData: Tables<"student_sessions"> | null;
+  quizData: QuizData | null;
+  answers: Record<string, string>;
+}
+
+interface Badge {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  earned: boolean;
+  color: string;
+}
+
+const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, answers }: ProgressDashboardProps) => {
+  // Compute metrics
+  const viewedMaterialIds = new Set(
+    activityLogs
+      .filter((l: any) => l.activity_type === "material_view" && l.material_id)
+      .map((l: any) => l.material_id)
+  );
+  const materialsWatched = viewedMaterialIds.size;
+  const totalMaterials = materials.length;
+  const materialsProgress = totalMaterials > 0 ? Math.round((materialsWatched / totalMaterials) * 100) : 0;
+
+  const isCompleted = !!sessionData?.completed_at;
+  const totalQuestions = quizData?.levels?.reduce((s, l) => s + (l.questions?.length || 0), 0) || 0;
+  const answeredQuestions = Object.keys(answers).length;
+  const quizProgress = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
+
+  const totalTimeSeconds = activityLogs.reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
+  const totalMinutes = Math.round(totalTimeSeconds / 60);
+
+  // Determine highest level reached
+  let highestLevel = 0;
+  if (quizData?.levels) {
+    for (let li = 0; li < quizData.levels.length; li++) {
+      const levelQuestions = quizData.levels[li].questions || [];
+      const allAnswered = levelQuestions.every((_, qi) => answers[`${li}-${qi}`]);
+      if (allAnswered) highestLevel = li + 1;
+    }
+  }
+
+  // Badges
+  const badges: Badge[] = [
+    {
+      id: "first_material",
+      icon: <Eye className="w-6 h-6" />,
+      label: "Explorador",
+      description: "Assistiu ao primeiro material",
+      earned: materialsWatched >= 1,
+      color: "text-blue-500",
+    },
+    {
+      id: "all_materials",
+      icon: <Video className="w-6 h-6" />,
+      label: "Dedicado",
+      description: "Assistiu a todos os materiais",
+      earned: totalMaterials > 0 && materialsWatched >= totalMaterials,
+      color: "text-purple-500",
+    },
+    {
+      id: "first_answer",
+      icon: <Target className="w-6 h-6" />,
+      label: "Iniciante",
+      description: "Respondeu a primeira questão",
+      earned: answeredQuestions >= 1,
+      color: "text-green-500",
+    },
+    {
+      id: "completed",
+      icon: <Trophy className="w-6 h-6" />,
+      label: "Concluísta",
+      description: "Completou toda a atividade",
+      earned: isCompleted,
+      color: "text-yellow-500",
+    },
+    {
+      id: "level3",
+      icon: <Flame className="w-6 h-6" />,
+      label: "Mestre",
+      description: "Alcançou o nível 3 (Complexo)",
+      earned: highestLevel >= 3,
+      color: "text-red-500",
+    },
+    {
+      id: "engagement",
+      icon: <TrendingUp className="w-6 h-6" />,
+      label: "Engajado",
+      description: "Passou mais de 10 min na plataforma",
+      earned: totalMinutes >= 10,
+      color: "text-teal-500",
+    },
+  ];
+
+  const earnedCount = badges.filter(b => b.earned).length;
+
+  return (
+    <div className="space-y-8">
+      {/* Overall Progress */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6">
+        <h2 className="font-display text-lg font-bold flex items-center gap-2 mb-6">
+          <TrendingUp className="w-5 h-5 text-primary" /> Seu Progresso
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+              <Video className="w-5 h-5 text-primary" />
+            </div>
+            <p className="font-display text-2xl font-bold text-foreground">{materialsWatched}/{totalMaterials}</p>
+            <p className="text-xs text-muted-foreground">Materiais Vistos</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-level-easy/10 flex items-center justify-center mx-auto mb-2">
+              <Target className="w-5 h-5 text-level-easy" />
+            </div>
+            <p className="font-display text-2xl font-bold text-foreground">{answeredQuestions}/{totalQuestions}</p>
+            <p className="text-xs text-muted-foreground">Questões Respondidas</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-level-medium/10 flex items-center justify-center mx-auto mb-2">
+              <Award className="w-5 h-5 text-level-medium" />
+            </div>
+            <p className="font-display text-2xl font-bold text-foreground">{highestLevel}/{quizData?.levels?.length || 0}</p>
+            <p className="text-xs text-muted-foreground">Nível Alcançado</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2">
+              <Flame className="w-5 h-5 text-accent" />
+            </div>
+            <p className="font-display text-2xl font-bold text-foreground">{totalMinutes} min</p>
+            <p className="text-xs text-muted-foreground">Tempo na Plataforma</p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Progress Bars */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-xl p-6 space-y-5">
+        <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wide">Barras de Progresso</h3>
+        <div>
+          <div className="flex justify-between text-sm mb-1.5">
+            <span className="text-foreground font-medium">Materiais</span>
+            <span className="text-muted-foreground">{materialsProgress}%</span>
+          </div>
+          <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${materialsProgress}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="h-full bg-primary rounded-full"
+            />
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between text-sm mb-1.5">
+            <span className="text-foreground font-medium">Atividade</span>
+            <span className="text-muted-foreground">{isCompleted ? "100" : quizProgress}%</span>
+          </div>
+          <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${isCompleted ? 100 : quizProgress}%` }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+              className="h-full bg-level-easy rounded-full"
+            />
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Badges */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card border border-border rounded-xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="font-display text-lg font-bold flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-yellow-500" /> Conquistas
+          </h3>
+          <span className="text-sm text-muted-foreground">{earnedCount}/{badges.length} desbloqueadas</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {badges.map((badge, i) => (
+            <motion.div
+              key={badge.id}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 + i * 0.08 }}
+              className={`relative border rounded-xl p-4 text-center transition-all ${
+                badge.earned
+                  ? "border-primary/30 bg-primary/5"
+                  : "border-border bg-secondary/30 opacity-50 grayscale"
+              }`}
+            >
+              {badge.earned && (
+                <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-level-easy rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
+              <div className={`${badge.earned ? badge.color : "text-muted-foreground"} mb-2 flex justify-center`}>
+                {badge.icon}
+              </div>
+              <p className="font-display text-sm font-bold text-foreground">{badge.label}</p>
+              <p className="text-xs text-muted-foreground mt-1">{badge.description}</p>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const StudentView = () => {
   const { roomId, sessionId } = useParams<{ roomId: string; sessionId: string }>();
   const navigate = useNavigate();
@@ -35,7 +247,7 @@ const StudentView = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<"materials" | "activity">("materials");
+  const [tab, setTab] = useState<"materials" | "activity" | "progress">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -45,6 +257,8 @@ const StudentView = () => {
   const [timeLeft, setTimeLeft] = useState("");
   const [showFeedback, setShowFeedback] = useState(false);
   const [teacherFeedbacks, setTeacherFeedbacks] = useState<Record<string, { feedback_text: string; grade: number | null }>>({});
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [sessionData, setSessionData] = useState<Tables<"student_sessions"> | null>(null);
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -85,12 +299,28 @@ const StudentView = () => {
     if (actRes.data?.[0]) {
       setQuizData(actRes.data[0].quiz_data as unknown as QuizData);
     }
+    if (sessionId) {
+      const [logsRes, sessRes] = await Promise.all([
+        supabase.from("student_activity_logs").select("*").eq("session_id", sessionId),
+        supabase.from("student_sessions").select("*").eq("id", sessionId).single(),
+      ]);
+      setActivityLogs(logsRes.data || []);
+      if (sessRes.data) {
+        setSessionData(sessRes.data);
+        if (sessRes.data.completed_at) {
+          setSubmitted(true);
+          if (sessRes.data.answers) {
+            setAnswers(sessRes.data.answers as Record<string, string>);
+          }
+        }
+      }
+    }
     if (roomRes.data?.unlock_at) {
       setUnlocked(new Date(roomRes.data.unlock_at) <= new Date());
     } else {
       setUnlocked(true);
     }
-  }, [roomId]);
+  }, [roomId, sessionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -207,6 +437,14 @@ const StudentView = () => {
             {!unlocked && <Lock className="w-3.5 h-3.5" />}
             Atividade
           </button>
+          <button
+            onClick={() => setTab("progress")}
+            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === "progress" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Trophy className="w-4 h-4" /> Progresso
+          </button>
         </div>
       </div>
 
@@ -249,6 +487,14 @@ const StudentView = () => {
               </div>
             )}
           </div>
+        ) : tab === "progress" ? (
+          <ProgressDashboard
+            materials={materials}
+            activityLogs={activityLogs}
+            sessionData={sessionData}
+            quizData={quizData}
+            answers={answers}
+          />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
