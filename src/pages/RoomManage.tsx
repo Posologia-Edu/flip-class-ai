@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
+import DiscussionForum from "@/components/DiscussionForum";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
@@ -784,6 +785,19 @@ const RoomManage = () => {
                 </div>
               )}
             </div>
+          )}
+        </section>
+
+        {/* Discussion Forum Section */}
+        <section>
+          <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
+            <MessageSquare className="w-5 h-5 text-primary" /> Fórum de Discussão
+          </h2>
+          {roomId && (
+            <DiscussionForum
+              roomId={roomId}
+              teacherUserId={room.teacher_id}
+            />
           )}
         </section>
       </main>

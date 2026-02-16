@@ -53,6 +53,57 @@ export type Database = {
           },
         ]
       }
+      discussion_posts: {
+        Row: {
+          author_email: string | null
+          author_name: string
+          author_user_id: string | null
+          content: string
+          created_at: string
+          id: string
+          is_teacher: boolean
+          parent_id: string | null
+          room_id: string
+        }
+        Insert: {
+          author_email?: string | null
+          author_name: string
+          author_user_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_teacher?: boolean
+          parent_id?: string | null
+          room_id: string
+        }
+        Update: {
+          author_email?: string | null
+          author_name?: string
+          author_user_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_teacher?: boolean
+          parent_id?: string | null
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discussion_posts_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "discussion_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discussion_posts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       materials: {
         Row: {
           content_text_for_ai: string | null
