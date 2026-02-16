@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -67,6 +68,8 @@ const RoomManage = () => {
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
   const [manualTranscript, setManualTranscript] = useState("");
   const [selectedMaterialForQuiz, setSelectedMaterialForQuiz] = useState<Material | null>(null);
+  const [feedbacks, setFeedbacks] = useState<Record<string, { feedback_text: string; grade: number | null; saved: boolean }>>({});
+  const [savingFeedback, setSavingFeedback] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -82,6 +85,23 @@ const RoomManage = () => {
     setActivities(actRes.data || []);
     setSessions(sessRes.data || []);
     setActivityLogs((logsRes.data as ActivityLog[]) || []);
+
+    // Fetch existing feedbacks for all sessions in this room
+    const sessionIds = (sessRes.data || []).map(s => s.id);
+    if (sessionIds.length > 0) {
+      const { data: fbData } = await supabase
+        .from("teacher_feedback" as any)
+        .select("*")
+        .in("session_id", sessionIds);
+      if (fbData) {
+        const fbMap: Record<string, { feedback_text: string; grade: number | null; saved: boolean }> = {};
+        (fbData as any[]).forEach((fb: any) => {
+          const key = `${fb.session_id}-${fb.question_key}`;
+          fbMap[key] = { feedback_text: fb.feedback_text || "", grade: fb.grade, saved: true };
+        });
+        setFeedbacks(fbMap);
+      }
+    }
     if (roomRes.data?.unlock_at) {
       // Display in local time without timezone conversion
       const d = new Date(roomRes.data.unlock_at);
@@ -192,6 +212,42 @@ const RoomManage = () => {
     if (m < 60) return `${m}min ${s}s`;
     const h = Math.floor(m / 60);
     return `${h}h ${m % 60}min`;
+  };
+
+  const saveFeedback = async (sessionId: string, questionKey: string) => {
+    const fbKey = `${sessionId}-${questionKey}`;
+    const fb = feedbacks[fbKey];
+    if (!fb) return;
+    setSavingFeedback(fbKey);
+    try {
+      const { error } = await supabase
+        .from("teacher_feedback" as any)
+        .upsert({
+          session_id: sessionId,
+          question_key: questionKey,
+          feedback_text: fb.feedback_text,
+          grade: fb.grade,
+        } as any, { onConflict: "session_id,question_key" });
+      if (error) throw error;
+      setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: true } }));
+      toast({ title: "Feedback salvo!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+    }
+    setSavingFeedback(null);
+  };
+
+  const updateFeedbackField = (sessionId: string, questionKey: string, field: "feedback_text" | "grade", value: string | number | null) => {
+    const fbKey = `${sessionId}-${questionKey}`;
+    setFeedbacks(prev => ({
+      ...prev,
+      [fbKey]: {
+        feedback_text: prev[fbKey]?.feedback_text || "",
+        grade: prev[fbKey]?.grade ?? null,
+        saved: false,
+        [field]: value,
+      },
+    }));
   };
 
   // Count unique emails for student count
@@ -556,9 +612,56 @@ const RoomManage = () => {
                                     <p className="text-xs font-semibold text-muted-foreground mb-1">Resposta do aluno:</p>
                                     <p className="text-sm text-foreground">{answer || <span className="italic text-muted-foreground">Não respondida</span>}</p>
                                   </div>
-                                  <p className="text-xs text-muted-foreground">
+                                  <p className="text-xs text-muted-foreground mb-3">
                                     <span className="font-semibold">Resposta esperada:</span> {q.correct_answer}
                                   </p>
+                                  {/* Feedback do professor */}
+                                  <div className="border-t border-border pt-3 mt-3 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
+                                      {feedbacks[`${s.id}-${key}`]?.saved && (
+                                        <Check className="w-3.5 h-3.5 text-level-easy" />
+                                      )}
+                                    </div>
+                                    <Textarea
+                                      placeholder="Escreva seu feedback para esta resposta..."
+                                      value={feedbacks[`${s.id}-${key}`]?.feedback_text || ""}
+                                      onChange={(e) => updateFeedbackField(s.id, key, "feedback_text", e.target.value)}
+                                      rows={3}
+                                      className="resize-y text-sm"
+                                    />
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex items-center gap-2">
+                                        <Label className="text-xs text-muted-foreground">Nota:</Label>
+                                        <Select
+                                          value={feedbacks[`${s.id}-${key}`]?.grade?.toString() ?? ""}
+                                          onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}
+                                        >
+                                          <SelectTrigger className="w-20 h-8 text-sm">
+                                            <SelectValue placeholder="—" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {Array.from({ length: 11 }, (_, i) => (
+                                              <SelectItem key={i} value={i.toString()}>{i}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => saveFeedback(s.id, key)}
+                                        disabled={savingFeedback === `${s.id}-${key}`}
+                                      >
+                                        {savingFeedback === `${s.id}-${key}` ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                                        ) : (
+                                          <Save className="w-3.5 h-3.5 mr-1" />
+                                        )}
+                                        Salvar
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             })}

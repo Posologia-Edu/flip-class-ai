@@ -247,6 +247,44 @@ export type Database = {
           },
         ]
       }
+      teacher_feedback: {
+        Row: {
+          created_at: string
+          feedback_text: string | null
+          grade: number | null
+          id: string
+          question_key: string
+          session_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          feedback_text?: string | null
+          grade?: number | null
+          id?: string
+          question_key: string
+          session_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          feedback_text?: string | null
+          grade?: number | null
+          id?: string
+          question_key?: string
+          session_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_feedback_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string

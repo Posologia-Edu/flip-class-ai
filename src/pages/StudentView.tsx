@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -43,6 +43,8 @@ const StudentView = () => {
   const [submitted, setSubmitted] = useState(false);
   const [openAnswer, setOpenAnswer] = useState("");
   const [timeLeft, setTimeLeft] = useState("");
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [teacherFeedbacks, setTeacherFeedbacks] = useState<Record<string, { feedback_text: string; grade: number | null }>>({});
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -252,7 +254,73 @@ const StudentView = () => {
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
             <h2 className="font-display text-2xl font-bold mb-2">Atividade Concluída!</h2>
             <p className="text-muted-foreground mb-6">Suas respostas foram enviadas ao professor para avaliação.</p>
-            <Button onClick={() => navigate("/")}>Voltar para Início</Button>
+            <div className="flex gap-3 justify-center">
+              <Button variant="outline" onClick={async () => {
+                if (!sessionId) return;
+                const { data } = await supabase
+                  .from("teacher_feedback" as any)
+                  .select("*")
+                  .eq("session_id", sessionId);
+                if (data) {
+                  const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
+                  (data as any[]).forEach((fb: any) => {
+                    fbMap[fb.question_key] = { feedback_text: fb.feedback_text || "", grade: fb.grade };
+                  });
+                  setTeacherFeedbacks(fbMap);
+                }
+                setShowFeedback(true);
+              }}>
+                <MessageSquare className="w-4 h-4 mr-2" /> Ver Feedback
+              </Button>
+              <Button onClick={() => navigate("/")}>Voltar para Início</Button>
+            </div>
+
+            {showFeedback && (
+              <div className="mt-8 text-left max-w-2xl mx-auto space-y-4">
+                {quizData?.levels?.map((level, li) => (
+                  <div key={li}>
+                    <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
+                    {level.questions?.map((q, qi) => {
+                      const key = `${li}-${qi}`;
+                      const fb = teacherFeedbacks[key];
+                      return (
+                        <div key={qi} className="mb-3 bg-card border border-border rounded-lg p-4">
+                          <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
+                          <div className="bg-secondary rounded-lg p-3 mb-2">
+                            <p className="text-xs font-semibold text-muted-foreground mb-1">Sua resposta:</p>
+                            <p className="text-sm text-foreground">{answers[key] || <span className="italic text-muted-foreground">Não respondida</span>}</p>
+                          </div>
+                          {fb ? (
+                            <div className="border-t border-border pt-3 mt-3 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                                <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
+                                {fb.grade !== null && fb.grade !== undefined && (
+                                  <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary">
+                                    <Star className="w-3 h-3" /> {fb.grade}/10
+                                  </span>
+                                )}
+                              </div>
+                              {fb.feedback_text && (
+                                <p className="text-sm text-foreground bg-secondary rounded-lg p-3">{fb.feedback_text}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic mt-2">Aguardando avaliação do professor</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+                {Object.keys(teacherFeedbacks).length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2" />
+                    <p>Nenhum feedback disponível ainda. Aguarde a avaliação do professor.</p>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         ) : currentQ ? (
           <AnimatePresence mode="wait">
