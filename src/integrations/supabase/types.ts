@@ -124,6 +124,39 @@ export type Database = {
         }
         Relationships: []
       }
+      question_bank: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          quiz_data: Json
+          tags: string[] | null
+          teacher_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          quiz_data?: Json
+          tags?: string[] | null
+          teacher_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          quiz_data?: Json
+          tags?: string[] | null
+          teacher_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rooms: {
         Row: {
           created_at: string
