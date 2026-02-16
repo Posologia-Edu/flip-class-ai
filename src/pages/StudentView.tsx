@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
+import NotificationCenter from "@/components/NotificationCenter";
 import { PeerReviewStudent } from "@/components/PeerReview";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -486,9 +487,12 @@ const StudentView = () => {
             <p className="text-xs text-muted-foreground">Sala de Aula Invertida</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => navigate("/")}>
-          <LogOut className="w-4 h-4 mr-2" /> Sair
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationCenter sessionId={sessionId} roomId={roomId} />
+          <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+            <LogOut className="w-4 h-4 mr-2" /> Sair
+          </Button>
+        </div>
       </header>
 
       <div className="border-b border-border bg-card px-6">
