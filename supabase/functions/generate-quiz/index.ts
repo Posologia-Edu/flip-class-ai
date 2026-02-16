@@ -8,13 +8,13 @@ const corsHeaders = {
 
 const SYSTEM_PROMPT = `Você é um gerador de atividades educacionais baseadas em casos reais para um sistema de Sala de Aula Invertida.
 
-Dado a TRANSCRIÇÃO COMPLETA de um vídeo educacional, você DEVE gerar atividades baseadas em CASOS REAIS e APLICADOS diretamente relacionados ao conteúdo ESPECÍFICO da transcrição.
+Dado o CONTEÚDO de um material educacional (pode ser transcrição de vídeo, texto de artigo, conteúdo de PDF, transcrição de podcast ou apresentação), você DEVE gerar atividades baseadas em CASOS REAIS e APLICADOS diretamente relacionados ao conteúdo ESPECÍFICO fornecido.
 
 IMPORTANTE:
 - NÃO gere questões de múltipla escolha ou verdadeiro/falso.
 - TODOS os itens devem ser CASOS REAIS com contexto detalhado e perguntas dissertativas.
 - Os casos devem ser ALTAMENTE APLICADOS, simulando situações reais que um profissional enfrentaria.
-- Os casos DEVEM ser baseados DIRETAMENTE no conteúdo da transcrição fornecida. Use termos, conceitos e exemplos mencionados no vídeo.
+- Os casos DEVEM ser baseados DIRETAMENTE no conteúdo fornecido. Use termos, conceitos e exemplos mencionados no material.
 - Cada caso deve ter um contexto narrativo detalhado (pelo menos 3-4 frases) seguido de uma pergunta que exija análise e raciocínio.
 
 Retorne um JSON com esta estrutura EXATA:
@@ -60,11 +60,11 @@ Retorne um JSON com esta estrutura EXATA:
 }
 
 Regras:
-- Nível 1: 2 casos. Aplicação direta dos conceitos do vídeo em situações reais simples.
-- Nível 2: 2 casos. Cenários com múltiplas variáveis que exigem análise mais profunda do conteúdo do vídeo.
-- Nível 3: 1 caso. Cenário complexo que exige síntese, pensamento crítico e integração de múltiplos conceitos do vídeo.
+- Nível 1: 2 casos. Aplicação direta dos conceitos do material em situações reais simples.
+- Nível 2: 2 casos. Cenários com múltiplas variáveis que exigem análise mais profunda do conteúdo.
+- Nível 3: 1 caso. Cenário complexo que exige síntese, pensamento crítico e integração de múltiplos conceitos.
 - TODOS os casos devem ser em Português (Brasil).
-- TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo da transcrição do vídeo.
+- TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
 serve(async (req) => {
@@ -73,11 +73,11 @@ serve(async (req) => {
   }
 
   try {
-    const { contentText, roomId, materialId } = await req.json();
+    const { contentText, roomId, materialId, materialType } = await req.json();
 
     if (!contentText || contentText.length < 50) {
       return new Response(
-        JSON.stringify({ error: "Transcrição do vídeo não fornecida ou muito curta." }),
+        JSON.stringify({ error: "Conteúdo do material não fornecido ou muito curto." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -85,14 +85,21 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    console.log("Generating quiz from transcript:", contentText.length, "chars");
+    console.log("Generating quiz from content:", contentText.length, "chars, type:", materialType || "unknown");
 
-    const userPrompt = `Gere atividades baseadas em casos reais e altamente aplicados com base na TRANSCRIÇÃO COMPLETA do vídeo abaixo. Os casos DEVEM usar os conceitos, termos e exemplos mencionados na transcrição.
+    const typeLabel = materialType === "video" ? "TRANSCRIÇÃO DO VÍDEO"
+      : materialType === "pdf" ? "CONTEÚDO DO PDF"
+      : materialType === "article" ? "CONTEÚDO DO ARTIGO"
+      : materialType === "podcast" ? "TRANSCRIÇÃO DO PODCAST"
+      : materialType === "presentation" ? "CONTEÚDO DA APRESENTAÇÃO"
+      : "CONTEÚDO DO MATERIAL";
 
-TRANSCRIÇÃO DO VÍDEO:
+    const userPrompt = `Gere atividades baseadas em casos reais e altamente aplicados com base no conteúdo abaixo. Os casos DEVEM usar os conceitos, termos e exemplos mencionados no material.
+
+${typeLabel}:
 ${contentText}
 
-IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo da transcrição acima para criar os casos. Não invente informações que não estejam na transcrição.`;
+IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não invente informações que não estejam no material.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

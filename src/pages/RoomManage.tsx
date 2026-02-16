@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import DiscussionForum from "@/components/DiscussionForum";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -50,6 +50,24 @@ interface QuizData {
   levels: QuizLevel[];
 }
 
+const MATERIAL_TYPES = [
+  { value: "video", label: "Vídeo do YouTube", icon: Video },
+  { value: "pdf", label: "PDF", icon: FileText },
+  { value: "article", label: "Artigo / Texto", icon: File },
+  { value: "podcast", label: "Podcast / Áudio", icon: Headphones },
+  { value: "presentation", label: "Apresentação", icon: Presentation },
+];
+
+const getMaterialIcon = (type: string) => {
+  const found = MATERIAL_TYPES.find(t => t.value === type);
+  return found ? found.icon : FileText;
+};
+
+const getMaterialLabel = (type: string) => {
+  const found = MATERIAL_TYPES.find(t => t.value === type);
+  return found ? found.label : type;
+};
+
 const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -59,7 +77,7 @@ const RoomManage = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   const [unlockAt, setUnlockAt] = useState("");
-  const [addingVideo, setAddingVideo] = useState(false);
+  const [addingMaterial, setAddingMaterial] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
@@ -80,6 +98,14 @@ const RoomManage = () => {
   const [saveBankDialogOpen, setSaveBankDialogOpen] = useState(false);
   const [activityToSave, setActivityToSave] = useState<Activity | null>(null);
 
+  // New material form state
+  const [newMaterialType, setNewMaterialType] = useState("video");
+  const [newMaterialTitle, setNewMaterialTitle] = useState("");
+  const [newMaterialUrl, setNewMaterialUrl] = useState("");
+  const [newMaterialContent, setNewMaterialContent] = useState("");
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null);
+
   const fetchData = useCallback(async () => {
     if (!roomId) return;
     const [roomRes, matRes, actRes, sessRes, logsRes] = await Promise.all([
@@ -95,7 +121,6 @@ const RoomManage = () => {
     setSessions(sessRes.data || []);
     setActivityLogs((logsRes.data as ActivityLog[]) || []);
 
-    // Fetch existing feedbacks for all sessions in this room
     const sessionIds = (sessRes.data || []).map(s => s.id);
     if (sessionIds.length > 0) {
       const { data: fbData } = await supabase
@@ -112,7 +137,6 @@ const RoomManage = () => {
       }
     }
     if (roomRes.data?.unlock_at) {
-      // Display in local time without timezone conversion
       const d = new Date(roomRes.data.unlock_at);
       const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       setUnlockAt(local);
@@ -126,41 +150,102 @@ const RoomManage = () => {
     return match?.[1] || null;
   };
 
-  const addVideo = async () => {
-    const ytId = extractYoutubeId(videoUrl);
-    if (!ytId || !roomId) {
-      toast({ title: "URL inválida", description: "Cole um link válido do YouTube.", variant: "destructive" });
-      return;
-    }
-    setAddingVideo(true);
-    const title = `Vídeo do YouTube`;
-    const thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
-
-    await supabase.from("materials").insert({
-      room_id: roomId,
-      type: "video",
-      title,
-      url: videoUrl,
-      thumbnail_url: thumbnail,
-      content_text_for_ai: `YouTube video ID: ${ytId}. URL: ${videoUrl}`,
-    });
-    setVideoUrl("");
+  const resetMaterialForm = () => {
+    setNewMaterialType("video");
+    setNewMaterialTitle("");
+    setNewMaterialUrl("");
+    setNewMaterialContent("");
+    setSelectedFile(null);
     setDialogOpen(false);
-    fetchData();
-    setAddingVideo(false);
+  };
+
+  const addMaterial = async () => {
+    if (!roomId) return;
+    setAddingMaterial(true);
+
+    try {
+      if (newMaterialType === "video") {
+        const ytId = extractYoutubeId(newMaterialUrl);
+        if (!ytId) {
+          toast({ title: "URL inválida", description: "Cole um link válido do YouTube.", variant: "destructive" });
+          setAddingMaterial(false);
+          return;
+        }
+        const title = newMaterialTitle || "Vídeo do YouTube";
+        const thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+        await supabase.from("materials").insert({
+          room_id: roomId,
+          type: "video",
+          title,
+          url: newMaterialUrl,
+          thumbnail_url: thumbnail,
+          content_text_for_ai: `YouTube video ID: ${ytId}. URL: ${newMaterialUrl}`,
+        });
+      } else if (newMaterialType === "article") {
+        if (!newMaterialContent.trim()) {
+          toast({ title: "Conteúdo vazio", description: "Cole o texto do artigo.", variant: "destructive" });
+          setAddingMaterial(false);
+          return;
+        }
+        await supabase.from("materials").insert({
+          room_id: roomId,
+          type: "article",
+          title: newMaterialTitle || "Artigo",
+          content_text_for_ai: newMaterialContent.trim(),
+        });
+      } else if (selectedFile) {
+        // Upload file to storage
+        setUploadingFile(true);
+        const fileExt = selectedFile.name.split(".").pop();
+        const filePath = `${roomId}/${crypto.randomUUID()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from("materials").upload(filePath, selectedFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("materials").getPublicUrl(filePath);
+        
+        // Read text content from file for AI
+        let contentForAi = "";
+        if (selectedFile.type === "text/plain" || selectedFile.name.endsWith(".txt") || selectedFile.name.endsWith(".md")) {
+          contentForAi = await selectedFile.text();
+        } else {
+          // For PDFs and other files, we store the file and let teacher paste content
+          contentForAi = newMaterialContent.trim() || "";
+        }
+
+        await supabase.from("materials").insert({
+          room_id: roomId,
+          type: newMaterialType,
+          title: newMaterialTitle || selectedFile.name,
+          url: urlData.publicUrl,
+          content_text_for_ai: contentForAi || null,
+        });
+        setUploadingFile(false);
+      } else if (newMaterialUrl.trim()) {
+        // Link-based material (podcast URL, external link, etc.)
+        await supabase.from("materials").insert({
+          room_id: roomId,
+          type: newMaterialType,
+          title: newMaterialTitle || newMaterialUrl,
+          url: newMaterialUrl,
+          content_text_for_ai: newMaterialContent.trim() || null,
+        });
+      } else {
+        toast({ title: "Dados insuficientes", description: "Adicione um arquivo, URL ou conteúdo.", variant: "destructive" });
+        setAddingMaterial(false);
+        return;
+      }
+
+      resetMaterialForm();
+      fetchData();
+      toast({ title: "Material adicionado!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao adicionar", description: err.message, variant: "destructive" });
+    }
+    setAddingMaterial(false);
+    setUploadingFile(false);
   };
 
   const updateUnlockTime = async () => {
     if (!roomId || !unlockAt) return;
-    // Send the local datetime as-is, treating it as UTC to preserve the user's intended time
-    const localDate = new Date(unlockAt);
-    const utcString = new Date(Date.UTC(
-      localDate.getFullYear(),
-      localDate.getMonth(),
-      localDate.getDate(),
-      localDate.getHours(),
-      localDate.getMinutes()
-    )).toISOString();
     await supabase.from("rooms").update({ unlock_at: unlockAt + ":00+00:00" }).eq("id", roomId);
     toast({ title: "Timer atualizado!" });
     fetchData();
@@ -176,24 +261,60 @@ const RoomManage = () => {
     fetchData();
   };
 
+  const isYoutubeLink = (mat: Material) => {
+    return mat.type === "video" && mat.url && extractYoutubeId(mat.url);
+  };
+
   const openTranscriptDialog = (material: Material) => {
     setSelectedMaterialForQuiz(material);
-    // If material already has a cached transcript, pre-fill it
-    const cached = material.content_text_for_ai || "";
-    const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
-    setManualTranscript(isPlaceholder ? "" : cached);
-    setTranscriptDialogOpen(true);
+    if (isYoutubeLink(material)) {
+      // YouTube: needs manual transcript
+      const cached = material.content_text_for_ai || "";
+      const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
+      setManualTranscript(isPlaceholder ? "" : cached);
+      setTranscriptDialogOpen(true);
+    } else {
+      // Other types: check if content_text_for_ai is available
+      const content = material.content_text_for_ai || "";
+      if (content.length >= 50) {
+        // Has content, generate directly
+        generateQuizDirect(material, content);
+      } else {
+        // No content, ask teacher to paste it
+        setManualTranscript("");
+        setTranscriptDialogOpen(true);
+      }
+    }
+  };
+
+  const generateQuizDirect = async (material: Material, content: string) => {
+    setGeneratingQuiz(material.id);
+    try {
+      const response = await supabase.functions.invoke("generate-quiz", {
+        body: {
+          materialId: material.id,
+          contentText: content,
+          roomId: roomId,
+          materialType: material.type,
+        },
+      });
+      if (response.error) throw response.error;
+      toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+    }
+    setGeneratingQuiz(null);
   };
 
   const generateQuizFromTranscript = async () => {
     if (!selectedMaterialForQuiz || !manualTranscript.trim()) {
-      toast({ title: "Transcrição vazia", description: "Cole a transcrição do vídeo antes de gerar.", variant: "destructive" });
+      toast({ title: "Conteúdo vazio", description: "Cole o conteúdo do material antes de gerar.", variant: "destructive" });
       return;
     }
     setTranscriptDialogOpen(false);
     setGeneratingQuiz(selectedMaterialForQuiz.id);
     try {
-      // Cache the transcript for future use
       await supabase.from("materials").update({ content_text_for_ai: manualTranscript.trim() }).eq("id", selectedMaterialForQuiz.id);
 
       const response = await supabase.functions.invoke("generate-quiz", {
@@ -201,6 +322,7 @@ const RoomManage = () => {
           materialId: selectedMaterialForQuiz.id,
           contentText: manualTranscript.trim(),
           roomId: roomId,
+          materialType: selectedMaterialForQuiz.type,
         },
       });
       if (response.error) throw response.error;
@@ -366,6 +488,20 @@ const RoomManage = () => {
 
   if (!room) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Carregando...</div>;
 
+  const getTranscriptDialogTitle = () => {
+    if (!selectedMaterialForQuiz) return "Conteúdo do Material";
+    if (isYoutubeLink(selectedMaterialForQuiz)) return "Transcrição do Vídeo";
+    return `Conteúdo do ${getMaterialLabel(selectedMaterialForQuiz.type)}`;
+  };
+
+  const getTranscriptDialogDescription = () => {
+    if (!selectedMaterialForQuiz) return "";
+    if (isYoutubeLink(selectedMaterialForQuiz)) {
+      return 'Cole abaixo a transcrição/legendas do vídeo. A IA usará esse conteúdo para gerar os casos aplicados. Você pode copiar a transcrição diretamente do YouTube (clique nos 3 pontos do vídeo → "Mostrar transcrição").';
+    }
+    return "Cole abaixo o conteúdo textual deste material. A IA usará esse texto para gerar atividades baseadas em casos reais.";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 bg-card flex items-center gap-4">
@@ -400,19 +536,125 @@ const RoomManage = () => {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold">Materiais</h2>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetMaterialForm(); }}>
               <DialogTrigger asChild>
-                <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Adicionar Vídeo</Button>
+                <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Adicionar Material</Button>
               </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle className="font-display">Adicionar Vídeo do YouTube</DialogTitle></DialogHeader>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle className="font-display">Adicionar Material</DialogTitle></DialogHeader>
                 <div className="space-y-4 pt-2">
+                  {/* Material Type Selection */}
                   <div className="space-y-2">
-                    <Label>URL do YouTube</Label>
-                    <Input placeholder="https://youtube.com/watch?v=..." value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
+                    <Label>Tipo de material</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {MATERIAL_TYPES.map((t) => {
+                        const Icon = t.icon;
+                        return (
+                          <button
+                            key={t.value}
+                            onClick={() => { setNewMaterialType(t.value); setSelectedFile(null); setNewMaterialUrl(""); setNewMaterialContent(""); }}
+                            className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium transition-colors ${
+                              newMaterialType === t.value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-foreground/30"
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <Button onClick={addVideo} disabled={addingVideo} className="w-full">
-                    {addingVideo ? "Adicionando..." : "Adicionar"}
+
+                  {/* Title */}
+                  <div className="space-y-2">
+                    <Label>Título (opcional)</Label>
+                    <Input
+                      placeholder="Ex: Aula 1 — Introdução"
+                      value={newMaterialTitle}
+                      onChange={(e) => setNewMaterialTitle(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Conditional fields based on type */}
+                  {newMaterialType === "video" && (
+                    <div className="space-y-2">
+                      <Label>URL do YouTube</Label>
+                      <Input placeholder="https://youtube.com/watch?v=..." value={newMaterialUrl} onChange={(e) => setNewMaterialUrl(e.target.value)} />
+                    </div>
+                  )}
+
+                  {newMaterialType === "article" && (
+                    <div className="space-y-2">
+                      <Label>Conteúdo do artigo</Label>
+                      <Textarea
+                        placeholder="Cole aqui o texto completo do artigo..."
+                        value={newMaterialContent}
+                        onChange={(e) => setNewMaterialContent(e.target.value)}
+                        rows={8}
+                        className="resize-y"
+                      />
+                    </div>
+                  )}
+
+                  {(newMaterialType === "pdf" || newMaterialType === "presentation") && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Upload do arquivo</Label>
+                        <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                          <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                          <input
+                            type="file"
+                            accept={newMaterialType === "pdf" ? ".pdf" : ".pdf,.ppt,.pptx,.odp"}
+                            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                            className="hidden"
+                            id="file-upload"
+                          />
+                          <label htmlFor="file-upload" className="cursor-pointer text-sm text-primary hover:underline">
+                            {selectedFile ? selectedFile.name : "Clique para selecionar arquivo"}
+                          </label>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Conteúdo textual para IA (cole o texto do {newMaterialType === "pdf" ? "PDF" : "slides"})</Label>
+                        <Textarea
+                          placeholder={`Cole aqui o conteúdo textual do ${newMaterialType === "pdf" ? "PDF" : "apresentação"} para que a IA possa gerar atividades...`}
+                          value={newMaterialContent}
+                          onChange={(e) => setNewMaterialContent(e.target.value)}
+                          rows={6}
+                          className="resize-y"
+                        />
+                        <p className="text-xs text-muted-foreground">A IA usará este texto para gerar atividades. Você pode copiar e colar o conteúdo do arquivo.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {newMaterialType === "podcast" && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>URL do podcast (opcional)</Label>
+                        <Input placeholder="https://..." value={newMaterialUrl} onChange={(e) => setNewMaterialUrl(e.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Transcrição / conteúdo do podcast</Label>
+                        <Textarea
+                          placeholder="Cole aqui a transcrição do podcast..."
+                          value={newMaterialContent}
+                          onChange={(e) => setNewMaterialContent(e.target.value)}
+                          rows={6}
+                          className="resize-y"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <Button onClick={addMaterial} disabled={addingMaterial || uploadingFile} className="w-full">
+                    {addingMaterial || uploadingFile ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-1" /> {uploadingFile ? "Enviando arquivo..." : "Adicionando..."}</>
+                    ) : (
+                      <><Plus className="w-4 h-4 mr-1" /> Adicionar</>
+                    )}
                   </Button>
                 </div>
               </DialogContent>
@@ -421,63 +663,73 @@ const RoomManage = () => {
 
           {materials.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-border">
-              <Video className="w-8 h-8 mx-auto mb-2" />
+              <FileText className="w-8 h-8 mx-auto mb-2" />
               <p>Nenhum material adicionado ainda.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {materials.map((mat) => (
-                <div key={mat.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-                  {mat.thumbnail_url ? (
-                    <img src={mat.thumbnail_url} alt="" className="w-24 h-16 rounded-lg object-cover flex-shrink-0" />
-                  ) : (
-                    <div className="w-24 h-16 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-6 h-6 text-muted-foreground" />
+              {materials.map((mat) => {
+                const MatIcon = getMaterialIcon(mat.type);
+                const hasContent = mat.content_text_for_ai && mat.content_text_for_ai.length >= 50 && !mat.content_text_for_ai.startsWith("YouTube video ID:");
+                return (
+                  <div key={mat.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
+                    {mat.thumbnail_url ? (
+                      <img src={mat.thumbnail_url} alt="" className="w-24 h-16 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-24 h-16 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
+                        <MatIcon className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-card-foreground truncate">{mat.title || mat.url}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-muted-foreground">{getMaterialLabel(mat.type)}</p>
+                        {hasContent && (
+                          <span className="inline-flex items-center gap-1 text-xs text-primary">
+                            <Check className="w-3 h-3" /> Conteúdo para IA
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-card-foreground truncate">{mat.title || mat.url}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{mat.type}</p>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openTranscriptDialog(mat)}
+                        disabled={generatingQuiz === mat.id}
+                      >
+                        {generatingQuiz === mat.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <Sparkles className="w-4 h-4 mr-1" />
+                        )}
+                        Gerar Atividade
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteMaterial(mat.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openTranscriptDialog(mat)}
-                      disabled={generatingQuiz === mat.id}
-                    >
-                      {generatingQuiz === mat.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                      ) : (
-                        <Sparkles className="w-4 h-4 mr-1" />
-                      )}
-                      Gerar Atividade
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => deleteMaterial(mat.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
 
-        {/* Transcript Dialog */}
+        {/* Transcript / Content Dialog */}
         <Dialog open={transcriptDialogOpen} onOpenChange={setTranscriptDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="font-display flex items-center gap-2">
-                <FileEdit className="w-5 h-5" /> Transcrição do Vídeo
+                <FileEdit className="w-5 h-5" /> {getTranscriptDialogTitle()}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <p className="text-sm text-muted-foreground">
-                Cole abaixo a transcrição/legendas do vídeo. A IA usará esse conteúdo para gerar os casos aplicados.
-                Você pode copiar a transcrição diretamente do YouTube (clique nos 3 pontos do vídeo → "Mostrar transcrição").
+                {getTranscriptDialogDescription()}
               </p>
               <Textarea
-                placeholder="Cole aqui a transcrição completa do vídeo..."
+                placeholder="Cole aqui o conteúdo do material..."
                 value={manualTranscript}
                 onChange={(e) => setManualTranscript(e.target.value)}
                 rows={12}
@@ -498,7 +750,6 @@ const RoomManage = () => {
             </div>
           </DialogContent>
         </Dialog>
-
 
         {/* Activities Section */}
         <section>

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
 import type { Tables, Json } from "@/integrations/supabase/types";
@@ -65,7 +65,6 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
   const totalTimeSeconds = activityLogs.reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
   const totalMinutes = Math.round(totalTimeSeconds / 60);
 
-  // Determine highest level reached
   let highestLevel = 0;
   if (quizData?.levels) {
     for (let li = 0; li < quizData.levels.length; li++) {
@@ -75,63 +74,19 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
     }
   }
 
-  // Badges
   const badges: Badge[] = [
-    {
-      id: "first_material",
-      icon: <Eye className="w-6 h-6" />,
-      label: "Explorador",
-      description: "Assistiu ao primeiro material",
-      earned: materialsWatched >= 1,
-      color: "text-blue-500",
-    },
-    {
-      id: "all_materials",
-      icon: <Video className="w-6 h-6" />,
-      label: "Dedicado",
-      description: "Assistiu a todos os materiais",
-      earned: totalMaterials > 0 && materialsWatched >= totalMaterials,
-      color: "text-purple-500",
-    },
-    {
-      id: "first_answer",
-      icon: <Target className="w-6 h-6" />,
-      label: "Iniciante",
-      description: "Respondeu a primeira questão",
-      earned: answeredQuestions >= 1,
-      color: "text-green-500",
-    },
-    {
-      id: "completed",
-      icon: <Trophy className="w-6 h-6" />,
-      label: "Concluísta",
-      description: "Completou toda a atividade",
-      earned: isCompleted,
-      color: "text-yellow-500",
-    },
-    {
-      id: "level3",
-      icon: <Flame className="w-6 h-6" />,
-      label: "Mestre",
-      description: "Alcançou o nível 3 (Complexo)",
-      earned: highestLevel >= 3,
-      color: "text-red-500",
-    },
-    {
-      id: "engagement",
-      icon: <TrendingUp className="w-6 h-6" />,
-      label: "Engajado",
-      description: "Passou mais de 10 min na plataforma",
-      earned: totalMinutes >= 10,
-      color: "text-teal-500",
-    },
+    { id: "first_material", icon: <Eye className="w-6 h-6" />, label: "Explorador", description: "Acessou o primeiro material", earned: materialsWatched >= 1, color: "text-blue-500" },
+    { id: "all_materials", icon: <BookOpen className="w-6 h-6" />, label: "Dedicado", description: "Acessou todos os materiais", earned: totalMaterials > 0 && materialsWatched >= totalMaterials, color: "text-purple-500" },
+    { id: "first_answer", icon: <Target className="w-6 h-6" />, label: "Iniciante", description: "Respondeu a primeira questão", earned: answeredQuestions >= 1, color: "text-green-500" },
+    { id: "completed", icon: <Trophy className="w-6 h-6" />, label: "Concluísta", description: "Completou toda a atividade", earned: isCompleted, color: "text-yellow-500" },
+    { id: "level3", icon: <Flame className="w-6 h-6" />, label: "Mestre", description: "Alcançou o nível 3 (Complexo)", earned: highestLevel >= 3, color: "text-red-500" },
+    { id: "engagement", icon: <TrendingUp className="w-6 h-6" />, label: "Engajado", description: "Passou mais de 10 min na plataforma", earned: totalMinutes >= 10, color: "text-teal-500" },
   ];
 
   const earnedCount = badges.filter(b => b.earned).length;
 
   return (
     <div className="space-y-8">
-      {/* Overall Progress */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6">
         <h2 className="font-display text-lg font-bold flex items-center gap-2 mb-6">
           <TrendingUp className="w-5 h-5 text-primary" /> Seu Progresso
@@ -139,7 +94,7 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
-              <Video className="w-5 h-5 text-primary" />
+              <BookOpen className="w-5 h-5 text-primary" />
             </div>
             <p className="font-display text-2xl font-bold text-foreground">{materialsWatched}/{totalMaterials}</p>
             <p className="text-xs text-muted-foreground">Materiais Vistos</p>
@@ -168,7 +123,6 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
         </div>
       </motion.div>
 
-      {/* Progress Bars */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-xl p-6 space-y-5">
         <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wide">Barras de Progresso</h3>
         <div>
@@ -177,12 +131,7 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
             <span className="text-muted-foreground">{materialsProgress}%</span>
           </div>
           <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${materialsProgress}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="h-full bg-primary rounded-full"
-            />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${materialsProgress}%` }} transition={{ duration: 0.8, ease: "easeOut" }} className="h-full bg-primary rounded-full" />
           </div>
         </div>
         <div>
@@ -191,17 +140,11 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
             <span className="text-muted-foreground">{isCompleted ? "100" : quizProgress}%</span>
           </div>
           <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${isCompleted ? 100 : quizProgress}%` }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
-              className="h-full bg-level-easy rounded-full"
-            />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${isCompleted ? 100 : quizProgress}%` }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} className="h-full bg-level-easy rounded-full" />
           </div>
         </div>
       </motion.div>
 
-      {/* Badges */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="font-display text-lg font-bold flex items-center gap-2">
@@ -217,9 +160,7 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.3 + i * 0.08 }}
               className={`relative border rounded-xl p-4 text-center transition-all ${
-                badge.earned
-                  ? "border-primary/30 bg-primary/5"
-                  : "border-border bg-secondary/30 opacity-50 grayscale"
+                badge.earned ? "border-primary/30 bg-primary/5" : "border-border bg-secondary/30 opacity-50 grayscale"
               }`}
             >
               {badge.earned && (
@@ -227,9 +168,7 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
                   <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                 </div>
               )}
-              <div className={`${badge.earned ? badge.color : "text-muted-foreground"} mb-2 flex justify-center`}>
-                {badge.icon}
-              </div>
+              <div className={`${badge.earned ? badge.color : "text-muted-foreground"} mb-2 flex justify-center`}>{badge.icon}</div>
               <p className="font-display text-sm font-bold text-foreground">{badge.label}</p>
               <p className="text-xs text-muted-foreground mt-1">{badge.description}</p>
             </motion.div>
@@ -238,6 +177,17 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
       </motion.div>
     </div>
   );
+};
+
+const getMaterialIcon = (type: string) => {
+  switch (type) {
+    case "video": return Video;
+    case "pdf": return FileText;
+    case "article": return File;
+    case "podcast": return Headphones;
+    case "presentation": return Presentation;
+    default: return FileText;
+  }
 };
 
 const StudentView = () => {
@@ -260,6 +210,7 @@ const StudentView = () => {
   const [teacherFeedbacks, setTeacherFeedbacks] = useState<Record<string, { feedback_text: string; grade: number | null }>>({});
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [sessionData, setSessionData] = useState<Tables<"student_sessions"> | null>(null);
+  const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -401,6 +352,125 @@ const StudentView = () => {
     toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
 
+  const renderMaterialCard = (mat: Material) => {
+    const ytId = mat.url ? extractYoutubeId(mat.url) : null;
+    const MatIcon = getMaterialIcon(mat.type);
+
+    if (mat.type === "video" && ytId) {
+      return (
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+          <div className="aspect-video">
+            <iframe
+              src={`https://www.youtube.com/embed/${ytId}`}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+          <div className="p-4">
+            <h3 className="font-medium text-card-foreground">{mat.title || "Vídeo"}</h3>
+          </div>
+        </div>
+      );
+    }
+
+    if (mat.type === "pdf" || mat.type === "presentation") {
+      return (
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+          {mat.url ? (
+            <>
+              <div className="aspect-[4/3]">
+                <iframe
+                  src={mat.url}
+                  className="w-full h-full"
+                  title={mat.title}
+                />
+              </div>
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MatIcon className="w-5 h-5 text-muted-foreground" />
+                  <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
+                </div>
+                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <ExternalLink className="w-4 h-4" /> Abrir
+                </a>
+              </div>
+            </>
+          ) : (
+            <div className="p-6 flex items-center gap-3">
+              <MatIcon className="w-8 h-8 text-muted-foreground" />
+              <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (mat.type === "article") {
+      const isExpanded = expandedArticle === mat.id;
+      const content = mat.content_text_for_ai || "";
+      const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
+      return (
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+          <div className="p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <File className="w-5 h-5 text-muted-foreground" />
+              <h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3>
+            </div>
+            {content && (
+              <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                {isExpanded ? content : preview}
+                {content.length > 300 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setExpandedArticle(isExpanded ? null : mat.id); }}
+                    className="text-primary text-sm font-medium ml-1 hover:underline"
+                  >
+                    {isExpanded ? "Ver menos" : "Ler mais"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (mat.type === "podcast") {
+      return (
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+          <div className="p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Headphones className="w-5 h-5 text-muted-foreground" />
+              <h3 className="font-medium text-card-foreground">{mat.title || "Podcast"}</h3>
+            </div>
+            {mat.url && (
+              <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <ExternalLink className="w-4 h-4" /> Ouvir podcast
+              </a>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Generic fallback
+    return (
+      <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+        <div className="p-6 flex items-center gap-3">
+          <MatIcon className="w-8 h-8 text-muted-foreground" />
+          <div>
+            <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
+            {mat.url && (
+              <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                <ExternalLink className="w-4 h-4" /> Abrir
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (!room) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Carregando...</div>;
 
   return (
@@ -426,7 +496,7 @@ const StudentView = () => {
             onClick={() => setTab("materials")}
             className={`py-3 text-sm font-medium border-b-2 transition-colors ${tab === "materials" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            <Video className="w-4 h-4 inline mr-1.5" /> Materiais
+            <BookOpen className="w-4 h-4 inline mr-1.5" /> Materiais
           </button>
           <button
             onClick={() => unlocked && quizData && handleStartQuiz()}
@@ -468,30 +538,11 @@ const StudentView = () => {
               </div>
             )}
 
-            {materials.map((mat) => {
-              const ytId = mat.url ? extractYoutubeId(mat.url) : null;
-              return (
-                <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
-                  {ytId && (
-                    <div className="aspect-video">
-                      <iframe
-                        src={`https://www.youtube.com/embed/${ytId}`}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  )}
-                  <div className="p-4">
-                    <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
-                  </div>
-                </div>
-              );
-            })}
+            {materials.map((mat) => renderMaterialCard(mat))}
 
             {materials.length === 0 && (
               <div className="text-center py-16 text-muted-foreground">
-                <Video className="w-8 h-8 mx-auto mb-2" />
+                <BookOpen className="w-8 h-8 mx-auto mb-2" />
                 <p>Nenhum material disponível ainda.</p>
               </div>
             )}
