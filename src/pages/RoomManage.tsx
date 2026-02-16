@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
@@ -70,6 +70,13 @@ const RoomManage = () => {
   const [selectedMaterialForQuiz, setSelectedMaterialForQuiz] = useState<Material | null>(null);
   const [feedbacks, setFeedbacks] = useState<Record<string, { feedback_text: string; grade: number | null; saved: boolean }>>({});
   const [savingFeedback, setSavingFeedback] = useState<string | null>(null);
+  const [bankDialogOpen, setBankDialogOpen] = useState(false);
+  const [bankItems, setBankItems] = useState<any[]>([]);
+  const [loadingBank, setLoadingBank] = useState(false);
+  const [savingToBank, setSavingToBank] = useState<string | null>(null);
+  const [bankTitle, setBankTitle] = useState("");
+  const [saveBankDialogOpen, setSaveBankDialogOpen] = useState(false);
+  const [activityToSave, setActivityToSave] = useState<Activity | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -250,6 +257,80 @@ const RoomManage = () => {
     }));
   };
 
+  const openSaveToBankDialog = (activity: Activity) => {
+    setActivityToSave(activity);
+    const quiz = activity.quiz_data as unknown as QuizData;
+    const totalQ = quiz?.levels?.reduce((s, l) => s + (l.questions?.length || 0), 0) || 0;
+    setBankTitle(`Atividade — ${totalQ} questões`);
+    setSaveBankDialogOpen(true);
+  };
+
+  const saveToBank = async () => {
+    if (!activityToSave || !bankTitle.trim()) return;
+    setSavingToBank(activityToSave.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      const { error } = await supabase
+        .from("question_bank" as any)
+        .insert({
+          teacher_id: user.id,
+          title: bankTitle.trim(),
+          quiz_data: activityToSave.quiz_data,
+        } as any);
+      if (error) throw error;
+      toast({ title: "Salvo no banco!", description: "Atividade salva na sua biblioteca pessoal." });
+      setSaveBankDialogOpen(false);
+      setActivityToSave(null);
+      setBankTitle("");
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+    }
+    setSavingToBank(null);
+  };
+
+  const loadBankItems = async () => {
+    setLoadingBank(true);
+    try {
+      const { data, error } = await supabase
+        .from("question_bank" as any)
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setBankItems(data || []);
+    } catch (err: any) {
+      toast({ title: "Erro ao carregar", description: err.message, variant: "destructive" });
+    }
+    setLoadingBank(false);
+  };
+
+  const importFromBank = async (bankItem: any) => {
+    if (!roomId) return;
+    try {
+      const { error } = await supabase.from("activities").insert({
+        room_id: roomId,
+        quiz_data: bankItem.quiz_data,
+      });
+      if (error) throw error;
+      toast({ title: "Atividade importada!", description: `"${bankItem.title}" foi adicionada a esta sala.` });
+      setBankDialogOpen(false);
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Erro ao importar", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const deleteBankItem = async (id: string) => {
+    try {
+      const { error } = await supabase.from("question_bank" as any).delete().eq("id", id);
+      if (error) throw error;
+      setBankItems(prev => prev.filter(b => b.id !== id));
+      toast({ title: "Removido do banco!" });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
   // Count unique emails for student count
   const uniqueEmails = new Set(sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean));
   const totalStudents = uniqueEmails.size || sessions.length;
@@ -417,9 +498,15 @@ const RoomManage = () => {
         </Dialog>
 
 
-        {activities.length > 0 && (
-          <section>
-            <h2 className="font-display text-lg font-semibold mb-4">Atividades Geradas</h2>
+        {/* Activities Section */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold">Atividades Geradas</h2>
+            <Button size="sm" variant="outline" onClick={() => { setBankDialogOpen(true); loadBankItems(); }}>
+              <Library className="w-4 h-4 mr-1" /> Banco de Questões
+            </Button>
+          </div>
+          {activities.length > 0 ? (
             <div className="space-y-3">
               {activities.map((act, i) => {
                 const quiz = act.quiz_data as unknown as QuizData;
@@ -435,6 +522,9 @@ const RoomManage = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openSaveToBankDialog(act); }} title="Salvar no Banco de Questões">
+                          {savingToBank === act.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookmarkPlus className="w-4 h-4" />}
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); deleteActivity(act.id); }}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -465,8 +555,13 @@ const RoomManage = () => {
                 );
               })}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-border">
+              <FileText className="w-8 h-8 mx-auto mb-2" />
+              <p>Nenhuma atividade gerada ainda. Use "Gerar Atividade" ou importe do Banco de Questões.</p>
+            </div>
+          )}
+        </section>
 
         {/* Student Statistics Section */}
         <section>
@@ -682,6 +777,85 @@ const RoomManage = () => {
           )}
         </section>
       </main>
+
+      {/* Save to Bank Dialog */}
+      <Dialog open={saveBankDialogOpen} onOpenChange={setSaveBankDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <BookmarkPlus className="w-5 h-5" /> Salvar no Banco de Questões
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Título da atividade</Label>
+              <Input
+                placeholder="Ex: Farmacologia — Casos de Antibióticos"
+                value={bankTitle}
+                onChange={(e) => setBankTitle(e.target.value)}
+              />
+            </div>
+            {activityToSave && (
+              <p className="text-xs text-muted-foreground">
+                {((activityToSave.quiz_data as unknown as QuizData)?.levels?.reduce((s, l) => s + (l.questions?.length || 0), 0)) || 0} questões serão salvas
+              </p>
+            )}
+            <Button onClick={saveToBank} disabled={!bankTitle.trim() || !!savingToBank} className="w-full">
+              {savingToBank ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Salvando...</> : <><BookmarkPlus className="w-4 h-4 mr-1" /> Salvar</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Question Bank Dialog */}
+      <Dialog open={bankDialogOpen} onOpenChange={setBankDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Library className="w-5 h-5" /> Banco de Questões
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Sua biblioteca pessoal de atividades. Importe qualquer uma para esta sala.
+            </p>
+            {loadingBank ? (
+              <div className="text-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
+              </div>
+            ) : bankItems.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Library className="w-8 h-8 mx-auto mb-2" />
+                <p>Nenhuma atividade salva ainda.</p>
+                <p className="text-xs mt-1">Use o botão <BookmarkPlus className="w-3 h-3 inline" /> nas atividades geradas para salvar aqui.</p>
+              </div>
+            ) : (
+              bankItems.map((item) => {
+                const quiz = item.quiz_data as unknown as QuizData;
+                const totalQ = quiz?.levels?.reduce((s: number, l: any) => s + (l.questions?.length || 0), 0) || 0;
+                return (
+                  <div key={item.id} className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-card-foreground">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {totalQ} questões • Salva em {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => importFromBank(item)}>
+                        <Download className="w-4 h-4 mr-1" /> Importar
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteBankItem(item.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
