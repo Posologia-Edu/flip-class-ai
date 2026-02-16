@@ -67,25 +67,119 @@ Regras:
 - TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
+async function extractTextFromFileUrl(fileUrl: string, materialType: string, apiKey: string): Promise<string> {
+  console.log("Fetching file from URL:", fileUrl);
+  
+  const fileResponse = await fetch(fileUrl);
+  if (!fileResponse.ok) {
+    throw new Error(`Falha ao baixar arquivo: ${fileResponse.status}`);
+  }
+  
+  const fileBuffer = await fileResponse.arrayBuffer();
+  const base64Data = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+  
+  const contentType = fileResponse.headers.get("content-type") || "application/octet-stream";
+  console.log("File content-type:", contentType, "size:", fileBuffer.byteLength);
+
+  // Determine MIME type for Gemini
+  let mimeType = contentType;
+  if (materialType === "pdf" || fileUrl.endsWith(".pdf")) {
+    mimeType = "application/pdf";
+  } else if (materialType === "presentation" || fileUrl.endsWith(".pptx")) {
+    mimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  } else if (fileUrl.endsWith(".ppt")) {
+    mimeType = "application/vnd.ms-powerpoint";
+  } else if (fileUrl.endsWith(".docx")) {
+    mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  } else if (fileUrl.endsWith(".doc")) {
+    mimeType = "application/msword";
+  }
+
+  // Use Gemini multimodal to extract and understand the document content
+  const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Extraia TODO o conteúdo textual deste documento de forma detalhada e completa. Mantenha a estrutura, títulos, subtítulos e informações. Retorne APENAS o texto extraído, sem comentários adicionais."
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Data}`
+              }
+            }
+          ]
+        }
+      ],
+    }),
+  });
+
+  if (!extractionResponse.ok) {
+    const errorText = await extractionResponse.text();
+    console.error("Extraction AI error:", extractionResponse.status, errorText);
+    throw new Error("Falha ao extrair conteúdo do documento com IA");
+  }
+
+  const extractionData = await extractionResponse.json();
+  const extractedText = extractionData.choices?.[0]?.message?.content;
+  
+  if (!extractedText || extractedText.length < 50) {
+    throw new Error("Não foi possível extrair conteúdo suficiente do documento");
+  }
+
+  console.log("Extracted text length:", extractedText.length);
+  return extractedText;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { contentText, roomId, materialId, materialType } = await req.json();
-
-    if (!contentText || contentText.length < 50) {
-      return new Response(
-        JSON.stringify({ error: "Conteúdo do material não fornecido ou muito curto." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const { contentText, roomId, materialId, materialType, fileUrl } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    console.log("Generating quiz from content:", contentText.length, "chars, type:", materialType || "unknown");
+    // Determine the content to use for quiz generation
+    let finalContent = contentText || "";
+
+    // If we have a file URL and no/insufficient text content, extract from file
+    if (fileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
+      console.log("Extracting content from file:", fileUrl);
+      finalContent = await extractTextFromFileUrl(fileUrl, materialType || "file", LOVABLE_API_KEY);
+      
+      // Save extracted text back to the material for future use
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      if (materialId) {
+        await supabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
+        console.log("Saved extracted text to material");
+      }
+    }
+
+    if (!finalContent || finalContent.length < 50) {
+      return new Response(
+        JSON.stringify({ error: "Conteúdo do material não fornecido ou muito curto. Para vídeos do YouTube, cole a transcrição." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Generating quiz from content:", finalContent.length, "chars, type:", materialType || "unknown");
 
     const typeLabel = materialType === "video" ? "TRANSCRIÇÃO DO VÍDEO"
       : materialType === "pdf" ? "CONTEÚDO DO PDF"
@@ -97,7 +191,7 @@ serve(async (req) => {
     const userPrompt = `Gere atividades baseadas em casos reais e altamente aplicados com base no conteúdo abaixo. Os casos DEVEM usar os conceitos, termos e exemplos mencionados no material.
 
 ${typeLabel}:
-${contentText}
+${finalContent}
 
 IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não invente informações que não estejam no material.`;
 
