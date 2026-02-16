@@ -163,6 +163,13 @@ const Index = () => {
           </motion.div>
         </div>
       </main>
+
+      <footer className="py-6 px-6 border-t border-border">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span>© {new Date().getFullYear()} Todos os direitos reservados.</span>
+          <span>Desenvolvido por <strong className="text-foreground">Sérgio Araújo</strong> e <strong className="text-foreground">Posologia Produções</strong></span>
+        </div>
+      </footer>
     </div>
   );
 };
