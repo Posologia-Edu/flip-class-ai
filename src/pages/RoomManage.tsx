@@ -306,7 +306,21 @@ const RoomManage = () => {
           fileUrl: material.url,
         },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        // If file too large, fallback to manual paste
+        const errorMsg = typeof response.error === "object" && response.error.message 
+          ? response.error.message 
+          : String(response.error);
+        if (errorMsg.includes("muito grande") || errorMsg.includes("WORKER_LIMIT")) {
+          setGeneratingQuiz(null);
+          setSelectedMaterialForQuiz(material);
+          setManualTranscript("");
+          setTranscriptDialogOpen(true);
+          toast({ title: "Arquivo muito grande", description: "Cole o conteúdo textual manualmente para gerar a atividade.", variant: "destructive" });
+          return;
+        }
+        throw new Error(errorMsg);
+      }
       toast({ title: "Atividade gerada!", description: "A IA leu o documento e criou a atividade com sucesso." });
       fetchData();
     } catch (err: any) {

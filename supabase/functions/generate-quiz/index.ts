@@ -67,10 +67,51 @@ Regras:
 - TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
-async function extractTextFromFileUrl(fileUrl: string, materialType: string, apiKey: string): Promise<string> {
-  console.log("Extracting content from file URL (passing URL directly to AI):", fileUrl);
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB limit for base64 in edge function
 
-  // Use Gemini multimodal to extract and understand the document content
+function getMimeType(fileUrl: string, materialType: string): string {
+  if (materialType === "pdf" || fileUrl.endsWith(".pdf")) return "application/pdf";
+  if (materialType === "presentation" || fileUrl.endsWith(".pptx")) return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (fileUrl.endsWith(".ppt")) return "application/vnd.ms-powerpoint";
+  if (fileUrl.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (fileUrl.endsWith(".doc")) return "application/msword";
+  return "application/octet-stream";
+}
+
+async function extractTextFromFileUrl(fileUrl: string, materialType: string, apiKey: string): Promise<string> {
+  console.log("Fetching file for AI extraction:", fileUrl);
+  
+  // First, do a HEAD request to check file size
+  const headResponse = await fetch(fileUrl, { method: "HEAD" });
+  const contentLength = parseInt(headResponse.headers.get("content-length") || "0", 10);
+  console.log("File size from HEAD:", contentLength);
+  
+  if (contentLength > MAX_FILE_SIZE) {
+    throw new Error(`Arquivo muito grande (${Math.round(contentLength / 1024 / 1024)}MB). Para arquivos acima de 15MB, cole o conteúdo textual manualmente.`);
+  }
+
+  // Download and base64-encode (required for non-image files with Gemini)
+  const fileResponse = await fetch(fileUrl);
+  if (!fileResponse.ok) {
+    throw new Error(`Falha ao baixar arquivo: ${fileResponse.status}`);
+  }
+
+  const fileBuffer = await fileResponse.arrayBuffer();
+  const uint8 = new Uint8Array(fileBuffer);
+  console.log("File downloaded, size:", uint8.length);
+
+  // Chunked base64 encoding to avoid stack overflow
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < uint8.length; i += chunkSize) {
+    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+  }
+  const base64Data = btoa(binary);
+
+  const mimeType = getMimeType(fileUrl, materialType);
+  console.log("Sending to AI with mime:", mimeType);
+
+  // Use Gemini multimodal with data URL (required for PDFs/documents)
   const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -90,7 +131,7 @@ async function extractTextFromFileUrl(fileUrl: string, materialType: string, api
             {
               type: "image_url",
               image_url: {
-                url: fileUrl
+                url: `data:${mimeType};base64,${base64Data}`
               }
             }
           ]
