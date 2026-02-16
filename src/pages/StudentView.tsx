@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
+import { PeerReviewStudent } from "@/components/PeerReview";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
@@ -198,7 +199,7 @@ const StudentView = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum">("materials");
+  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -524,6 +525,14 @@ const StudentView = () => {
           >
             <MessageSquare className="w-4 h-4" /> Fórum
           </button>
+          <button
+            onClick={() => setTab("peer-review")}
+            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === "peer-review" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Users className="w-4 h-4" /> Avaliação por Pares
+          </button>
         </div>
       </div>
 
@@ -560,6 +569,13 @@ const StudentView = () => {
             roomId={roomId!}
             studentName={sessionData?.student_name}
             studentEmail={sessionData?.student_email || undefined}
+          />
+        ) : tab === "peer-review" ? (
+          <PeerReviewStudent
+            sessionId={sessionId!}
+            roomId={roomId!}
+            quizData={quizData}
+            studentName={sessionData?.student_name || "Aluno"}
           />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
