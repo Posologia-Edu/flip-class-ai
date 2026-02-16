@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp } from "lucide-react";
+import AnalyticsReport from "@/components/AnalyticsReport";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
@@ -62,7 +63,7 @@ const RoomManage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers">("overview");
+  const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers" | "reports">("overview");
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
@@ -612,6 +613,13 @@ const RoomManage = () => {
               <MessageSquare className="w-3.5 h-3.5 inline mr-1" />
               Respostas
             </button>
+            <button
+              onClick={() => setStatsTab("reports")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "reports" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              <TrendingUp className="w-3.5 h-3.5 inline mr-1" />
+              Relatórios
+            </button>
           </div>
 
           {sessions.length === 0 ? (
@@ -619,6 +627,8 @@ const RoomManage = () => {
               <Users className="w-8 h-8 mx-auto mb-2" />
               <p>Nenhum aluno entrou nesta sala ainda.</p>
             </div>
+          ) : statsTab === "reports" ? (
+            <AnalyticsReport sessions={sessions} activityLogs={activityLogs} materials={materials} />
           ) : statsTab === "overview" ? (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
