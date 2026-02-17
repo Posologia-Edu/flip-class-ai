@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BookOpen, Users, Sparkles, ArrowRight } from "lucide-react";
+import { BookOpen, Users, Sparkles, ArrowRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,9 +67,15 @@ const Index = () => {
           </div>
           <span className="font-display text-xl font-bold text-foreground">FlipClass</span>
         </div>
-        <Button variant="outline" onClick={() => navigate("/auth")} className="font-medium">
-          Área do Professor
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => navigate("/docs")} className="font-medium gap-1.5">
+            <FileText className="w-4 h-4" />
+            Documentação
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/auth")} className="font-medium">
+            Área do Professor
+          </Button>
+        </div>
       </header>
 
       <main className="flex-1 flex items-center justify-center px-6">
