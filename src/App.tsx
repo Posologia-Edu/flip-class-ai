@@ -11,6 +11,7 @@ import StudentView from "./pages/StudentView";
 import AdminPanel from "./pages/AdminPanel";
 import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
+import Documentation from "./pages/Documentation";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/pending-approval" element={<PendingApproval />} />
+          <Route path="/docs" element={<Documentation />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
