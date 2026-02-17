@@ -250,7 +250,8 @@ const RoomManage = () => {
 
   const updateUnlockTime = async () => {
     if (!roomId || !unlockAt) return;
-    await supabase.from("rooms").update({ unlock_at: unlockAt + ":00+00:00" }).eq("id", roomId);
+    const localDate = new Date(unlockAt);
+    await supabase.from("rooms").update({ unlock_at: localDate.toISOString() }).eq("id", roomId);
     toast({ title: "Timer atualizado!" });
     fetchData();
   };
