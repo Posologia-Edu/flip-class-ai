@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import FloatingAuth from "@/components/FloatingAuth";
 
 const Index = () => {
   const [pin, setPin] = useState("");
@@ -72,9 +73,7 @@ const Index = () => {
             <FileText className="w-4 h-4" />
             Documentação
           </Button>
-          <Button variant="outline" onClick={() => navigate("/auth")} className="font-medium">
-            Área do Professor
-          </Button>
+          <FloatingAuth />
         </div>
       </header>
 
