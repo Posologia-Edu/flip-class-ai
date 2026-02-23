@@ -61,21 +61,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-display text-xl font-bold text-foreground">FlipClass</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => navigate("/docs")} className="font-medium gap-1.5">
-            <FileText className="w-4 h-4" />
-            Documentação
-          </Button>
-          <FloatingAuth />
-        </div>
-      </header>
 
       <main className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-5xl w-full grid md:grid-cols-2 gap-16 items-center">
