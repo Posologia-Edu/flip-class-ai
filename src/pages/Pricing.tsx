@@ -90,11 +90,8 @@ export default function Pricing() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-12">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-8">
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-        </Button>
+    <div className="bg-background">
+      <div className="max-w-5xl mx-auto px-6 py-8">
 
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold font-heading mb-4">
