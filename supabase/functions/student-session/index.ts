@@ -19,7 +19,6 @@ serve(async (req) => {
 
   try {
     if (req.method === "GET") {
-      // Fetch student session data by sessionId
       const url = new URL(req.url);
       const sessionId = url.searchParams.get("sessionId");
       if (!sessionId) {
@@ -29,7 +28,6 @@ serve(async (req) => {
         });
       }
 
-      // Fetch session, activity logs, and teacher feedback in parallel
       const [sessRes, logsRes, feedbackRes] = await Promise.all([
         supabase.from("student_sessions").select("*").eq("id", sessionId).single(),
         supabase.from("student_activity_logs").select("*").eq("session_id", sessionId),
@@ -57,7 +55,6 @@ serve(async (req) => {
       const { action, sessionId, roomId, data } = body;
 
       if (action === "create_session") {
-        // Server-side validated student session creation
         if (!roomId || typeof roomId !== "string") {
           return new Response(JSON.stringify({ error: "roomId is required" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -73,7 +70,6 @@ serve(async (req) => {
             status: 400,
           });
         }
-        // Strip HTML tags from name to prevent XSS
         const sanitizedName = name.replace(/<[^>]*>/g, "");
 
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
@@ -91,6 +87,29 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 404,
           });
+        }
+
+        // Check if room has a student whitelist
+        const { data: whitelist } = await supabase
+          .from("room_students")
+          .select("id")
+          .eq("room_id", roomId);
+        
+        if (whitelist && whitelist.length > 0) {
+          // Room has a whitelist - check if student email is registered
+          const { data: allowed } = await supabase
+            .from("room_students")
+            .select("id")
+            .eq("room_id", roomId)
+            .eq("student_email", email)
+            .maybeSingle();
+          
+          if (!allowed) {
+            return new Response(JSON.stringify({ error: "Seu email não está cadastrado nesta sala. Solicite ao professor para adicionar seu email." }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 403,
+            });
+          }
         }
 
         const { data: session, error: insertErr } = await supabase
@@ -118,7 +137,6 @@ serve(async (req) => {
       }
 
       if (action === "submit") {
-        // Submit quiz answers - only if not already completed
         const { data: existing } = await supabase
           .from("student_sessions")
           .select("completed_at")
@@ -146,7 +164,6 @@ serve(async (req) => {
       }
 
       if (action === "log_activity") {
-        // Log student activity
         const { error } = await supabase.from("student_activity_logs").insert({
           session_id: sessionId,
           room_id: roomId,

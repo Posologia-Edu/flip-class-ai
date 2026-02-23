@@ -110,7 +110,7 @@ const Index = () => {
             <div className="flex items-center gap-8 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-primary" />
-                Sem cadastro necessário
+                Acesso com PIN + email
               </div>
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-accent" />

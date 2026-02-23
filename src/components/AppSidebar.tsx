@@ -42,7 +42,7 @@ export function AppSidebar() {
 
   const mainMenuItems = [
     { title: "Painel", url: "/dashboard", icon: LayoutDashboard },
-    { title: "Banco de Questões", url: "/dashboard/question-bank", icon: Library },
+    { title: "Banco de Atividades", url: "/dashboard/activity-bank", icon: Library },
     { title: "Minhas Salas", url: "/dashboard/rooms", icon: BookOpen },
     { title: "Análises", url: "/dashboard/analytics", icon: BarChart3 },
     { title: "Calendário", url: "/dashboard/calendar", icon: CalendarDays },

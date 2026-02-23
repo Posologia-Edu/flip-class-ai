@@ -34,16 +34,19 @@ const App = () => (
           <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
           <Route path="/pending-approval" element={<PendingApproval />} />
 
-          {/* Authenticated routes - with sidebar */}
-          <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/dashboard/rooms" element={<AppLayout><RoomsList /></AppLayout>} />
-          <Route path="/dashboard/room/:roomId" element={<AppLayout><RoomManage /></AppLayout>} />
-          <Route path="/dashboard/question-bank" element={<AppLayout><QuestionBank /></AppLayout>} />
-          <Route path="/dashboard/analytics" element={<AppLayout><AnalyticsPage /></AppLayout>} />
-          <Route path="/dashboard/calendar" element={<AppLayout><CalendarPage /></AppLayout>} />
-          <Route path="/dashboard/pricing" element={<AppLayout><Pricing /></AppLayout>} />
-          <Route path="/admin" element={<AppLayout><AdminPanel /></AppLayout>} />
-          <Route path="/docs" element={<AppLayout><Documentation /></AppLayout>} />
+          {/* Authenticated routes - single persistent sidebar */}
+          <Route element={<AppLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/rooms" element={<RoomsList />} />
+            <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
+            <Route path="/dashboard/activity-bank" element={<QuestionBank />} />
+            <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
+            <Route path="/dashboard/calendar" element={<CalendarPage />} />
+            <Route path="/dashboard/pricing" element={<Pricing />} />
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/docs" element={<Documentation />} />
+          </Route>
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
