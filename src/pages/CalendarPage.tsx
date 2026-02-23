@@ -23,11 +23,11 @@ const CalendarPage = () => {
       .order("created_at", { ascending: false });
     setRooms(data || []);
     setLoading(false);
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!authLoading && user) fetchRooms();
-  }, [authLoading, user, fetchRooms]);
+  }, [authLoading, user?.id, fetchRooms]);
 
   if (authLoading || loading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;

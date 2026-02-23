@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -27,28 +28,30 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* Public routes - no sidebar */}
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
-          <Route path="/pending-approval" element={<PendingApproval />} />
+        <AuthProvider>
+          <Routes>
+            {/* Public routes - no sidebar */}
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
+            <Route path="/pending-approval" element={<PendingApproval />} />
 
-          {/* Authenticated routes - single persistent sidebar */}
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/rooms" element={<RoomsList />} />
-            <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
-            <Route path="/dashboard/activity-bank" element={<QuestionBank />} />
-            <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
-            <Route path="/dashboard/calendar" element={<CalendarPage />} />
-            <Route path="/dashboard/pricing" element={<Pricing />} />
-            <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/docs" element={<Documentation />} />
-          </Route>
+            {/* Authenticated routes - single persistent sidebar */}
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/rooms" element={<RoomsList />} />
+              <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
+              <Route path="/dashboard/activity-bank" element={<QuestionBank />} />
+              <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
+              <Route path="/dashboard/calendar" element={<CalendarPage />} />
+              <Route path="/dashboard/pricing" element={<Pricing />} />
+              <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/docs" element={<Documentation />} />
+            </Route>
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
