@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, LogOut, ShieldCheck, UserCheck, UserX, Clock, ArrowLeft } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PendingTeacher {
   id: string;
@@ -14,20 +15,36 @@ interface PendingTeacher {
   created_at: string;
 }
 
+interface SystemStats {
+  totalTeachers: number;
+  totalRooms: number;
+  totalStudents: number;
+  totalSessions: number;
+}
+
 const AdminPanel = () => {
   const { user, isAdmin, loading } = useAuth();
   const [teachers, setTeachers] = useState<PendingTeacher[]>([]);
+  const [stats, setStats] = useState<SystemStats>({ totalTeachers: 0, totalRooms: 0, totalStudents: 0, totalSessions: 0 });
   const [loadingData, setLoadingData] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const fetchTeachers = useCallback(async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, user_id, full_name, approval_status, created_at")
-      .order("created_at", { ascending: false });
-    setTeachers(data || []);
+  const fetchData = useCallback(async () => {
+    const [profilesRes, roomsRes, sessionsRes] = await Promise.all([
+      supabase.from("profiles").select("id, user_id, full_name, approval_status, created_at").order("created_at", { ascending: false }),
+      supabase.from("rooms").select("id", { count: "exact", head: true }),
+      supabase.from("student_sessions").select("id", { count: "exact", head: true }),
+    ]);
+    setTeachers(profilesRes.data || []);
+    const approvedCount = (profilesRes.data || []).filter((t) => t.approval_status === "approved").length;
+    setStats({
+      totalTeachers: approvedCount,
+      totalRooms: roomsRes.count || 0,
+      totalStudents: 0,
+      totalSessions: sessionsRes.count || 0,
+    });
     setLoadingData(false);
   }, []);
 
@@ -36,103 +53,98 @@ const AdminPanel = () => {
       navigate("/dashboard");
       return;
     }
-    if (!loading && isAdmin) {
-      fetchTeachers();
-    }
-  }, [loading, isAdmin, navigate, fetchTeachers]);
+    if (!loading && isAdmin) fetchData();
+  }, [loading, isAdmin, navigate, fetchData]);
 
   const approveTeacher = async (teacher: PendingTeacher) => {
     setProcessing(teacher.id);
-    
-    // Update profile status
     const { error } = await supabase
       .from("profiles")
-      .update({
-        approval_status: "approved",
-        approved_at: new Date().toISOString(),
-        approved_by: user?.id,
-      })
+      .update({ approval_status: "approved", approved_at: new Date().toISOString(), approved_by: user?.id })
       .eq("id", teacher.id);
-
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      // Send approval email
-      try {
-        await supabase.functions.invoke("send-approval-email", {
-          body: { userId: teacher.user_id, approved: true },
-        });
-      } catch (e) {
-        console.warn("Email notification failed", e);
-      }
-      toast({ title: "Professor aprovado!", description: `${teacher.full_name || "Professor"} agora tem acesso ao sistema.` });
-      fetchTeachers();
+      try { await supabase.functions.invoke("send-approval-email", { body: { userId: teacher.user_id, approved: true } }); } catch {}
+      toast({ title: "Professor aprovado!" });
+      fetchData();
     }
     setProcessing(null);
   };
 
   const rejectTeacher = async (teacher: PendingTeacher) => {
     setProcessing(teacher.id);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ approval_status: "rejected" })
-      .eq("id", teacher.id);
-
+    const { error } = await supabase.from("profiles").update({ approval_status: "rejected" }).eq("id", teacher.id);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      try {
-        await supabase.functions.invoke("send-approval-email", {
-          body: { userId: teacher.user_id, approved: false },
-        });
-      } catch (e) {
-        console.warn("Email notification failed", e);
-      }
+      try { await supabase.functions.invoke("send-approval-email", { body: { userId: teacher.user_id, approved: false } }); } catch {}
       toast({ title: "Cadastro rejeitado." });
-      fetchTeachers();
+      fetchData();
     }
     setProcessing(null);
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/");
-  };
-
-  const pending = teachers.filter(t => t.approval_status === "pending");
-  const approved = teachers.filter(t => t.approval_status === "approved");
-  const rejected = teachers.filter(t => t.approval_status === "rejected");
+  const pending = teachers.filter((t) => t.approval_status === "pending");
+  const approved = teachers.filter((t) => t.approval_status === "approved");
+  const rejected = teachers.filter((t) => t.approval_status === "rejected");
 
   if (loading || loadingData) {
-    return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Carregando...</div>;
+    return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-display text-xl font-bold">Painel Admin</span>
-          </div>
-        </div>
-        <Button variant="ghost" size="sm" onClick={handleLogout}>
-          <LogOut className="w-4 h-4 mr-2" /> Sair
-        </Button>
-      </header>
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="mb-8">
+        <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
+          <ShieldCheck className="w-6 h-6 text-primary" />
+          Painel de Administração
+        </h1>
+        <p className="text-muted-foreground mt-1">Gerencie professores, monitore o sistema e configure permissões</p>
+      </div>
 
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-10">
-        {/* Pending */}
-        <section>
-          <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
-            <Clock className="w-5 h-5 text-accent" />
-            Aguardando Aprovação ({pending.length})
-          </h2>
+      {/* System Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <Users className="w-4 h-4" /> Professores
+          </div>
+          <p className="font-display text-2xl font-bold text-foreground">{stats.totalTeachers}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <Clock className="w-4 h-4" /> Pendentes
+          </div>
+          <p className="font-display text-2xl font-bold text-accent">{pending.length}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <BookOpen className="w-4 h-4" /> Salas
+          </div>
+          <p className="font-display text-2xl font-bold text-foreground">{stats.totalRooms}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <BarChart3 className="w-4 h-4" /> Sessões
+          </div>
+          <p className="font-display text-2xl font-bold text-foreground">{stats.totalSessions}</p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="pending" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="pending">
+            Pendentes ({pending.length})
+          </TabsTrigger>
+          <TabsTrigger value="approved">
+            Aprovados ({approved.length})
+          </TabsTrigger>
+          <TabsTrigger value="rejected">
+            Rejeitados ({rejected.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pending">
           {pending.length === 0 ? (
             <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
               Nenhum cadastro pendente.
@@ -148,21 +160,10 @@ const AdminPanel = () => {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => approveTeacher(t)}
-                      disabled={processing === t.id}
-                      className="bg-level-easy hover:bg-level-easy/90 text-level-easy-foreground"
-                    >
+                    <Button size="sm" onClick={() => approveTeacher(t)} disabled={processing === t.id}>
                       <UserCheck className="w-4 h-4 mr-1" /> Aprovar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => rejectTeacher(t)}
-                      disabled={processing === t.id}
-                      className="border-destructive text-destructive hover:bg-destructive/10"
-                    >
+                    <Button size="sm" variant="outline" onClick={() => rejectTeacher(t)} disabled={processing === t.id} className="border-destructive text-destructive hover:bg-destructive/10">
                       <UserX className="w-4 h-4 mr-1" /> Rejeitar
                     </Button>
                   </div>
@@ -170,14 +171,9 @@ const AdminPanel = () => {
               ))}
             </div>
           )}
-        </section>
+        </TabsContent>
 
-        {/* Approved */}
-        <section>
-          <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
-            <UserCheck className="w-5 h-5 text-level-easy" />
-            Professores Aprovados ({approved.length})
-          </h2>
+        <TabsContent value="approved">
           {approved.length === 0 ? (
             <div className="bg-card border border-border rounded-xl p-6 text-center text-muted-foreground">
               Nenhum professor aprovado ainda.
@@ -198,7 +194,7 @@ const AdminPanel = () => {
                       <td className="px-4 py-3 font-medium">{t.full_name || "Sem nome"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{new Date(t.created_at).toLocaleDateString("pt-BR")}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-level-easy/10 text-level-easy">
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                           Aprovado
                         </span>
                       </td>
@@ -208,15 +204,14 @@ const AdminPanel = () => {
               </table>
             </div>
           )}
-        </section>
+        </TabsContent>
 
-        {/* Rejected */}
-        {rejected.length > 0 && (
-          <section>
-            <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
-              <UserX className="w-5 h-5 text-destructive" />
-              Rejeitados ({rejected.length})
-            </h2>
+        <TabsContent value="rejected">
+          {rejected.length === 0 ? (
+            <div className="bg-card border border-border rounded-xl p-6 text-center text-muted-foreground">
+              Nenhum cadastro rejeitado.
+            </div>
+          ) : (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-secondary">
@@ -235,9 +230,9 @@ const AdminPanel = () => {
                 </tbody>
               </table>
             </div>
-          </section>
-        )}
-      </main>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
