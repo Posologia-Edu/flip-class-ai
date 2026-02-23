@@ -41,15 +41,19 @@ serve(async (req) => {
     }
 
     const customerId = customers.data[0].id;
-    const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: "active", limit: 1 });
+    // Check for active OR trialing subscriptions
+    const [activeSubs, trialingSubs] = await Promise.all([
+      stripe.subscriptions.list({ customer: customerId, status: "active", limit: 1 }),
+      stripe.subscriptions.list({ customer: customerId, status: "trialing", limit: 1 }),
+    ]);
 
-    if (subscriptions.data.length === 0) {
+    const sub = activeSubs.data[0] || trialingSubs.data[0];
+
+    if (!sub) {
       return new Response(JSON.stringify({ subscribed: false, product_id: null, subscription_end: null }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const sub = subscriptions.data[0];
     const productId = sub.items.data[0].price.product;
     const subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
 
