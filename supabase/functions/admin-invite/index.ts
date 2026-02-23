@@ -77,8 +77,11 @@ serve(async (req) => {
       }
 
       // Invite user via Supabase Auth (sends password setup email)
+      // redirectTo sends invited user to the set-password page
+      const siteUrl = Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", "") || "";
       const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(email, {
         data: { invited_by_admin: true },
+        redirectTo: `${req.headers.get("origin") || "https://learn-flip-ai-25.lovable.app"}/reset-password`,
       });
 
       if (inviteErr) {

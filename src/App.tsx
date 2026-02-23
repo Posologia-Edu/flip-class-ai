@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import RoomManage from "./pages/RoomManage";
 import RoomsList from "./pages/RoomsList";
@@ -19,6 +20,7 @@ import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
 import Documentation from "./pages/Documentation";
 import Pricing from "./pages/Pricing";
+import MyAccount from "./pages/MyAccount";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +35,7 @@ const App = () => (
             {/* Public routes - no sidebar */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
             <Route path="/pending-approval" element={<PendingApproval />} />
 
@@ -45,6 +48,7 @@ const App = () => (
               <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
               <Route path="/dashboard/calendar" element={<CalendarPage />} />
               <Route path="/dashboard/pricing" element={<Pricing />} />
+              <Route path="/dashboard/account" element={<MyAccount />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/docs" element={<Documentation />} />
             </Route>
