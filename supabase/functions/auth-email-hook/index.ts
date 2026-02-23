@@ -16,12 +16,12 @@ const corsHeaders = {
 }
 
 const EMAIL_SUBJECTS: Record<string, string> = {
-  signup: 'Confirm your email',
-  invite: "You've been invited",
-  magiclink: 'Your login link',
-  recovery: 'Reset your password',
-  email_change: 'Confirm your new email',
-  reauthentication: 'Your verification code',
+  signup: 'Confirme seu email - FlipClass',
+  invite: 'Você foi convidado para o FlipClass!',
+  magiclink: 'Seu link de acesso - FlipClass',
+  recovery: 'Redefinir sua senha - FlipClass',
+  email_change: 'Confirme seu novo email - FlipClass',
+  reauthentication: 'Seu código de verificação - FlipClass',
 }
 
 // Template mapping
@@ -35,7 +35,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "learn-flip-ai-25"
+const SITE_NAME = "FlipClass"
 const SENDER_DOMAIN = "notify.tbl.posologia.app"
 const ROOT_DOMAIN = "tbl.posologia.app"
 const FROM_DOMAIN = "tbl.posologia.app" // Domain shown in From address (may be root or sender subdomain)
