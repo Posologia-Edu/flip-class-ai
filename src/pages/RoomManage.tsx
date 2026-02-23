@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
+import { RoomStudents } from "@/components/RoomStudents";
 import DiscussionForum from "@/components/DiscussionForum";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -616,9 +617,6 @@ const RoomManage = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 bg-card flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
         <div>
           <h1 className="font-display text-xl font-bold">{room.title}</h1>
           <p className="text-sm text-muted-foreground">PIN: <span className="font-mono font-bold text-foreground">{room.pin_code}</span></p>
@@ -642,6 +640,9 @@ const RoomManage = () => {
             <Button onClick={updateUnlockTime} disabled={!unlockAt}>Salvar</Button>
           </div>
         </section>
+
+        {/* Student Management */}
+        {roomId && <RoomStudents roomId={roomId} />}
 
         {/* Materials Section */}
         <section>

@@ -1,7 +1,8 @@
+import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout() {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -11,7 +12,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <SidebarTrigger />
           </header>
           <div className="flex-1">
-            {children}
+            <Outlet />
           </div>
         </main>
       </div>

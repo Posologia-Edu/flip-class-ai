@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3 } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PendingTeacher {
@@ -22,12 +23,24 @@ interface SystemStats {
   totalSessions: number;
 }
 
+interface Invite {
+  id: string;
+  email: string;
+  status: string;
+  created_at: string;
+  activated_at: string | null;
+}
+
 const AdminPanel = () => {
   const { user, isAdmin, loading } = useAuth();
   const [teachers, setTeachers] = useState<PendingTeacher[]>([]);
   const [stats, setStats] = useState<SystemStats>({ totalTeachers: 0, totalRooms: 0, totalStudents: 0, totalSessions: 0 });
   const [loadingData, setLoadingData] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -48,13 +61,29 @@ const AdminPanel = () => {
     setLoadingData(false);
   }, []);
 
+  const fetchInvites = useCallback(async () => {
+    setLoadingInvites(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-invite", {
+        body: { action: "list_invites" },
+      });
+      if (!error && data?.invites) {
+        setInvites(data.invites);
+      }
+    } catch {}
+    setLoadingInvites(false);
+  }, []);
+
   useEffect(() => {
     if (!loading && !isAdmin) {
       navigate("/dashboard");
       return;
     }
-    if (!loading && isAdmin) fetchData();
-  }, [loading, isAdmin, navigate, fetchData]);
+    if (!loading && isAdmin) {
+      fetchData();
+      fetchInvites();
+    }
+  }, [loading, isAdmin, navigate, fetchData, fetchInvites]);
 
   const approveTeacher = async (teacher: PendingTeacher) => {
     setProcessing(teacher.id);
@@ -85,6 +114,30 @@ const AdminPanel = () => {
     setProcessing(null);
   };
 
+  const sendInvite = async () => {
+    const trimmed = inviteEmail.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast({ title: "Email inválido", variant: "destructive" });
+      return;
+    }
+    setSendingInvite(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-invite", {
+        body: { action: "invite", email: trimmed },
+      });
+      if (error || data?.error) {
+        toast({ title: "Erro", description: data?.error || "Falha ao enviar convite", variant: "destructive" });
+      } else {
+        toast({ title: "Convite enviado!", description: `Email enviado para ${trimmed}` });
+        setInviteEmail("");
+        fetchInvites();
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+    setSendingInvite(false);
+  };
+
   const pending = teachers.filter((t) => t.approval_status === "pending");
   const approved = teachers.filter((t) => t.approval_status === "approved");
   const rejected = teachers.filter((t) => t.approval_status === "rejected");
@@ -100,7 +153,7 @@ const AdminPanel = () => {
           <ShieldCheck className="w-6 h-6 text-primary" />
           Painel de Administração
         </h1>
-        <p className="text-muted-foreground mt-1">Gerencie professores, monitore o sistema e configure permissões</p>
+        <p className="text-muted-foreground mt-1">Gerencie professores, convide usuários e monitore o sistema</p>
       </div>
 
       {/* System Stats */}
@@ -131,18 +184,73 @@ const AdminPanel = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="pending" className="space-y-6">
+      <Tabs defaultValue="invites" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="pending">
-            Pendentes ({pending.length})
-          </TabsTrigger>
-          <TabsTrigger value="approved">
-            Aprovados ({approved.length})
-          </TabsTrigger>
-          <TabsTrigger value="rejected">
-            Rejeitados ({rejected.length})
-          </TabsTrigger>
+          <TabsTrigger value="invites">Convites</TabsTrigger>
+          <TabsTrigger value="pending">Pendentes ({pending.length})</TabsTrigger>
+          <TabsTrigger value="approved">Aprovados ({approved.length})</TabsTrigger>
+          <TabsTrigger value="rejected">Rejeitados ({rejected.length})</TabsTrigger>
         </TabsList>
+
+        {/* Invites Tab */}
+        <TabsContent value="invites">
+          <div className="space-y-6">
+            <div className="bg-card border border-border rounded-xl p-6">
+              <h3 className="font-display font-semibold text-lg mb-2 flex items-center gap-2">
+                <Send className="w-5 h-5 text-primary" /> Convidar Professor
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                O convidado receberá um email com link para criar senha. Terá acesso premium gratuito permanente.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="email@professor.com"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="flex-1"
+                  onKeyDown={(e) => e.key === "Enter" && sendInvite()}
+                />
+                <Button onClick={sendInvite} disabled={sendingInvite}>
+                  <Mail className="w-4 h-4 mr-1" /> {sendingInvite ? "Enviando..." : "Enviar Convite"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Invite List */}
+            <div className="bg-card border border-border rounded-xl p-6">
+              <h3 className="font-display font-semibold text-lg mb-4">Convites Enviados</h3>
+              {loadingInvites ? (
+                <p className="text-sm text-muted-foreground">Carregando...</p>
+              ) : invites.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum convite enviado ainda.</p>
+              ) : (
+                <div className="space-y-2">
+                  {invites.map((inv) => (
+                    <div key={inv.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2.5 h-2.5 rounded-full ${inv.status === "active" ? "bg-green-500 animate-pulse" : "bg-red-500 animate-pulse"}`} />
+                        <div>
+                          <p className="text-sm font-medium">{inv.email}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Enviado em {new Date(inv.created_at).toLocaleDateString("pt-BR")}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        inv.status === "active" 
+                          ? "bg-green-500/10 text-green-600" 
+                          : "bg-red-500/10 text-red-500"
+                      }`}>
+                        {inv.status === "active" ? "Ativo" : "Pendente"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
 
         <TabsContent value="pending">
           {pending.length === 0 ? (

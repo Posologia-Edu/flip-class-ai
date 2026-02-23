@@ -59,6 +59,33 @@ export type Database = {
           },
         ]
       }
+      admin_invites: {
+        Row: {
+          activated_at: string | null
+          created_at: string
+          email: string
+          id: string
+          invited_by: string
+          status: string
+        }
+        Insert: {
+          activated_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          invited_by: string
+          status?: string
+        }
+        Update: {
+          activated_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string
+          status?: string
+        }
+        Relationships: []
+      }
       discussion_posts: {
         Row: {
           author_email: string | null
@@ -345,6 +372,38 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      room_students: {
+        Row: {
+          created_at: string
+          id: string
+          room_id: string
+          student_email: string
+          student_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          room_id: string
+          student_email: string
+          student_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          room_id?: string
+          student_email?: string
+          student_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_students_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rooms: {
         Row: {
