@@ -1,64 +1,123 @@
 
 
-# Feedback Qualitativo do Professor nas Respostas dos Alunos
+# Plano de Monetizacao - LearnFlip AI
 
-## Objetivo
-Permitir que o professor escreva feedback textual e atribua uma nota (0-10) para cada resposta individual dos alunos, diretamente na aba "Respostas" do painel de gerenciamento da sala.
+## Visao Geral
 
-## O que muda para o professor
-- Na aba "Respostas", ao expandir as respostas de um aluno, cada resposta terá um campo de texto para feedback e um seletor de nota (0-10).
-- Um botao "Salvar Feedback" persiste os dados.
-- Feedbacks ja salvos aparecem preenchidos ao reabrir.
-
-## O que muda para o aluno
-- Apos concluir a atividade, na tela de conclusao, o aluno podera ver os feedbacks do professor (quando disponíveis) ao clicar em "Ver Feedback".
+Com base nas funcionalidades existentes do sistema (salas de aula, geracao de quizzes por IA, correcao automatica, revisao por pares, forum, analytics e calendario), proponho um modelo de monetizacao baseado em planos por assinatura (SaaS) com limites progressivos.
 
 ---
 
-## Detalhes Tecnicos
+## Modelo de Planos
 
-### 1. Nova tabela: `teacher_feedback`
+### Plano Gratuito (Free)
+- 1 sala ativa
+- Ate 30 alunos por sala
+- 3 geracoes de quiz por IA por mes
+- 5 correcoes por IA por mes
+- Materiais: apenas links e videos do YouTube
+- Sem analytics avancado
+- Sem revisao por pares
+- Forum basico
 
-```sql
-CREATE TABLE public.teacher_feedback (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id uuid NOT NULL REFERENCES public.student_sessions(id) ON DELETE CASCADE,
-  question_key text NOT NULL,  -- formato "nivel-questao" ex: "0-1"
-  feedback_text text,
-  grade smallint CHECK (grade >= 0 AND grade <= 10),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(session_id, question_key)
-);
+### Plano Professor (R$ 29,90/mes)
+- 5 salas ativas
+- Ate 60 alunos por sala
+- 30 geracoes de quiz por IA por mes
+- 100 correcoes por IA por mes
+- Upload de arquivos (PDF, DOCX, PPTX)
+- Analytics completo com relatorio de alunos em risco
+- Revisao por pares
+- Feedback qualitativo do professor
+- Banco de questoes pessoal
+- Calendario de salas
+- Suporte por email
 
-ALTER TABLE public.teacher_feedback ENABLE ROW LEVEL SECURITY;
+### Plano Institucional (R$ 149,90/mes)
+- Salas ilimitadas
+- Alunos ilimitados
+- Geracoes e correcoes por IA ilimitadas
+- Todos os tipos de material
+- Todas as funcionalidades
+- Painel administrativo com multiplos professores
+- Analytics cruzado entre salas
+- Exportacao de relatorios
+- Suporte prioritario
+- Logo personalizado (white-label basico)
+
+---
+
+## Implementacao Tecnica
+
+### 1. Tabela de planos e assinaturas
+
+Criar tabelas `plans` e `subscriptions` no banco de dados para controlar qual professor tem acesso a quais funcionalidades e limites.
+
+```text
+plans                          subscriptions
++----------+                   +----------------+
+| id       |                   | id             |
+| name     |<------------------| plan_id        |
+| price    |                   | user_id        |
+| limits   |                   | status         |
+| features |                   | current_period |
++----------+                   +----------------+
 ```
 
-**Politicas RLS:**
-- SELECT: qualquer pessoa pode ler (alunos precisam ver seu feedback)
-- INSERT/UPDATE/DELETE: apenas o professor dono da sala (via join com student_sessions -> rooms -> teacher_id)
+### 2. Integracao com Stripe
 
-### 2. Alteracoes no Frontend - RoomManage.tsx (Aba Respostas)
+Usar a integracao nativa do Stripe disponivel no Lovable para:
+- Criar produtos e precos para cada plano
+- Gerenciar checkout e portal de assinatura
+- Webhooks para ativar/desativar planos automaticamente
 
-- Adicionar estado para armazenar feedbacks carregados do banco
-- Buscar feedbacks existentes no `fetchData`
-- Em cada bloco de resposta do aluno, adicionar:
-  - `Textarea` para feedback qualitativo
-  - `Select` com notas de 0 a 10
-  - Botao "Salvar" que faz upsert na tabela `teacher_feedback`
-- Indicador visual quando feedback ja foi salvo (icone de check)
+### 3. Middleware de limites (Feature Gates)
 
-### 3. Alteracoes no Frontend - StudentView.tsx
+Adicionar verificacoes nos pontos criticos do sistema:
+- **Criacao de sala**: verificar limite de salas ativas
+- **Geracao de quiz**: verificar contador mensal de geracoes IA
+- **Correcao por IA**: verificar contador mensal de correcoes
+- **Upload de arquivo**: verificar se o plano permite
+- **Analytics/Peer Review**: verificar se a funcionalidade esta liberada
 
-- Apos submissao (`submitted === true`), adicionar botao "Ver Feedback do Professor"
-- Buscar feedbacks da tabela `teacher_feedback` para a sessao do aluno
-- Exibir cada feedback ao lado da pergunta correspondente, com a nota atribuida
-- Se nao houver feedback ainda, exibir mensagem "Aguardando avaliacao do professor"
+### 4. Pagina de Pricing
 
-### 4. Sequencia de implementacao
+Criar uma pagina `/pricing` com os 3 planos lado a lado, destacando o plano recomendado (Professor), com botao de assinar que redireciona para o checkout do Stripe.
 
-1. Criar a migration da tabela `teacher_feedback` com RLS
-2. Atualizar `RoomManage.tsx` - carregar, exibir e salvar feedbacks na aba Respostas
-3. Atualizar `StudentView.tsx` - exibir feedbacks recebidos apos conclusao
-4. Testar o fluxo completo
+### 5. Painel de uso
+
+Adicionar no Dashboard do professor indicadores de consumo:
+- "Voce usou 2/3 geracoes de IA este mes"
+- "3/5 salas ativas"
+- Barra de progresso visual com alerta quando proximo do limite
+
+### 6. Trial gratuito
+
+Oferecer 14 dias do Plano Professor gratis para novos cadastros, incentivando a conversao.
+
+---
+
+## Sequencia de Implementacao
+
+1. Habilitar integracao Stripe no projeto
+2. Criar tabelas `plans` e `subscriptions` no banco
+3. Criar Edge Function para webhook do Stripe (ativar/cancelar assinaturas)
+4. Criar pagina de Pricing com checkout
+5. Implementar feature gates nos componentes existentes (RoomManage, Dashboard, geracoes IA)
+6. Adicionar painel de uso no Dashboard
+7. Implementar logica de trial de 14 dias
+8. Testar fluxo completo: cadastro -> trial -> checkout -> uso -> limites
+
+---
+
+## Estimativa de Esforco
+
+| Etapa | Complexidade |
+|-------|-------------|
+| Integracao Stripe + tabelas | Media |
+| Pagina de Pricing | Baixa |
+| Feature gates | Media |
+| Painel de uso | Baixa |
+| Trial gratuito | Baixa |
+| **Total estimado** | **5-7 interacoes** |
 
