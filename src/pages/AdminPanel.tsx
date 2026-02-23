@@ -5,7 +5,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PendingTeacher {
@@ -138,6 +149,24 @@ const AdminPanel = () => {
     setSendingInvite(false);
   };
 
+  const revokeInvite = async (invite: Invite) => {
+    setProcessing(invite.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-invite", {
+        body: { action: "revoke_invite", invite_id: invite.id },
+      });
+      if (error || data?.error) {
+        toast({ title: "Erro", description: data?.error || "Falha ao revogar convite", variant: "destructive" });
+      } else {
+        toast({ title: "Convite revogado!", description: `Convite para ${invite.email} foi removido.` });
+        fetchInvites();
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+    setProcessing(null);
+  };
+
   const pending = teachers.filter((t) => t.approval_status === "pending");
   const approved = teachers.filter((t) => t.approval_status === "approved");
   const rejected = teachers.filter((t) => t.approval_status === "rejected");
@@ -237,13 +266,37 @@ const AdminPanel = () => {
                           </p>
                         </div>
                       </div>
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                        inv.status === "active" 
-                          ? "bg-green-500/10 text-green-600" 
-                          : "bg-red-500/10 text-red-500"
-                      }`}>
-                        {inv.status === "active" ? "Ativo" : "Pendente"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          inv.status === "active" 
+                            ? "bg-green-500/10 text-green-600" 
+                            : "bg-red-500/10 text-red-500"
+                        }`}>
+                          {inv.status === "active" ? "Ativo" : "Pendente"}
+                        </span>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" disabled={processing === inv.id}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Revogar convite</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja revogar o convite para <strong>{inv.email}</strong>? 
+                                {inv.status !== "active" && " O usuário será removido e não poderá mais acessar o sistema."}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => revokeInvite(inv)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                Revogar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                   ))}
                 </div>

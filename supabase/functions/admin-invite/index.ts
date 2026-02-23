@@ -120,6 +120,48 @@ serve(async (req) => {
       });
     }
 
+    if (action === "revoke_invite") {
+      const inviteId = body.invite_id;
+      if (!inviteId) {
+        return new Response(JSON.stringify({ error: "invite_id obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get invite details
+      const { data: invite } = await adminClient
+        .from("admin_invites")
+        .select("*")
+        .eq("id", inviteId)
+        .maybeSingle();
+
+      if (!invite) {
+        return new Response(JSON.stringify({ error: "Convite não encontrado" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Delete the invite record
+      await adminClient.from("admin_invites").delete().eq("id", inviteId);
+
+      // Try to delete the auth user if they haven't activated yet
+      if (invite.status !== "active") {
+        const { data: allUsers } = await adminClient.auth.admin.listUsers();
+        const matchedUser = allUsers?.users?.find((u: any) => u.email === invite.email);
+        if (matchedUser && !matchedUser.last_sign_in_at) {
+          await adminClient.auth.admin.deleteUser(matchedUser.id);
+          // Also clean up profile
+          await adminClient.from("profiles").delete().eq("user_id", matchedUser.id);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "list_invites") {
       const { data: invites } = await adminClient
         .from("admin_invites")
