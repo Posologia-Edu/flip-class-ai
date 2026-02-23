@@ -12,6 +12,7 @@ import AdminPanel from "./pages/AdminPanel";
 import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
 import Documentation from "./pages/Documentation";
+import Pricing from "./pages/Pricing";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
           <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
