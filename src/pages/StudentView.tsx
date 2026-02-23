@@ -219,12 +219,17 @@ const StudentView = () => {
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
     try {
-      await supabase.from("student_activity_logs").insert({
-        session_id: sessionId,
-        room_id: roomId,
-        activity_type: activityType,
-        material_id: materialId || null,
-        duration_seconds: durationSeconds || 0,
+      await supabase.functions.invoke("student-session", {
+        body: {
+          action: "log_activity",
+          sessionId,
+          roomId,
+          data: {
+            activity_type: activityType,
+            material_id: materialId || null,
+            duration_seconds: durationSeconds || 0,
+          },
+        },
       });
     } catch (e) {
       console.warn("Activity log failed", e);
@@ -254,18 +259,32 @@ const StudentView = () => {
       setQuizData(actRes.data[0].quiz_data as unknown as QuizData);
     }
     if (sessionId) {
-      const [logsRes, sessRes] = await Promise.all([
-        supabase.from("student_activity_logs").select("*").eq("session_id", sessionId),
-        supabase.from("student_sessions").select("*").eq("id", sessionId).single(),
-      ]);
-      setActivityLogs(logsRes.data || []);
-      if (sessRes.data) {
-        setSessionData(sessRes.data);
-        if (sessRes.data.completed_at) {
-          setSubmitted(true);
-          if (sessRes.data.answers) {
-            setAnswers(sessRes.data.answers as Record<string, string>);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}`, {
+        headers: {
+          "apikey": supabaseKey,
+          "Content-Type": "application/json",
+        },
+      });
+      const sessionResult = await res.json();
+      if (sessionResult && !sessionResult.error) {
+        setActivityLogs(sessionResult.activityLogs || []);
+        if (sessionResult.session) {
+          setSessionData(sessionResult.session);
+          if (sessionResult.session.completed_at) {
+            setSubmitted(true);
+            if (sessionResult.session.answers) {
+              setAnswers(sessionResult.session.answers as Record<string, string>);
+            }
           }
+        }
+        if (sessionResult.teacherFeedbacks) {
+          const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
+          for (const fb of sessionResult.teacherFeedbacks) {
+            fbMap[fb.question_key] = { feedback_text: fb.feedback_text, grade: fb.grade };
+          }
+          setTeacherFeedbacks(fbMap);
         }
       }
     }
@@ -345,11 +364,16 @@ const StudentView = () => {
     logActivity("quiz_complete", undefined, quizDuration);
 
     if (sessionId) {
-      await supabase.from("student_sessions").update({
-        score: Object.keys(answers).length,
-        answers: answers as unknown as Json,
-        completed_at: new Date().toISOString(),
-      }).eq("id", sessionId);
+      await supabase.functions.invoke("student-session", {
+        body: {
+          action: "submit",
+          sessionId,
+          data: {
+            score: Object.keys(answers).length,
+            answers: answers,
+          },
+        },
+      });
     }
     toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
