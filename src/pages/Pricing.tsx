@@ -142,6 +142,7 @@ export default function Pricing() {
                           R$ {plan.price.toFixed(2).replace(".", ",")}
                         </span>
                         <span className="text-muted-foreground">/mês</span>
+                        <p className="text-xs text-muted-foreground mt-1">14 dias grátis, cancele quando quiser</p>
                       </>
                     )}
                   </CardDescription>
@@ -178,7 +179,7 @@ export default function Pricing() {
                       {checkoutLoading === key ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       ) : null}
-                      {key === "free" ? "Plano Atual" : "Assinar Agora"}
+                      {key === "free" ? "Plano Atual" : "Iniciar Teste Grátis"}
                     </Button>
                   )}
                 </CardFooter>
