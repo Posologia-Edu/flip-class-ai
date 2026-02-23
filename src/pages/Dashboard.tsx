@@ -25,18 +25,17 @@ const Dashboard = () => {
   const auth = useAuth();
 
   useEffect(() => {
-    if (!auth.loading && !auth.user) {
+    if (auth.loading) return;
+    if (!auth.user) {
       navigate("/auth");
       return;
     }
-    if (!auth.loading && auth.user && !auth.isApproved) {
+    if (!auth.isApproved) {
       navigate("/pending-approval");
       return;
     }
-    if (!auth.loading && auth.user && auth.isApproved) {
-      fetchRooms();
-    }
-  }, [auth, navigate]);
+    fetchRooms();
+  }, [auth.loading, auth.user?.id, auth.isApproved]);
 
   const fetchRooms = async () => {
     if (!auth.user) return;

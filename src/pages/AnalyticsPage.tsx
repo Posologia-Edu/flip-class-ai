@@ -23,22 +23,19 @@ const AnalyticsPage = () => {
 
   const fetchAnalytics = useCallback(async () => {
     if (!user) return;
-    const { data: rooms } = await supabase
-      .from("rooms")
-      .select("*")
-      .eq("teacher_id", user.id)
-      .order("created_at", { ascending: false });
+    const [roomsRes, sessionsRes] = await Promise.all([
+      supabase.from("rooms").select("*").eq("teacher_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("student_sessions").select("room_id, score, completed_at"),
+    ]);
 
-    const roomsList = rooms || [];
+    const roomsList = roomsRes.data || [];
+    const allSessions = sessionsRes.data || [];
     const result: RoomAnalytics[] = [];
 
     for (const room of roomsList) {
-      const { data: sessions } = await supabase
-        .from("student_sessions")
-        .select("score, completed_at")
-        .eq("room_id", room.id);
-      const completed = (sessions || []).filter((s) => s.completed_at);
-      const studentCount = sessions?.length || 0;
+      const sessions = allSessions.filter(s => s.room_id === room.id);
+      const completed = sessions.filter(s => s.completed_at);
+      const studentCount = sessions.length;
       result.push({
         roomId: room.id,
         title: room.title,
@@ -52,11 +49,11 @@ const AnalyticsPage = () => {
     }
     setAnalytics(result);
     setLoading(false);
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!authLoading && user) fetchAnalytics();
-  }, [authLoading, user, fetchAnalytics]);
+  }, [authLoading, user?.id, fetchAnalytics]);
 
   const totalStudents = analytics.reduce((s, r) => s + r.studentCount, 0);
   const totalCompleted = analytics.reduce((s, r) => s + r.completedCount, 0);

@@ -51,11 +51,11 @@ const QuestionBank = () => {
       .order("updated_at", { ascending: false });
     setItems(data || []);
     setLoading(false);
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!authLoading && user) fetchItems();
-  }, [authLoading, user, fetchItems]);
+  }, [authLoading, user?.id, fetchItems]);
 
   const deleteItem = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();

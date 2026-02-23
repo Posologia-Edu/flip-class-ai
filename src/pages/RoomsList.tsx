@@ -37,24 +37,21 @@ const RoomsList = () => {
 
   const fetchRooms = useCallback(async () => {
     if (!auth.user) return;
-    const { data } = await supabase
-      .from("rooms")
-      .select("*")
-      .eq("teacher_id", auth.user.id)
-      .order("created_at", { ascending: false });
-    const roomsList = data || [];
+    const [roomsRes, sessionsRes] = await Promise.all([
+      supabase.from("rooms").select("*").eq("teacher_id", auth.user.id).order("created_at", { ascending: false }),
+      supabase.from("student_sessions").select("room_id, score, completed_at"),
+    ]);
+    const roomsList = roomsRes.data || [];
     setRooms(roomsList);
 
+    const allSessions = sessionsRes.data || [];
     const statsMap: Record<string, RoomStats> = {};
     for (const room of roomsList) {
-      const { data: sessions } = await supabase
-        .from("student_sessions")
-        .select("score, completed_at")
-        .eq("room_id", room.id);
-      const completed = (sessions || []).filter((s) => s.completed_at);
+      const sessions = allSessions.filter(s => s.room_id === room.id);
+      const completed = sessions.filter(s => s.completed_at);
       statsMap[room.id] = {
         roomId: room.id,
-        studentCount: sessions?.length || 0,
+        studentCount: sessions.length,
         avgScore: completed.length > 0
           ? Math.round(completed.reduce((s, c) => s + (c.score || 0), 0) / completed.length)
           : 0,
@@ -63,11 +60,11 @@ const RoomsList = () => {
     }
     setRoomStats(statsMap);
     setLoading(false);
-  }, [auth.user]);
+  }, [auth.user?.id]);
 
   useEffect(() => {
     if (!auth.loading && auth.user && auth.isApproved) fetchRooms();
-  }, [auth, fetchRooms]);
+  }, [auth.loading, auth.user?.id, auth.isApproved, fetchRooms]);
 
   const createRoom = async () => {
     if (!newTitle.trim() || !auth.user) return;
