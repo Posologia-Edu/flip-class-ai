@@ -79,7 +79,14 @@ const Dashboard = () => {
     setLoading(false);
   };
 
-  const generatePin = () => Math.floor(100000 + Math.random() * 900000).toString();
+  const generatePin = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let pin = '';
+    for (let i = 0; i < 8; i++) {
+      pin += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return pin;
+  };
 
   const createRoom = async () => {
     if (!newTitle.trim()) return;

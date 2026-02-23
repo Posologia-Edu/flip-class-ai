@@ -17,46 +17,68 @@ const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [roomId, setRoomId] = useState("");
+
   const handlePinSubmit = async () => {
-    if (pin.length !== 6) {
-      toast({ title: "PIN inválido", description: "O PIN deve ter 6 dígitos.", variant: "destructive" });
+    if (pin.length < 6) {
+      toast({ title: "PIN inválido", description: "Digite o PIN fornecido pelo professor.", variant: "destructive" });
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.from("rooms").select("id").eq("pin_code", pin).maybeSingle();
+    const { data, error } = await supabase.from("rooms").select("id").eq("pin_code", pin.toUpperCase()).maybeSingle();
     setLoading(false);
     if (error || !data) {
       toast({ title: "Sala não encontrada", description: "Verifique o PIN e tente novamente.", variant: "destructive" });
       return;
     }
+    setRoomId(data.id);
     setStep("info");
   };
 
   const handleInfoSubmit = async () => {
-    if (!studentName.trim()) {
-      toast({ title: "Nome obrigatório", description: "Digite seu nome para continuar.", variant: "destructive" });
+    const trimmedName = studentName.trim();
+    const trimmedEmail = studentEmail.trim().toLowerCase();
+    
+    if (!trimmedName || trimmedName.length < 2) {
+      toast({ title: "Nome obrigatório", description: "Digite seu nome (mínimo 2 caracteres).", variant: "destructive" });
       return;
     }
-    if (!studentEmail.trim() || !studentEmail.includes("@")) {
-      toast({ title: "Email obrigatório", description: "Digite um email válido para continuar.", variant: "destructive" });
+    if (trimmedName.length > 100) {
+      toast({ title: "Nome muito longo", description: "O nome deve ter no máximo 100 caracteres.", variant: "destructive" });
       return;
     }
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast({ title: "Email inválido", description: "Digite um email válido para continuar.", variant: "destructive" });
+      return;
+    }
+    if (trimmedEmail.length > 255) {
+      toast({ title: "Email muito longo", description: "O email deve ter no máximo 255 caracteres.", variant: "destructive" });
+      return;
+    }
+
     setLoading(true);
-    const { data: room } = await supabase.from("rooms").select("id").eq("pin_code", pin).maybeSingle();
-    if (!room) { setLoading(false); return; }
+    try {
+      const { data: result, error } = await supabase.functions.invoke("student-session", {
+        body: {
+          action: "create_session",
+          roomId,
+          data: {
+            student_name: trimmedName,
+            student_email: trimmedEmail,
+          },
+        },
+      });
+      setLoading(false);
 
-    const { data: session, error } = await supabase.from("student_sessions").insert({
-      room_id: room.id,
-      student_name: studentName.trim(),
-      student_email: studentEmail.trim().toLowerCase(),
-    }).select("id").single();
-    setLoading(false);
-
-    if (error) {
+      if (error || result?.error) {
+        toast({ title: "Erro", description: result?.error || "Não foi possível entrar na sala.", variant: "destructive" });
+        return;
+      }
+      navigate(`/room/${roomId}/student/${result.sessionId}`);
+    } catch (e) {
+      setLoading(false);
       toast({ title: "Erro", description: "Não foi possível entrar na sala.", variant: "destructive" });
-      return;
     }
-    navigate(`/room/${room.id}/student/${session.id}`);
   };
 
   return (
@@ -104,24 +126,24 @@ const Index = () => {
               </h2>
               <p className="text-muted-foreground mb-6 text-sm">
                 {step === "pin"
-                  ? "Digite o PIN de 6 dígitos fornecido pelo professor."
+                  ? "Digite o PIN fornecido pelo professor."
                   : "Preencha seus dados para identificar suas respostas."}
               </p>
 
               {step === "pin" ? (
                 <div className="space-y-4">
                   <Input
-                    placeholder="000000"
+                    placeholder="ABCD1234"
                     value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="text-center text-3xl tracking-[0.5em] font-display font-bold h-16 bg-secondary border-none"
-                    maxLength={6}
+                    onChange={(e) => setPin(e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase())}
+                    className="text-center text-3xl tracking-[0.3em] font-display font-bold h-16 bg-secondary border-none"
+                    maxLength={8}
                     onKeyDown={(e) => e.key === "Enter" && handlePinSubmit()}
                   />
                   <Button
                     className="w-full h-12 text-base font-semibold"
                     onClick={handlePinSubmit}
-                    disabled={loading || pin.length !== 6}
+                    disabled={loading || pin.length < 6}
                   >
                     Entrar <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
