@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Settings,
   Globe,
+  UserCog,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
@@ -50,6 +51,7 @@ export function AppSidebar() {
   ];
 
   const bottomItems = [
+    { title: "Minha Conta", url: "/dashboard/account", icon: UserCog },
     { title: "Documentação", url: "/docs", icon: FileText },
   ];
 

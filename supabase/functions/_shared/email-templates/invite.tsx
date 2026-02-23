@@ -40,10 +40,10 @@ export const InviteEmail = ({
           <Link href={siteUrl} style={link}>
             <strong>FlipClass</strong>
           </Link>
-          . Clique no botão abaixo para aceitar o convite e criar sua conta.
+          . Clique no botão abaixo para definir sua senha e acessar a plataforma.
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Aceitar Convite
+          Definir Minha Senha
         </Button>
         <Text style={footer}>
           Se você não esperava este convite, pode ignorar este email com segurança.
