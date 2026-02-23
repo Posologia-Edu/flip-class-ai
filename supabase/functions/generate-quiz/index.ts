@@ -229,6 +229,13 @@ serve(async (req) => {
       );
     }
 
+    // Truncate very long content to avoid AI timeout (max ~40k chars)
+    const MAX_CONTENT_LENGTH = 40000;
+    if (finalContent.length > MAX_CONTENT_LENGTH) {
+      console.log("Truncating content from", finalContent.length, "to", MAX_CONTENT_LENGTH, "chars");
+      finalContent = finalContent.substring(0, MAX_CONTENT_LENGTH) + "\n\n[Conteúdo truncado por limite de tamanho]";
+    }
+
     console.log("Generating quiz from content:", finalContent.length, "chars, type:", materialType || "unknown");
 
     const typeLabel = materialType === "video" ? "TRANSCRIÇÃO DO VÍDEO"
@@ -245,6 +252,9 @@ ${finalContent}
 
 IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não invente informações que não estejam no material.`;
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 120s timeout
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -258,7 +268,10 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
           { role: "user", content: userPrompt },
         ],
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       if (response.status === 429) {

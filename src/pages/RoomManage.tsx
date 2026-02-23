@@ -303,7 +303,10 @@ const RoomManage = () => {
   const generateQuizFromFile = async (material: Material) => {
     setGeneratingQuiz(material.id);
     try {
-      const response = await supabase.functions.invoke("generate-quiz", {
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Tempo limite excedido. O arquivo pode ser muito grande. Tente colar o conteúdo textual manualmente.")), 150000)
+      );
+      const fetchPromise = supabase.functions.invoke("generate-quiz", {
         body: {
           materialId: material.id,
           contentText: material.content_text_for_ai || "",
@@ -312,8 +315,8 @@ const RoomManage = () => {
           fileUrl: material.url,
         },
       });
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
       if (response.error) {
-        // If file too large, fallback to manual paste
         const errorMsg = typeof response.error === "object" && response.error.message 
           ? response.error.message 
           : String(response.error);
@@ -330,7 +333,13 @@ const RoomManage = () => {
       toast({ title: "Atividade gerada!", description: "A IA leu o documento e criou a atividade com sucesso." });
       fetchData();
     } catch (err: any) {
-      toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+      const isTimeout = err.message?.includes("Tempo limite");
+      if (isTimeout) {
+        setSelectedMaterialForQuiz(material);
+        setManualTranscript("");
+        setTranscriptDialogOpen(true);
+      }
+      toast({ title: isTimeout ? "Tempo limite excedido" : "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
   };
