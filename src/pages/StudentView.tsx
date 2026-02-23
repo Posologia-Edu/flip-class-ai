@@ -246,8 +246,11 @@ const StudentView = () => {
     };
   }, [sessionId, roomId, logActivity]);
 
+  const isValidUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
   const fetchData = useCallback(async () => {
-    if (!roomId) return;
+    if (!roomId || !isValidUuid(roomId)) return;
+    if (sessionId && !isValidUuid(sessionId)) return;
     const [roomRes, matRes, actRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("id", roomId).single(),
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
