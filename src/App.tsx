@@ -23,20 +23,21 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
-            <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
-            <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/pending-approval" element={<PendingApproval />} />
-            <Route path="/docs" element={<Documentation />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
+        <Routes>
+          {/* Public routes - no sidebar */}
+          <Route path="/" element={<Index />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
+          <Route path="/pending-approval" element={<PendingApproval />} />
+
+          {/* Authenticated routes - with sidebar */}
+          <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+          <Route path="/dashboard/room/:roomId" element={<AppLayout><RoomManage /></AppLayout>} />
+          <Route path="/admin" element={<AppLayout><AdminPanel /></AppLayout>} />
+          <Route path="/docs" element={<AppLayout><Documentation /></AppLayout>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

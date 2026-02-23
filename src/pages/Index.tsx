@@ -61,6 +61,15 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background sticky top-0 z-30">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <BookOpen className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <span className="font-display text-lg font-bold text-foreground">FlipClass</span>
+        </div>
+        <FloatingAuth />
+      </header>
 
       <main className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-5xl w-full grid md:grid-cols-2 gap-16 items-center">
