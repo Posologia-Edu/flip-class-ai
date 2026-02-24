@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -17,6 +17,10 @@ export default function MyAccount() {
   const { toast } = useToast();
 
   const [newName, setNewName] = useState(fullName || "");
+
+  useEffect(() => {
+    if (fullName) setNewName(fullName);
+  }, [fullName]);
   const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");

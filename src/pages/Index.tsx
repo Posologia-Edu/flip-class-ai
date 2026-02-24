@@ -185,6 +185,21 @@ const Index = () => {
         </div>
       </main>
 
+      {/* Teacher CTA Section */}
+      <section className="py-16 px-6 border-t border-border bg-card">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-3">
+            É professor? Crie salas inteligentes
+          </h2>
+          <p className="text-muted-foreground mb-8 max-w-lg mx-auto leading-relaxed">
+            Envie materiais, gere quizzes com IA e acompanhe o desempenho dos seus alunos em tempo real — tudo em uma única plataforma.
+          </p>
+          <Button size="lg" className="font-semibold" onClick={() => navigate("/auth")}>
+            Começar como Professor <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+      </section>
+
       <footer className="py-6 px-6 border-t border-border">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <span>© {new Date().getFullYear()} Todos os direitos reservados.</span>
