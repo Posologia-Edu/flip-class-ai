@@ -9,13 +9,15 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mail, Lock, User, LogIn, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 const FloatingAuth = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupName, setSignupName] = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -36,7 +38,7 @@ const FloatingAuth = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
     if (error) {
       toast({ title: "Erro no login", description: error.message, variant: "destructive" });
     }
@@ -47,10 +49,10 @@ const FloatingAuth = () => {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
+      email: signupEmail,
+      password: signupPassword,
       options: {
-        data: { full_name: fullName },
+        data: { full_name: signupName },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -68,6 +70,23 @@ const FloatingAuth = () => {
     });
     if (error) {
       toast({ title: "Erro com Google", description: String(error), variant: "destructive" });
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!loginEmail.trim()) {
+      toast({ title: "Digite seu email primeiro", description: "Preencha o campo de email acima.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(loginEmail.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    if (error) {
+      toast({ title: "Erro ao enviar email", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Email enviado!", description: "Verifique sua caixa de entrada para redefinir a senha." });
     }
   };
 
@@ -125,8 +144,8 @@ const FloatingAuth = () => {
                     id="float-email"
                     type="email"
                     placeholder="seu@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
                     className="h-9 text-sm"
                     required
                   />
@@ -137,8 +156,8 @@ const FloatingAuth = () => {
                     id="float-pass"
                     type="password"
                     placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
                     className="h-9 text-sm"
                     required
                     minLength={6}
@@ -147,6 +166,13 @@ const FloatingAuth = () => {
                 <Button type="submit" className="w-full h-9 text-sm font-semibold" disabled={loading}>
                   {loading ? "Entrando..." : "Entrar"}
                 </Button>
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="w-full text-xs text-primary hover:underline text-center"
+                >
+                  Esqueci minha senha
+                </button>
               </form>
             </TabsContent>
 
@@ -157,8 +183,8 @@ const FloatingAuth = () => {
                   <Input
                     id="float-name"
                     placeholder="Seu nome"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    value={signupName}
+                    onChange={(e) => setSignupName(e.target.value)}
                     className="h-9 text-sm"
                     required
                   />
@@ -169,8 +195,8 @@ const FloatingAuth = () => {
                     id="float-signup-email"
                     type="email"
                     placeholder="seu@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
                     className="h-9 text-sm"
                     required
                   />
@@ -181,8 +207,8 @@ const FloatingAuth = () => {
                     id="float-signup-pass"
                     type="password"
                     placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
                     className="h-9 text-sm"
                     required
                     minLength={6}

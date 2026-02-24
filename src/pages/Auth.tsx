@@ -23,7 +23,6 @@ const Auth = () => {
       if (!auth.isApproved) {
         navigate("/pending-approval");
       } else {
-        // Both admin and teacher go to dashboard
         navigate("/dashboard");
       }
     }
@@ -54,6 +53,23 @@ const Auth = () => {
       }
     }
     setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      toast({ title: "Digite seu email primeiro", description: "Preencha o campo de email para receber o link de recuperação.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    if (error) {
+      toast({ title: "Erro ao enviar email", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Email enviado!", description: "Verifique sua caixa de entrada para redefinir a senha." });
+    }
   };
 
   return (
@@ -94,6 +110,15 @@ const Auth = () => {
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10" required minLength={6} />
             </div>
+            {isLogin && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-xs text-primary hover:underline mt-1"
+              >
+                Esqueci minha senha
+              </button>
+            )}
           </div>
           <Button type="submit" className="w-full h-12 font-semibold" disabled={loading}>
             {loading ? "Carregando..." : isLogin ? "Entrar" : "Cadastrar"}
