@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Key, Eye, EyeOff, Trash2, ExternalLink, Pencil } from "lucide-react";
+import { Key, Eye, EyeOff, Trash2, ExternalLink, Pencil, CheckCircle2, Circle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface AiApiKey {
   id: string;
@@ -115,6 +116,15 @@ const AiApiKeysManager = () => {
               <div className="flex items-center gap-2">
                 <Key className="w-4 h-4 text-primary" />
                 <span className="font-semibold text-foreground">{provider.name}</span>
+                {savedKey ? (
+                  <Badge variant="default" className="bg-primary/90 hover:bg-primary text-primary-foreground text-xs flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Configurada
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground text-xs flex items-center gap-1">
+                    <Circle className="w-3 h-3" /> Não configurada
+                  </Badge>
+                )}
               </div>
               <a
                 href={provider.url}
