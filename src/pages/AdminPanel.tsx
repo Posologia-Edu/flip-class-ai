@@ -5,7 +5,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2 } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key } from "lucide-react";
+import AiApiKeysManager from "@/components/AiApiKeysManager";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -216,6 +217,7 @@ const AdminPanel = () => {
       <Tabs defaultValue="invites" className="space-y-6">
         <TabsList>
           <TabsTrigger value="invites">Convites</TabsTrigger>
+          <TabsTrigger value="api-keys"><Key className="w-4 h-4 mr-1" /> API Keys</TabsTrigger>
           <TabsTrigger value="pending">Pendentes ({pending.length})</TabsTrigger>
           <TabsTrigger value="approved">Aprovados ({approved.length})</TabsTrigger>
           <TabsTrigger value="rejected">Rejeitados ({rejected.length})</TabsTrigger>
@@ -302,6 +304,13 @@ const AdminPanel = () => {
                 </div>
               )}
             </div>
+          </div>
+        </TabsContent>
+
+        {/* API Keys Tab */}
+        <TabsContent value="api-keys">
+          <div className="bg-card border border-border rounded-xl p-6">
+            <AiApiKeysManager />
           </div>
         </TabsContent>
 

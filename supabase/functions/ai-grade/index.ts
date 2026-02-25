@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,6 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate the caller
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Authentication required" }), {
@@ -66,10 +66,6 @@ serve(async (req) => {
 
     const { question, context, correctAnswer, studentAnswer, batchItems } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
-    // Support batch grading (multiple questions at once)
     const items = batchItems || [{ question, context, correctAnswer, studentAnswer }];
     const results = [];
 
@@ -96,60 +92,44 @@ RESPOSTA DO ALUNO: ${item.studentAnswer}
 
 Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fortes, pontos a melhorar e sugestão.`;
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+      try {
+        const content = await callAiWithFallback({
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userPrompt },
           ],
-        }),
-      });
+        });
 
-      if (!response.ok) {
-        if (response.status === 429) {
+        let gradeResult;
+        const cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("Formato inválido da IA");
+
+        try {
+          gradeResult = JSON.parse(jsonMatch[0]);
+        } catch {
+          const fixed = jsonMatch[0]
+            .replace(/,\s*([\]}])/g, "$1")
+            .replace(/[\u201C\u201D]/g, '"')
+            .replace(/[\u2018\u2019]/g, "'");
+          gradeResult = JSON.parse(fixed);
+        }
+
+        gradeResult.grade = Math.max(0, Math.min(10, Math.round(gradeResult.grade)));
+        results.push(gradeResult);
+      } catch (err) {
+        if (err.message === "RATE_LIMIT") {
           return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }), {
             status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        if (response.status === 402) {
+        if (err.message === "INSUFFICIENT_CREDITS") {
           return new Response(JSON.stringify({ error: "Créditos de IA insuficientes." }), {
             status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        const t = await response.text();
-        console.error("AI gateway error:", response.status, t);
-        throw new Error("Erro no serviço de IA");
+        throw err;
       }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new Error("Sem resposta da IA");
-
-      // Parse JSON response
-      let gradeResult;
-      const cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("Formato inválido da IA");
-
-      try {
-        gradeResult = JSON.parse(jsonMatch[0]);
-      } catch {
-        const fixed = jsonMatch[0]
-          .replace(/,\s*([\]}])/g, "$1")
-          .replace(/[\u201C\u201D]/g, '"')
-          .replace(/[\u2018\u2019]/g, "'");
-        gradeResult = JSON.parse(fixed);
-      }
-
-      // Ensure grade is within bounds
-      gradeResult.grade = Math.max(0, Math.min(10, Math.round(gradeResult.grade)));
-      results.push(gradeResult);
     }
 
     return new Response(JSON.stringify({ success: true, results }), {

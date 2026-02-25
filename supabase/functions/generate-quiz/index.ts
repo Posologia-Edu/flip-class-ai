@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,7 +68,7 @@ Regras:
 - TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB limit for base64 in edge function
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 function getMimeType(fileUrl: string, materialType: string): string {
   if (materialType === "pdf" || fileUrl.endsWith(".pdf")) return "application/pdf";
@@ -78,77 +79,48 @@ function getMimeType(fileUrl: string, materialType: string): string {
   return "application/octet-stream";
 }
 
-async function extractTextFromFileUrl(fileUrl: string, materialType: string, apiKey: string): Promise<string> {
+async function extractTextFromFileUrl(fileUrl: string, materialType: string): Promise<string> {
   console.log("Fetching file for AI extraction:", fileUrl);
   
-  // First, do a HEAD request to check file size
   const headResponse = await fetch(fileUrl, { method: "HEAD" });
   const contentLength = parseInt(headResponse.headers.get("content-length") || "0", 10);
-  console.log("File size from HEAD:", contentLength);
   
   if (contentLength > MAX_FILE_SIZE) {
     throw new Error(`Arquivo muito grande (${Math.round(contentLength / 1024 / 1024)}MB). Para arquivos acima de 15MB, cole o conteúdo textual manualmente.`);
   }
 
-  // Download and base64-encode (required for non-image files with Gemini)
   const fileResponse = await fetch(fileUrl);
-  if (!fileResponse.ok) {
-    throw new Error(`Falha ao baixar arquivo: ${fileResponse.status}`);
-  }
+  if (!fileResponse.ok) throw new Error(`Falha ao baixar arquivo: ${fileResponse.status}`);
 
   const fileBuffer = await fileResponse.arrayBuffer();
   const uint8 = new Uint8Array(fileBuffer);
-  console.log("File downloaded, size:", uint8.length);
 
-  // Chunked base64 encoding to avoid stack overflow
   let binary = "";
   const chunkSize = 8192;
   for (let i = 0; i < uint8.length; i += chunkSize) {
     binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
   }
   const base64Data = btoa(binary);
-
   const mimeType = getMimeType(fileUrl, materialType);
-  console.log("Sending to AI with mime:", mimeType);
 
-  // Use Gemini multimodal with data URL (required for PDFs/documents)
-  const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Extraia TODO o conteúdo textual deste documento de forma detalhada e completa. Mantenha a estrutura, títulos, subtítulos e informações. Retorne APENAS o texto extraído, sem comentários adicionais."
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${mimeType};base64,${base64Data}`
-              }
-            }
-          ]
-        }
-      ],
-    }),
+  const extractedText = await callAiWithFallback({
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Extraia TODO o conteúdo textual deste documento de forma detalhada e completa. Mantenha a estrutura, títulos, subtítulos e informações. Retorne APENAS o texto extraído, sem comentários adicionais."
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:${mimeType};base64,${base64Data}` }
+          }
+        ]
+      }
+    ],
   });
 
-  if (!extractionResponse.ok) {
-    const errorText = await extractionResponse.text();
-    console.error("Extraction AI error:", extractionResponse.status, errorText);
-    throw new Error("Falha ao extrair conteúdo do documento com IA");
-  }
-
-  const extractionData = await extractionResponse.json();
-  const extractedText = extractionData.choices?.[0]?.message?.content;
-  
   if (!extractedText || extractedText.length < 50) {
     throw new Error("Não foi possível extrair conteúdo suficiente do documento");
   }
@@ -163,7 +135,6 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate the caller
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Authentication required" }), {
@@ -189,7 +160,6 @@ serve(async (req) => {
 
     const { contentText, roomId, materialId, materialType, fileUrl } = await req.json();
 
-    // Verify the caller owns the room
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
     const { data: room } = await serviceSupabase.from("rooms").select("teacher_id").eq("id", roomId).single();
@@ -199,25 +169,14 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
-    // Determine the content to use for quiz generation
     let finalContent = contentText || "";
 
-    // If we have a file URL and no/insufficient text content, extract from file
     if (fileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
       console.log("Extracting content from file:", fileUrl);
-      finalContent = await extractTextFromFileUrl(fileUrl, materialType || "file", LOVABLE_API_KEY);
-      
-      // Save extracted text back to the material for future use
-      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      finalContent = await extractTextFromFileUrl(fileUrl, materialType || "file");
       
       if (materialId) {
-        await supabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
+        await serviceSupabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
         console.log("Saved extracted text to material");
       }
     }
@@ -229,14 +188,10 @@ serve(async (req) => {
       );
     }
 
-    // Truncate very long content to avoid AI timeout (max ~40k chars)
     const MAX_CONTENT_LENGTH = 40000;
     if (finalContent.length > MAX_CONTENT_LENGTH) {
-      console.log("Truncating content from", finalContent.length, "to", MAX_CONTENT_LENGTH, "chars");
       finalContent = finalContent.substring(0, MAX_CONTENT_LENGTH) + "\n\n[Conteúdo truncado por limite de tamanho]";
     }
-
-    console.log("Generating quiz from content:", finalContent.length, "chars, type:", materialType || "unknown");
 
     const typeLabel = materialType === "video" ? "TRANSCRIÇÃO DO VÍDEO"
       : materialType === "pdf" ? "CONTEÚDO DO PDF"
@@ -253,88 +208,63 @@ ${finalContent}
 IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não invente informações que não estejam no material.`;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000); // 120s timeout
+    const timeout = setTimeout(() => controller.abort(), 120000);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+    try {
+      const content = await callAiWithFallback({
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
-      }),
-      signal: controller.signal,
-    });
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeout);
+      clearTimeout(timeout);
 
-    if (!response.ok) {
-      if (response.status === 429) {
+      let quizJson: any;
+      let cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Não foi possível interpretar a resposta da IA");
+
+      try {
+        quizJson = JSON.parse(jsonMatch[0]);
+      } catch {
+        let fixedJson = jsonMatch[0]
+          .replace(/,\s*([\]}])/g, "$1")
+          .replace(/[\u201C\u201D]/g, '"')
+          .replace(/[\u2018\u2019]/g, "'");
+        try {
+          quizJson = JSON.parse(fixedJson);
+        } catch {
+          throw new Error("A IA retornou um formato inválido. Tente gerar novamente.");
+        }
+      }
+
+      const { error: insertError } = await serviceSupabase.from("activities").insert({
+        room_id: roomId,
+        material_id: materialId || null,
+        quiz_data: quizJson,
+      });
+
+      if (insertError) throw new Error("Falha ao salvar atividade");
+
+      return new Response(JSON.stringify({ success: true, quiz: quizJson }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err.message === "RATE_LIMIT") {
         return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
+      if (err.message === "INSUFFICIENT_CREDITS") {
         return new Response(JSON.stringify({ error: "Créditos insuficientes." }), {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error("Erro no serviço de IA");
+      throw err;
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error("Sem resposta da IA");
-
-    console.log("AI response length:", content.length);
-
-    let quizJson: any;
-    // Clean AI response: remove markdown fences, fix common JSON issues
-    let cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Não foi possível interpretar a resposta da IA");
-    }
-    try {
-      quizJson = JSON.parse(jsonMatch[0]);
-    } catch {
-      // Try fixing common issues: unescaped quotes in strings, trailing commas
-      let fixedJson = jsonMatch[0]
-        .replace(/,\s*([\]}])/g, "$1") // remove trailing commas
-        .replace(/[\u201C\u201D]/g, '"') // smart quotes
-        .replace(/[\u2018\u2019]/g, "'"); // smart single quotes
-      try {
-        quizJson = JSON.parse(fixedJson);
-      } catch {
-        console.error("Failed to parse JSON even after cleanup. First 500 chars:", jsonMatch[0].substring(0, 500));
-        throw new Error("A IA retornou um formato inválido. Tente gerar novamente.");
-      }
-    }
-
-    // Save to database (reuse serviceSupabase from auth check above)
-    const supabase = serviceSupabase;
-
-    const { error: insertError } = await supabase.from("activities").insert({
-      room_id: roomId,
-      material_id: materialId || null,
-      quiz_data: quizJson,
-    });
-
-    if (insertError) {
-      console.error("Insert error:", insertError);
-      throw new Error("Falha ao salvar atividade");
-    }
-
-    return new Response(JSON.stringify({ success: true, quiz: quizJson }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (e) {
     console.error("generate-quiz error:", e);
     return new Response(
