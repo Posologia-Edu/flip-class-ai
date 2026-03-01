@@ -293,6 +293,66 @@ const StudentView = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
+    if (!roomId || !sessionId) return;
+
+    let isActive = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      await fetchData();
+      if (isActive) timeoutId = setTimeout(poll, 5000);
+    };
+
+    const channel = supabase
+      .channel(`student-view:${roomId}:${sessionId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "materials",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "activities",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "rooms",
+        filter: `id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "student_sessions",
+        filter: `id=eq.${sessionId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "student_activity_logs",
+        filter: `session_id=eq.${sessionId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "teacher_feedback",
+        filter: `session_id=eq.${sessionId}`,
+      }, fetchData)
+      .subscribe();
+
+    timeoutId = setTimeout(poll, 5000);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, [roomId, sessionId, fetchData]);
+
+  useEffect(() => {
     if (!room?.unlock_at || unlocked) return;
     const interval = setInterval(() => {
       const diff = new Date(room.unlock_at!).getTime() - Date.now();

@@ -82,7 +82,7 @@ const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canUploadFile, canGenerateQuiz, canUseAiCorrection, canUsePeerReview, loading: gateLoading } = useFeatureGate();
+  const { canUploadFile, canGenerateQuiz, canUseAiCorrection, canUsePeerReview, loading: gateLoading, aiUsage, limits } = useFeatureGate();
   const [room, setRoom] = useState<Room | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -166,6 +166,59 @@ const RoomManage = () => {
   }, [roomId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    let isActive = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      await fetchData();
+      if (isActive) timeoutId = setTimeout(poll, 5000);
+    };
+
+    const channel = supabase
+      .channel(`room-manage:${roomId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "materials",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "activities",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "student_sessions",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "student_activity_logs",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "teacher_feedback",
+      }, fetchData)
+      .subscribe();
+
+    timeoutId = setTimeout(poll, 5000);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, [roomId, fetchData]);
 
   const extractYoutubeId = (url: string) => {
     const match = url.match(/(?:youtu\.be\/|v=|\/embed\/|\/v\/|\/watch\?v=)([^&?\s]+)/);
@@ -644,6 +697,31 @@ const RoomManage = () => {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-10">
+        {/* Uso de IA no mês */}
+        <section className="bg-card rounded-xl border border-border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" /> Uso de IA (mês atual)
+            </h2>
+            <p className="text-xs text-muted-foreground">Atualizado automaticamente</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-secondary rounded-lg p-4">
+              <p className="text-xs text-muted-foreground mb-1">Geração de Quiz</p>
+              <p className="font-display text-2xl font-bold text-foreground">{aiUsage.generations}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Limite: {limits.ai_generations_per_month === -1 ? "Ilimitado" : limits.ai_generations_per_month}
+              </p>
+            </div>
+            <div className="bg-secondary rounded-lg p-4">
+              <p className="text-xs text-muted-foreground mb-1">Correção por IA</p>
+              <p className="font-display text-2xl font-bold text-foreground">{aiUsage.corrections}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Limite: {limits.ai_corrections_per_month === -1 ? "Ilimitado" : limits.ai_corrections_per_month}
+              </p>
+            </div>
+          </div>
+        </section>
         {/* Timer Section */}
         <section className="bg-card rounded-xl border border-border p-6">
           <h2 className="font-display text-lg font-semibold flex items-center gap-2 mb-4">
