@@ -63,6 +63,39 @@ export const PeerReviewTeacher = ({
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
+  useEffect(() => {
+    let isActive = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      await fetchAssignments();
+      if (isActive) timeoutId = setTimeout(poll, 5000);
+    };
+
+    const channel = supabase
+      .channel(`peer-review-teacher:${roomId}:${activityId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "peer_review_assignments",
+        filter: `activity_id=eq.${activityId}`,
+      }, fetchAssignments)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "peer_reviews",
+      }, fetchAssignments)
+      .subscribe();
+
+    timeoutId = setTimeout(poll, 5000);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, [roomId, activityId, fetchAssignments]);
+
   const saveCriteria = async () => {
     setSaving(true);
     try {
@@ -273,83 +306,156 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
+  const [activeQuizData, setActiveQuizData] = useState<any>(quizData);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Get activities with peer review enabled for this room
-      const { data: acts } = await supabase
-        .from("activities")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("peer_review_enabled", true)
-        .limit(1);
+      const [{ data: reviewerAssignments }, { data: revieweeAssignments }] = await Promise.all([
+        supabase
+          .from("peer_review_assignments" as any)
+          .select("*")
+          .eq("reviewer_session_id", sessionId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("peer_review_assignments" as any)
+          .select("*")
+          .eq("reviewee_session_id", sessionId)
+          .order("created_at", { ascending: false }),
+      ]);
 
-      if (!acts || acts.length === 0) {
-        setLoading(false);
-        return;
+      const reviewerRows = (reviewerAssignments || []) as any[];
+      const revieweeRows = (revieweeAssignments || []) as any[];
+
+      const allAssignments = [...reviewerRows, ...revieweeRows];
+      const activityIds = Array.from(new Set(allAssignments.map((a) => a.activity_id).filter(Boolean)));
+
+      let activityMap = new Map<string, any>();
+      if (activityIds.length > 0) {
+        const { data: activities } = await supabase
+          .from("activities")
+          .select("id, room_id, peer_review_enabled, peer_review_criteria, quiz_data")
+          .in("id", activityIds)
+          .eq("room_id", roomId);
+
+        activityMap = new Map((activities || []).map((a: any) => [a.id, a]));
       }
 
-      const activity = acts[0];
-      const actCriteria = (activity as any).peer_review_criteria as Criterion[] || [];
-      setCriteria(actCriteria);
+      const activeReviewerAssignment = reviewerRows.find((a: any) => {
+        const activity = activityMap.get(a.activity_id);
+        return activity?.peer_review_enabled;
+      }) as any;
 
-      // Get assignment for this student (as reviewer)
-      const { data: assignData } = await supabase
-        .from("peer_review_assignments" as any)
-        .select("*")
-        .eq("activity_id", activity.id)
-        .eq("reviewer_session_id", sessionId);
+      if (activeReviewerAssignment) {
+        setAssignment(activeReviewerAssignment);
 
-      if (assignData && assignData.length > 0) {
-        const assign = assignData[0] as any;
-        setAssignment(assign);
+        const activity = activityMap.get(activeReviewerAssignment.activity_id);
+        const actCriteria = (activity?.peer_review_criteria as Criterion[]) || [];
+        setCriteria(actCriteria);
+        setActiveQuizData((activity?.quiz_data as any) || quizData);
 
-        // Get reviewee's answers
-        const { data: revieweeSession } = await supabase
-          .from("student_sessions")
-          .select("*")
-          .eq("id", assign.reviewee_session_id)
-          .single();
-        if (revieweeSession?.answers) {
-          setRevieweeAnswers(revieweeSession.answers as Record<string, string>);
-        }
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const revieweeRes = await fetch(
+          `${supabaseUrl}/functions/v1/student-session?sessionId=${activeReviewerAssignment.reviewee_session_id}`,
+          { headers: { apikey: supabaseKey, "Content-Type": "application/json" } }
+        );
+        const revieweePayload = await revieweeRes.json();
+        setRevieweeAnswers((revieweePayload?.session?.answers as Record<string, string>) || {});
 
-        // Check if already reviewed
         const { data: existingData } = await supabase
           .from("peer_reviews" as any)
           .select("*")
-          .eq("assignment_id", assign.id);
+          .eq("assignment_id", activeReviewerAssignment.id)
+          .limit(1);
+
         if (existingData && existingData.length > 0) {
           const rev = existingData[0] as any;
           setExistingReview(rev);
           setScores((rev.criteria_scores as Record<string, number>) || {});
           setComment(rev.comment || "");
+        } else {
+          setExistingReview(null);
+          setScores({});
+          setComment("");
         }
+      } else {
+        setAssignment(null);
+        setRevieweeAnswers({});
+        setExistingReview(null);
       }
 
-      // Get reviews received by this student
-      const { data: receivedAssign } = await supabase
-        .from("peer_review_assignments" as any)
-        .select("*")
-        .eq("activity_id", activity.id)
-        .eq("reviewee_session_id", sessionId);
+      const validRevieweeAssignments = revieweeRows.filter((a: any) => activityMap.has(a.activity_id));
+      const reviewAssignmentIds = validRevieweeAssignments.map((a: any) => a.id);
 
-      if (receivedAssign && receivedAssign.length > 0) {
-        const rIds = (receivedAssign as any[]).map(a => a.id);
+      if (!activeReviewerAssignment && validRevieweeAssignments.length > 0) {
+        const firstActivity = activityMap.get(validRevieweeAssignments[0].activity_id);
+        setCriteria((firstActivity?.peer_review_criteria as Criterion[]) || []);
+      }
+
+      if (reviewAssignmentIds.length > 0) {
         const { data: revData } = await supabase
           .from("peer_reviews" as any)
           .select("*")
-          .in("assignment_id", rIds);
+          .in("assignment_id", reviewAssignmentIds);
         setReceivedReviews(revData || []);
+      } else {
+        setReceivedReviews([]);
       }
     } catch (err) {
       console.error("Peer review fetch error:", err);
     }
     setLoading(false);
-  }, [sessionId, roomId]);
+  }, [sessionId, roomId, quizData]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    let isActive = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      await fetchData();
+      if (isActive) timeoutId = setTimeout(poll, 5000);
+    };
+
+    const channel = supabase
+      .channel(`peer-review-student:${roomId}:${sessionId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "peer_review_assignments",
+        filter: `reviewer_session_id=eq.${sessionId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "peer_review_assignments",
+        filter: `reviewee_session_id=eq.${sessionId}`,
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "peer_reviews",
+      }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "activities",
+        filter: `room_id=eq.${roomId}`,
+      }, fetchData)
+      .subscribe();
+
+    timeoutId = setTimeout(poll, 5000);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, [roomId, sessionId, fetchData]);
 
   const submitReview = async () => {
     if (!assignment) return;
@@ -399,7 +505,7 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     );
   }
 
-  const levels = quizData?.levels || [];
+  const levels = activeQuizData?.levels || [];
 
   return (
     <div className="space-y-8">

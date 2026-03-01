@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2 } from "lucide-react";
+import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2, Sparkles, Bot } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 
@@ -45,6 +45,7 @@ const InstitutionalDashboard = () => {
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [aiUsage, setAiUsage] = useState({ generations: 0, corrections: 0 });
 
   const fetchTeachers = useCallback(async () => {
     if (!user) return;
@@ -55,6 +56,7 @@ const InstitutionalDashboard = () => {
       if (error) throw error;
       setTeachers(data?.teachers || []);
       setTeacherCount(data?.count || 0);
+      setAiUsage(data?.aiUsageMonthly || { generations: 0, corrections: 0 });
     } catch (err: any) {
       console.error("Error fetching teachers:", err);
     } finally {
@@ -185,7 +187,7 @@ const InstitutionalDashboard = () => {
 
         <TabsContent value="teachers">
           {/* Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-muted-foreground">Professores</p>
               <p className="font-display text-2xl font-bold text-foreground">{teacherCount}<span className="text-sm font-normal text-muted-foreground">/{MAX_TEACHERS}</span></p>
@@ -201,6 +203,16 @@ const InstitutionalDashboard = () => {
             <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-muted-foreground">Taxa Conclusão</p>
               <p className="font-display text-2xl font-bold text-foreground">{avgCompletion}%</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> Geração IA (mês)</p>
+              <p className="font-display text-2xl font-bold text-foreground">{aiUsage.generations}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Plano institucional: ilimitado</p>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Bot className="w-3.5 h-3.5" /> Correção IA (mês)</p>
+              <p className="font-display text-2xl font-bold text-foreground">{aiUsage.corrections}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Plano institucional: ilimitado</p>
             </div>
           </div>
 

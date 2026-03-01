@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
         .in("status", ["active", "pending"]);
 
       if (!invites || invites.length === 0) {
-        return new Response(JSON.stringify({ teachers: [], count: 0, limit: MAX_TEACHERS }), {
+        return new Response(JSON.stringify({ teachers: [], count: 0, limit: MAX_TEACHERS, aiUsageMonthly: { generations: 0, corrections: 0 } }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -108,7 +108,28 @@ Deno.serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ teachers, count: invites.length, limit: MAX_TEACHERS }), {
+      const trackedUserIds = Array.from(
+        new Set([userId, ...teachers.map((t: any) => t.userId).filter(Boolean)])
+      );
+
+      let aiUsageMonthly = { generations: 0, corrections: 0 };
+      if (trackedUserIds.length > 0) {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+        const { data: usageRows } = await adminClient
+          .from("ai_usage_log")
+          .select("usage_type")
+          .in("user_id", trackedUserIds)
+          .gte("created_at", startOfMonth);
+
+        aiUsageMonthly = {
+          generations: (usageRows || []).filter((u: any) => u.usage_type === "generation").length,
+          corrections: (usageRows || []).filter((u: any) => u.usage_type === "correction").length,
+        };
+      }
+
+      return new Response(JSON.stringify({ teachers, count: invites.length, limit: MAX_TEACHERS, aiUsageMonthly }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
