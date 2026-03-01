@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
-import Stripe from "npm:stripe@18.5.0";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,15 +118,22 @@ serve(async (req) => {
               adminPlan = invite.granted_plan;
             }
 
-            // Check Stripe subscription
+            // Check Stripe subscription using direct fetch
             const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
             if (stripeKey) {
-              const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-              const customers = await stripe.customers.list({ email: teacherEmail, limit: 1 });
+              const stripeGet = async (path: string) => {
+                const res = await fetch(`https://api.stripe.com/v1${path}`, {
+                  headers: { "Authorization": `Bearer ${stripeKey}` },
+                });
+                if (!res.ok) throw new Error(`Stripe error ${res.status}`);
+                return res.json();
+              };
+              const customers = await stripeGet(`/customers?email=${encodeURIComponent(teacherEmail)}&limit=1`);
               if (customers.data.length > 0) {
+                const customerId = customers.data[0].id;
                 const [activeSubs, trialingSubs] = await Promise.all([
-                  stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 }),
-                  stripe.subscriptions.list({ customer: customers.data[0].id, status: "trialing", limit: 1 }),
+                  stripeGet(`/subscriptions?customer=${customerId}&status=active&limit=1`),
+                  stripeGet(`/subscriptions?customer=${customerId}&status=trialing&limit=1`),
                 ]);
                 const sub = activeSubs.data[0] || trialingSubs.data[0];
                 if (sub) {
