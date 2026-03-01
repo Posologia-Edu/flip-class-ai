@@ -185,6 +185,36 @@ export type Database = {
           },
         ]
       }
+      institution_settings: {
+        Row: {
+          created_at: string
+          id: string
+          institution_name: string | null
+          logo_url: string | null
+          primary_color: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          institution_name?: string | null
+          logo_url?: string | null
+          primary_color?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          institution_name?: string | null
+          logo_url?: string | null
+          primary_color?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       materials: {
         Row: {
           content_text_for_ai: string | null

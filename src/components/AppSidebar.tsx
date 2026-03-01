@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   BookOpen,
   LayoutDashboard,
@@ -13,10 +14,12 @@ import {
   Settings,
   Globe,
   UserCog,
+  Building2,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
+import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar,
@@ -34,7 +37,27 @@ import {
 
 export function AppSidebar() {
   const { user, isAdmin, isApproved, fullName } = useAuth();
+  const { canUseMultiTeacher } = useFeatureGate();
   const navigate = useNavigate();
+  const [institutionLogo, setInstitutionLogo] = useState<string | null>(null);
+  const [institutionName, setInstitutionName] = useState<string | null>(null);
+
+  // Load institution settings for white-label
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("institution_settings" as any)
+        .select("logo_url, institution_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data) {
+        setInstitutionLogo((data as any).logo_url || null);
+        setInstitutionName((data as any).institution_name || null);
+      }
+    };
+    loadSettings();
+  }, [user]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -48,6 +71,7 @@ export function AppSidebar() {
     { title: "Análises", url: "/dashboard/analytics", icon: BarChart3 },
     { title: "Calendário", url: "/dashboard/calendar", icon: CalendarDays },
     { title: "Planos", url: "/dashboard/pricing", icon: CreditCard },
+    ...(canUseMultiTeacher() ? [{ title: "Institucional", url: "/dashboard/institutional", icon: Building2 }] : []),
   ];
 
   const bottomItems = [
@@ -63,12 +87,16 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4 pb-2">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <BookOpen className="w-5 h-5 text-primary-foreground" />
-          </div>
+          {institutionLogo ? (
+            <img src={institutionLogo} alt="Logo" className="w-9 h-9 rounded-lg object-contain shrink-0" />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
+              <BookOpen className="w-5 h-5 text-primary-foreground" />
+            </div>
+          )}
           <div className="group-data-[collapsible=icon]:hidden">
             <span className="font-display text-lg font-bold text-sidebar-foreground leading-none">
-              FlipClass
+              {institutionName || "FlipClass"}
             </span>
             {user && (
               <p className="text-xs text-sidebar-foreground/60 truncate mt-0.5">
