@@ -18,29 +18,35 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_published: boolean
           material_id: string | null
           peer_review_criteria: Json
           peer_review_enabled: boolean
           quiz_data: Json
           room_id: string
+          title: string | null
         }
         Insert: {
           created_at?: string
           id?: string
+          is_published?: boolean
           material_id?: string | null
           peer_review_criteria?: Json
           peer_review_enabled?: boolean
           quiz_data?: Json
           room_id: string
+          title?: string | null
         }
         Update: {
           created_at?: string
           id?: string
+          is_published?: boolean
           material_id?: string | null
           peer_review_criteria?: Json
           peer_review_enabled?: boolean
           quiz_data?: Json
           room_id?: string
+          title?: string | null
         }
         Relationships: [
           {
@@ -220,6 +226,7 @@ export type Database = {
           content_text_for_ai: string | null
           created_at: string
           id: string
+          is_published: boolean
           room_id: string
           thumbnail_url: string | null
           title: string
@@ -230,6 +237,7 @@ export type Database = {
           content_text_for_ai?: string | null
           created_at?: string
           id?: string
+          is_published?: boolean
           room_id: string
           thumbnail_url?: string | null
           title?: string
@@ -240,6 +248,7 @@ export type Database = {
           content_text_for_ai?: string | null
           created_at?: string
           id?: string
+          is_published?: boolean
           room_id?: string
           thumbnail_url?: string | null
           title?: string
