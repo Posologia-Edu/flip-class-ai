@@ -43,6 +43,52 @@ const PLAN_LIMITS: Record<string, number> = {
   institutional: -1,
 };
 
+// Product ID to plan mapping (must match src/lib/subscription.ts)
+const PRODUCT_TO_PLAN: Record<string, string> = {
+  "prod_U1yOTsueyuc6SQ": "professor",
+  "prod_U1yOWsVEIi6joe": "institutional",
+};
+
+async function resolveServerPlan(serviceSupabase: any, userId: string): Promise<string> {
+  const { data: userData } = await serviceSupabase.auth.admin.getUserById(userId);
+  const email = userData?.user?.email;
+  
+  let adminPlan = "free";
+  let stripePlan = "free";
+  
+  if (email) {
+    const { data: invite } = await serviceSupabase
+      .from("admin_invites").select("granted_plan")
+      .eq("email", email.toLowerCase()).in("status", ["active", "pending"]).maybeSingle();
+    if (invite?.granted_plan && invite.granted_plan in PLAN_LIMITS) adminPlan = invite.granted_plan;
+  }
+
+  try {
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (stripeKey && email) {
+      const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (customers.data.length > 0) {
+        const [activeSubs, trialingSubs] = await Promise.all([
+          stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 }),
+          stripe.subscriptions.list({ customer: customers.data[0].id, status: "trialing", limit: 1 }),
+        ]);
+        const sub = activeSubs.data[0] || trialingSubs.data[0];
+        if (sub) {
+          const productId = String(sub.items.data[0].price.product);
+          stripePlan = PRODUCT_TO_PLAN[productId] || "free";
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Stripe check failed:", e);
+  }
+
+  const hierarchy: Record<string, number> = { free: 0, professor: 1, institutional: 2 };
+  return (hierarchy[adminPlan] ?? 0) >= (hierarchy[stripePlan] ?? 0) ? adminPlan : stripePlan;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -75,17 +121,8 @@ serve(async (req) => {
     
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check AI usage limits
-    const { data: userData } = await serviceSupabase.auth.admin.getUserById(userId);
-    const email = userData?.user?.email;
-    let planKey = "free";
-    if (email) {
-      const { data: invite } = await serviceSupabase
-        .from("admin_invites").select("granted_plan")
-        .eq("email", email).in("status", ["active", "pending"]).maybeSingle();
-      if (invite?.granted_plan) planKey = invite.granted_plan;
-    }
-    
+    // Check AI usage limits using resolved plan (admin + Stripe)
+    const planKey = await resolveServerPlan(serviceSupabase, userId);
     const limit = PLAN_LIMITS[planKey] ?? 5;
     if (limit !== -1) {
       const now = new Date();

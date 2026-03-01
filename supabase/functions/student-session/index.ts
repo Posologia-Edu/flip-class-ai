@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,50 +90,63 @@ serve(async (req) => {
           });
         }
 
-        // Check student limit per room based on teacher's plan
-        const { data: teacherInvite } = await supabase
-          .from("admin_invites")
-          .select("granted_plan")
-          .eq("email", (await supabase.from("profiles").select("user_id").eq("user_id", room.teacher_id).single()).data ? "" : "")
-          .maybeSingle();
+        // Determine teacher's plan (admin invite + Stripe)
+        const planLimits: Record<string, number> = { free: 30, professor: 60, institutional: -1 };
+        const planHierarchy: Record<string, number> = { free: 0, professor: 1, institutional: 2 };
+        const productToPlan: Record<string, string> = {
+          "prod_U1yOTsueyuc6SQ": "professor",
+          "prod_U1yOWsVEIi6joe": "institutional",
+        };
+
+        let adminPlan = "free";
+        let stripePlan = "free";
+        let teacherEmail = "";
+
+        try {
+          const { data: teacherAuth } = await supabase.auth.admin.getUserById(room.teacher_id);
+          teacherEmail = teacherAuth?.user?.email?.toLowerCase() || "";
+          
+          if (teacherEmail) {
+            // Check admin invite
+            const { data: invite } = await supabase
+              .from("admin_invites")
+              .select("granted_plan, status")
+              .eq("email", teacherEmail)
+              .in("status", ["active", "pending"])
+              .maybeSingle();
+            if (invite?.granted_plan && invite.granted_plan in planLimits) {
+              adminPlan = invite.granted_plan;
+            }
+
+            // Check Stripe subscription
+            const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+            if (stripeKey) {
+              const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+              const customers = await stripe.customers.list({ email: teacherEmail, limit: 1 });
+              if (customers.data.length > 0) {
+                const [activeSubs, trialingSubs] = await Promise.all([
+                  stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 }),
+                  stripe.subscriptions.list({ customer: customers.data[0].id, status: "trialing", limit: 1 }),
+                ]);
+                const sub = activeSubs.data[0] || trialingSubs.data[0];
+                if (sub) {
+                  const productId = String(sub.items.data[0].price.product);
+                  stripePlan = productToPlan[productId] || "free";
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore - use defaults
+        }
+
+        const teacherPlan = (planHierarchy[adminPlan] ?? 0) >= (planHierarchy[stripePlan] ?? 0) ? adminPlan : stripePlan;
 
         // Get current unique student count for this room
         const { count: currentStudentCount } = await supabase
           .from("student_sessions")
           .select("student_email", { count: "exact", head: true })
           .eq("room_id", roomId);
-
-        // Check teacher's subscription to determine limit
-        // We use a simple approach: check if teacher has a Stripe subscription
-        const planLimits: Record<string, number> = {
-          free: 30,
-          professor: 60,
-          institutional: -1,
-        };
-
-        // Determine teacher's plan by checking check-subscription
-        let teacherPlan = "free";
-        try {
-          // Check admin_invites for granted plan
-          // First get teacher email from auth
-          const { data: teacherAuth } = await supabase.auth.admin.getUserById(room.teacher_id);
-          if (teacherAuth?.user?.email) {
-            const { data: invite } = await supabase
-              .from("admin_invites")
-              .select("granted_plan, status")
-              .eq("email", teacherAuth.user.email.toLowerCase())
-              .in("status", ["active", "pending"])
-              .maybeSingle();
-            if (invite?.granted_plan) {
-              teacherPlan = invite.granted_plan;
-            }
-          }
-          // Also check Stripe subscription via check-subscription function logic
-          // For simplicity, we check the subscriptions table approach isn't available,
-          // so we rely on the granted_plan or default to free
-        } catch {
-          // ignore - use default
-        }
 
         const maxStudents = planLimits[teacherPlan] ?? 30;
         if (maxStudents !== -1 && (currentStudentCount ?? 0) >= maxStudents) {
