@@ -100,6 +100,10 @@ export function useFeatureGate() {
   const getRoomStudentLimit = useCallback(() => limits.max_students_per_room, [limits.max_students_per_room]);
   const getRoomLimit = useCallback(() => limits.max_rooms, [limits.max_rooms]);
 
+  const canExportReports = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
+  const canUseMultiTeacher = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
+  const canUseWhiteLabel = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
+
   return {
     effectivePlan,
     limits,
@@ -117,5 +121,8 @@ export function useFeatureGate() {
     canUseAiCorrection,
     getRoomStudentLimit,
     getRoomLimit,
+    canExportReports,
+    canUseMultiTeacher,
+    canUseWhiteLabel,
   };
 }

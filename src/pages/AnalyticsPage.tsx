@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeatureGate } from "@/hooks/useFeatureGate";
 import UpgradeGate from "@/components/UpgradeGate";
-import { BarChart3, Users, BookOpen, Target, TrendingUp, Clock, Eye, ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart3, Users, BookOpen, Target, TrendingUp, Clock, Eye, ChevronDown, ChevronUp, Download, FileText } from "lucide-react";
 import CrossRoomAnalytics from "@/components/CrossRoomAnalytics";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from "recharts";
+import { Button } from "@/components/ui/button";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
@@ -31,7 +32,7 @@ const COLORS = [
 
 const AnalyticsPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const { canUseAdvancedAnalytics } = useFeatureGate();
+  const { canUseAdvancedAnalytics, canExportReports } = useFeatureGate();
   const [analytics, setAnalytics] = useState<RoomAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRoom, setExpandedRoom] = useState<string | null>(null);
@@ -151,13 +152,35 @@ const AnalyticsPage = () => {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
 
+  const exportGlobalCSV = () => {
+    const headers = ["Sala", "Alunos", "Concluídos", "Taxa (%)", "Média"];
+    const rows = analytics.map(r => [r.title, r.studentCount, r.completedCount, r.completionRate, r.avgScore]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "relatorio-geral.csv"; a.click(); URL.revokeObjectURL(url);
+  };
+
   const analyticsContent = (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-primary" /> Análises
-        </h1>
-        <p className="text-muted-foreground mt-1">Visão geral do desempenho das suas salas</p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-primary" /> Análises
+          </h1>
+          <p className="text-muted-foreground mt-1">Visão geral do desempenho das suas salas</p>
+        </div>
+        {canExportReports() && (
+          <div className="flex gap-2 print:hidden">
+            <Button variant="outline" size="sm" onClick={exportGlobalCSV}>
+              <Download className="w-4 h-4 mr-1" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <FileText className="w-4 h-4 mr-1" /> PDF
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
@@ -251,7 +274,7 @@ const AnalyticsPage = () => {
                           )}
                         </div>
                       )}
-                      <AnalyticsReport sessions={roomSessions} activityLogs={roomActivityLogs} materials={roomMaterials} />
+                      <AnalyticsReport sessions={roomSessions} activityLogs={roomActivityLogs} materials={roomMaterials} showExport={canExportReports()} roomTitle={room.title} />
                     </div>
                   )}
                 </div>

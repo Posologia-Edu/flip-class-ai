@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle } from "lucide-react";
+import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface ActivityLog {
@@ -19,6 +20,8 @@ interface AnalyticsReportProps {
   sessions: Session[];
   activityLogs: ActivityLog[];
   materials: Material[];
+  showExport?: boolean;
+  roomTitle?: string;
 }
 
 const CHART_COLORS = [
@@ -30,7 +33,7 @@ const CHART_COLORS = [
   "hsl(280, 60%, 55%)",
 ];
 
-const AnalyticsReport = ({ sessions, activityLogs, materials }: AnalyticsReportProps) => {
+const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false, roomTitle = "Sala" }: AnalyticsReportProps) => {
   // --- Average time per material ---
   const timePerMaterial = useMemo(() => {
     return materials.map((mat) => {
@@ -115,6 +118,26 @@ const AnalyticsReport = ({ sessions, activityLogs, materials }: AnalyticsReportP
 
   const atRiskCount = atRiskStudents.filter((s) => s.isAtRisk).length;
 
+  const exportCSV = useCallback(() => {
+    const headers = ["Nome", "Email", "Concluído", "Nota", "Tempo (min)", "Materiais Vistos (%)", "Em Risco", "Riscos"];
+    const rows = atRiskStudents.map((s) => [
+      s.name, s.email, s.completed ? "Sim" : "Não", 
+      sessions.find(ss => ss.id === s.id)?.score ?? "—",
+      s.totalMinutes, s.materialsPercent, s.isAtRisk ? "Sim" : "Não",
+      s.risks.join("; ")
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `relatorio-${roomTitle.replace(/\s+/g, "-")}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }, [atRiskStudents, sessions, roomTitle]);
+
+  const exportPDF = useCallback(() => {
+    window.print();
+  }, []);
+
   if (sessions.length === 0) {
     return (
       <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
@@ -125,7 +148,18 @@ const AnalyticsReport = ({ sessions, activityLogs, materials }: AnalyticsReportP
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:space-y-4" id="analytics-report-print">
+      {/* Export Buttons */}
+      {showExport && (
+        <div className="flex gap-2 justify-end print:hidden">
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Download className="w-4 h-4 mr-1" /> Exportar CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportPDF}>
+            <FileText className="w-4 h-4 mr-1" /> Exportar PDF
+          </Button>
+        </div>
+      )}
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-xl p-4 text-center">

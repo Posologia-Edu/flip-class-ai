@@ -15,3 +15,5 @@ project_id = "qxqvttkcemshgsdobgfe"
     verify_jwt = false
   [functions.send-metrics-to-hub]
     verify_jwt = false
+  [functions.institutional-dashboard]
+    verify_jwt = false
