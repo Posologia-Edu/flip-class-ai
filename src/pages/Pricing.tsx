@@ -35,6 +35,7 @@ const planFeatures: Record<PlanKey, string[]> = {
     "Salas ilimitadas",
     "Alunos ilimitados",
     "IA ilimitada (gerações e correções)",
+    "Até 10 professores vinculados",
     "Todos os tipos de material",
     "Analytics cruzado entre salas",
     "Exportação de relatórios",

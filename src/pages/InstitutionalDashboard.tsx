@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Users, BookOpen, Upload, Palette, Save, Loader2 } from "lucide-react";
+import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 interface Teacher {
   email: string;
@@ -26,11 +27,17 @@ interface InstitutionSettings {
   primary_color: string;
 }
 
+const MAX_TEACHERS = 10;
+
 const InstitutionalDashboard = () => {
   const { user } = useAuth();
   const { canUseMultiTeacher, canUseWhiteLabel } = useFeatureGate();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teacherCount, setTeacherCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [removingEmail, setRemovingEmail] = useState<string | null>(null);
   const [settings, setSettings] = useState<InstitutionSettings>({
     institution_name: "",
     logo_url: "",
@@ -47,6 +54,7 @@ const InstitutionalDashboard = () => {
       });
       if (error) throw error;
       setTeachers(data?.teachers || []);
+      setTeacherCount(data?.count || 0);
     } catch (err: any) {
       console.error("Error fetching teachers:", err);
     } finally {
@@ -74,6 +82,42 @@ const InstitutionalDashboard = () => {
     fetchTeachers();
     fetchSettings();
   }, [fetchTeachers, fetchSettings]);
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("institutional-dashboard", {
+        body: { action: "invite_teacher", email: inviteEmail.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Convite enviado!", description: `Professor ${inviteEmail} convidado com sucesso.` });
+      setInviteEmail("");
+      fetchTeachers();
+    } catch (err: any) {
+      toast({ title: "Erro ao convidar", description: err.message, variant: "destructive" });
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleRemove = async (email: string) => {
+    setRemovingEmail(email);
+    try {
+      const { data, error } = await supabase.functions.invoke("institutional-dashboard", {
+        body: { action: "remove_teacher", email },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Professor removido" });
+      fetchTeachers();
+    } catch (err: any) {
+      toast({ title: "Erro ao remover", description: err.message, variant: "destructive" });
+    } finally {
+      setRemovingEmail(null);
+    }
+  };
 
   const handleSaveSettings = async () => {
     if (!user) return;
@@ -119,8 +163,10 @@ const InstitutionalDashboard = () => {
   const totalRooms = teachers.reduce((s, t) => s + t.roomCount, 0);
   const totalStudents = teachers.reduce((s, t) => s + t.studentCount, 0);
   const avgCompletion = teachers.length > 0
-    ? Math.round(teachers.reduce((s, t) => s + t.completionRate, 0) / teachers.filter(t => t.studentCount > 0).length || 0)
+    ? Math.round(teachers.reduce((s, t) => s + t.completionRate, 0) / (teachers.filter(t => t.studentCount > 0).length || 1))
     : 0;
+
+  const canInviteMore = teacherCount < MAX_TEACHERS;
 
   const content = (
     <div className="p-6 max-w-5xl mx-auto">
@@ -142,7 +188,7 @@ const InstitutionalDashboard = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-muted-foreground">Professores</p>
-              <p className="font-display text-2xl font-bold text-foreground">{teachers.length}</p>
+              <p className="font-display text-2xl font-bold text-foreground">{teacherCount}<span className="text-sm font-normal text-muted-foreground">/{MAX_TEACHERS}</span></p>
             </div>
             <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-muted-foreground">Salas Total</p>
@@ -158,6 +204,40 @@ const InstitutionalDashboard = () => {
             </div>
           </div>
 
+          {/* Teacher Limit Bar */}
+          <div className="bg-card border border-border rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-foreground">Vagas de professores</p>
+              <p className="text-sm text-muted-foreground">{teacherCount} de {MAX_TEACHERS} utilizadas</p>
+            </div>
+            <Progress value={(teacherCount / MAX_TEACHERS) * 100} className="h-2" />
+          </div>
+
+          {/* Invite Form */}
+          <div className="bg-card border border-border rounded-xl p-4 mb-6">
+            <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-primary" /> Convidar Professor
+            </h3>
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="Email do professor"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                disabled={!canInviteMore || inviting}
+                onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+                className="flex-1"
+              />
+              <Button onClick={handleInvite} disabled={!canInviteMore || inviting || !inviteEmail.trim()}>
+                {inviting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <UserPlus className="w-4 h-4 mr-1" />}
+                Convidar
+              </Button>
+            </div>
+            {!canInviteMore && (
+              <p className="text-xs text-destructive mt-2">Limite de {MAX_TEACHERS} professores atingido.</p>
+            )}
+          </div>
+
           {/* Teachers Table */}
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -167,7 +247,7 @@ const InstitutionalDashboard = () => {
             <div className="text-center py-12 bg-card border border-border rounded-xl">
               <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground">Nenhum professor vinculado.</p>
-              <p className="text-xs text-muted-foreground mt-1">Convide professores no painel de Administração.</p>
+              <p className="text-xs text-muted-foreground mt-1">Use o formulário acima para convidar professores.</p>
             </div>
           ) : (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -179,6 +259,7 @@ const InstitutionalDashboard = () => {
                     <th className="text-center p-3 font-medium text-muted-foreground">Salas</th>
                     <th className="text-center p-3 font-medium text-muted-foreground">Alunos</th>
                     <th className="text-center p-3 font-medium text-muted-foreground">Conclusão</th>
+                    <th className="text-center p-3 font-medium text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -198,6 +279,21 @@ const InstitutionalDashboard = () => {
                       <td className="text-center p-3 text-foreground">{t.roomCount}</td>
                       <td className="text-center p-3 text-foreground">{t.studentCount}</td>
                       <td className="text-center p-3 text-foreground">{t.completionRate}%</td>
+                      <td className="text-center p-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemove(t.email)}
+                          disabled={removingEmail === t.email}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {removingEmail === t.email ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

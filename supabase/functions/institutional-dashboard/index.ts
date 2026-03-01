@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MAX_TEACHERS = 10;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,7 +23,6 @@ Deno.serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -32,13 +33,21 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    // Admin client for cross-user queries
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const body = await req.json();
+    const { action } = body;
 
-    const { action } = await req.json();
+    // Helper: get current invite count for this user
+    const getInviteCount = async () => {
+      const { data } = await adminClient
+        .from("admin_invites")
+        .select("id")
+        .eq("invited_by", userId)
+        .in("status", ["active", "pending"]);
+      return data?.length || 0;
+    };
 
     if (action === "get_teachers") {
-      // Get teachers invited by this user
       const { data: invites } = await adminClient
         .from("admin_invites")
         .select("email, granted_plan, status, activated_at, created_at")
@@ -46,12 +55,13 @@ Deno.serve(async (req) => {
         .in("status", ["active", "pending"]);
 
       if (!invites || invites.length === 0) {
-        return new Response(JSON.stringify({ teachers: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ teachers: [], count: 0, limit: MAX_TEACHERS }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Get profiles for these emails
       const { data: authUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-      
+
       const teachers = [];
       for (const invite of invites) {
         const authUser = authUsers?.users?.find((u: any) => u.email?.toLowerCase() === invite.email.toLowerCase());
@@ -68,7 +78,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Get rooms for this teacher
         const { data: rooms } = await adminClient
           .from("rooms")
           .select("id")
@@ -99,14 +108,99 @@ Deno.serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ teachers }), {
+      return new Response(JSON.stringify({ teachers, count: invites.length, limit: MAX_TEACHERS }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (action === "get_teacher_rooms") {
-      const { teacherId } = await req.json().catch(() => ({}));
-      // Already parsed above, re-parse body won't work. Let's handle via initial parse
+    if (action === "invite_teacher") {
+      const email = (body.email || "").trim().toLowerCase();
+      if (!email) {
+        return new Response(JSON.stringify({ error: "Email é obrigatório" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check limit
+      const currentCount = await getInviteCount();
+      if (currentCount >= MAX_TEACHERS) {
+        return new Response(JSON.stringify({ error: `Limite de ${MAX_TEACHERS} professores atingido` }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if already invited
+      const { data: existing } = await adminClient
+        .from("admin_invites")
+        .select("id, status")
+        .eq("email", email)
+        .eq("invited_by", userId)
+        .in("status", ["active", "pending"])
+        .maybeSingle();
+
+      if (existing) {
+        return new Response(JSON.stringify({ error: "Este professor já foi convidado" }), {
+          status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Try to invite via Supabase Auth
+      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email);
+
+      // Insert into admin_invites
+      const { error: insertError } = await adminClient
+        .from("admin_invites")
+        .insert({
+          email,
+          invited_by: userId,
+          granted_plan: "institutional",
+          status: inviteData?.user ? "active" : "pending",
+          activated_at: inviteData?.user ? new Date().toISOString() : null,
+        });
+
+      if (insertError) {
+        return new Response(JSON.stringify({ error: insertError.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // If user already exists, update their profile to approved
+      if (inviteData?.user) {
+        await adminClient
+          .from("profiles")
+          .update({ approval_status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
+          .eq("user_id", inviteData.user.id);
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "remove_teacher") {
+      const email = (body.email || "").trim().toLowerCase();
+      if (!email) {
+        return new Response(JSON.stringify({ error: "Email é obrigatório" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error } = await adminClient
+        .from("admin_invites")
+        .update({ status: "revoked" })
+        .eq("email", email)
+        .eq("invited_by", userId)
+        .in("status", ["active", "pending"]);
+
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ error: "Invalid action" }), {

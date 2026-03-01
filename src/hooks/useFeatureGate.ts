@@ -103,6 +103,10 @@ export function useFeatureGate() {
   const canExportReports = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
   const canUseMultiTeacher = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
   const canUseWhiteLabel = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
+  const canInviteTeacher = useCallback((currentCount: number) => {
+    return limits.max_teachers > 0 && currentCount < limits.max_teachers;
+  }, [limits.max_teachers]);
+  const getTeacherLimit = useCallback(() => limits.max_teachers, [limits.max_teachers]);
 
   return {
     effectivePlan,
@@ -124,5 +128,7 @@ export function useFeatureGate() {
     canExportReports,
     canUseMultiTeacher,
     canUseWhiteLabel,
+    canInviteTeacher,
+    getTeacherLimit,
   };
 }
