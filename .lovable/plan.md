@@ -1,134 +1,182 @@
 
+# Auditoria e Implementacao Completa de Travas de Plano, Stripe e Convites
 
-# Revisao Completa de UX e Onboarding do FlipClass
+## Diagnostico: Problemas Encontrados
 
-## Problemas Identificados
+### 1. NENHUMA trava de plano esta implementada
+A funcao `getPlanLimits()` existe em `src/lib/subscription.ts` mas **nunca e chamada** em nenhum lugar do sistema. Isso significa que:
+- Usuarios do plano gratuito podem criar salas ilimitadas
+- Podem fazer upload de arquivos sem restricao
+- Podem acessar Analytics, Banco de Questoes, Calendario, Peer Review sem limitacao
+- Geracoes e correcoes de IA nao sao contabilizadas
+- Nao ha limite de alunos por sala
 
-### 1. Onboarding Inexistente para Professores
-Quando um professor novo acessa o Dashboard pela primeira vez, ele ve um painel vazio sem nenhuma orientacao do que fazer. Nao ha tour guiado, dicas contextuais ou um passo-a-passo para criar a primeira sala.
+### 2. Stripe parcialmente configurado
+- Checkout, check-subscription e customer-portal existem como Edge Functions
+- Produtos e precos estao definidos no codigo (`prod_U1yOTsueyuc6SQ`, `prod_U1yOWsVEIi6joe`)
+- Gerenciamento de assinatura so e possivel via portal externo do Stripe (abre em nova aba)
+- **Precisa verificar**: se estes produtos realmente existem no Stripe conectado
 
-### 2. Pagina de Login sem "Esqueci minha Senha"
-A pagina `/auth` e o FloatingAuth nao possuem link de "Esqueci minha senha". O professor que esquecer a senha fica sem saida.
+### 3. Convites nao permitem escolher plano
+- Admin convida com "Premium Vitalicio" fixo sem opcao de escolha
+- Nao existe coluna `granted_plan` na tabela `admin_invites`
+- `useSubscription` nao considera plano concedido por admin
 
-### 3. Dashboard Vazio sem Call-to-Action
-Quando o professor nao tem salas, o Dashboard mostra apenas zeros nos cards de estatisticas. Deveria exibir um estado vazio com orientacao e botao para criar a primeira sala.
-
-### 4. FloatingAuth e Auth Compartilham Estado de Form
-O FloatingAuth na landing page compartilha campos de email/senha entre as abas Login e Cadastro, o que pode confundir o usuario.
-
-### 5. Pagina Pending Approval sem Contexto
-A pagina `/pending-approval` e muito simples. Nao informa tempo estimado nem da opcao de contato com admin.
-
-### 6. MyAccount nao Sincroniza Nome Inicial
-O campo `newName` e inicializado com `fullName` do auth context, mas se o contexto carrega depois do mount, o campo fica vazio.
-
-### 7. Feedback Visual Insuficiente nos Formularios
-Formularios de login, cadastro e reset de senha nao desabilitam o botao durante o loading de forma consistente e nao limpam os campos apos sucesso.
-
-### 8. Falta de Navegacao na Landing Page para Professores
-A landing page e focada apenas no aluno (PIN). Professores precisam localizar o botao "Entrar" no canto, sem nenhum CTA visivel abaixo do hero.
+### 4. Revogacao funciona parcialmente
+- Revoga convites pendentes e deleta usuario do auth
+- Nao revoga/downgrade usuarios ja ativos
 
 ---
 
-## Plano de Melhorias
+## Plano de Implementacao
 
-### Tarefa 1: Onboarding do Professor (Dashboard Vazio)
-Quando `rooms.length === 0`, exibir um componente de boas-vindas com:
-- Titulo "Bem-vindo ao FlipClass!"
-- 3 passos ilustrados: Criar Sala -> Adicionar Materiais -> Compartilhar PIN
-- Botao principal "Criar Minha Primeira Sala" que redireciona para `/dashboard/rooms`
+### Tarefa 1: Criar tabela de contagem de uso de IA
+Adicionar uma tabela `ai_usage_log` para rastrear geracoes e correcoes de IA por professor por mes.
 
-**Arquivo:** `src/pages/Dashboard.tsx`
+```text
+CREATE TABLE public.ai_usage_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  usage_type TEXT NOT NULL, -- 'generation' ou 'correction'
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+-- RLS: users can view own, service role can insert
+```
 
-### Tarefa 2: Link "Esqueci minha Senha"
-Adicionar link "Esqueci minha senha" no formulario de login em:
-- `src/pages/Auth.tsx` -- abaixo do campo de senha
-- `src/components/FloatingAuth.tsx` -- abaixo do botao Entrar
+Adicionar coluna `granted_plan` na tabela `admin_invites`:
+```text
+ALTER TABLE public.admin_invites ADD COLUMN granted_plan TEXT DEFAULT 'institutional';
+```
 
-Ao clicar, chama `supabase.auth.resetPasswordForEmail(email)` com feedback via toast. O link do email redireciona para `/reset-password`.
+### Tarefa 2: Criar hook `useFeatureGate`
+Novo hook centralizado que combina `useSubscription` com planos concedidos por admin.
 
-**Arquivos:** `src/pages/Auth.tsx`, `src/components/FloatingAuth.tsx`
+**Arquivo:** `src/hooks/useFeatureGate.ts`
 
-### Tarefa 3: Secao CTA para Professores na Landing Page
-Adicionar uma secao abaixo do hero com:
-- Titulo "E professor? Crie salas inteligentes"
-- Breve descricao das funcionalidades
-- Botao "Comecar como Professor" que leva para `/auth`
+Funcionalidades:
+- Verificar se o usuario tem um plano concedido via convite admin (consulta `admin_invites` pelo email do usuario)
+- Usar o maior plano entre Stripe e admin-grant
+- Expor funcoes: `canCreateRoom()`, `canUploadFile()`, `canUsePeerReview()`, `canUseQuestionBank()`, `canUseAdvancedAnalytics()`, `canGenerateQuiz()`, `canUseAiCorrection()`, `getRoomStudentLimit()`, `getRoomLimit()`
 
-**Arquivo:** `src/pages/Index.tsx`
+### Tarefa 3: Implementar travas em todas as paginas
 
-### Tarefa 4: Melhorar Pagina Pending Approval
-- Adicionar uma animacao sutil no icone
-- Texto informando que o processo leva ate 24h uteis
-- Link mailto para contato com administrador
+**`src/pages/RoomsList.tsx`:**
+- Antes de criar sala, verificar `rooms.length < limit.max_rooms` (ou ilimitado se -1)
+- Mostrar mensagem e link para upgrade quando atingir limite
 
-**Arquivo:** `src/pages/PendingApproval.tsx`
+**`src/pages/RoomManage.tsx`:**
+- Upload de arquivo: verificar `canUploadFile()`
+- Geracao de quiz: verificar `canGenerateQuiz()` e contagem mensal
+- Correcao AI: verificar `canUseAiCorrection()` e contagem mensal
+- Peer Review: verificar `canUsePeerReview()`
+- Esconder/desabilitar botoes bloqueados com tooltip "Disponivel no plano Professor"
 
-### Tarefa 5: Sincronizar Nome no MyAccount
-Usar `useEffect` para atualizar `newName` quando `fullName` mudar no contexto, evitando campo vazio no carregamento.
+**`src/pages/QuestionBank.tsx`:**
+- Verificar `canUseQuestionBank()` no topo; se bloqueado, mostrar tela de upgrade
 
-**Arquivo:** `src/pages/MyAccount.tsx`
+**`src/pages/AnalyticsPage.tsx`:**
+- Verificar `canUseAdvancedAnalytics()`; se bloqueado, mostrar preview com blur e CTA de upgrade
 
-### Tarefa 6: Separar Estados de Form no FloatingAuth
-Criar estados independentes para email/senha em cada aba (login vs signup) para evitar que dados de uma aba contaminem a outra.
+**`src/pages/CalendarPage.tsx`:**
+- Bloquear para plano gratuito (calendario e feature do plano Professor+)
 
-**Arquivo:** `src/components/FloatingAuth.tsx`
+**`src/components/PeerReview.tsx`:**
+- Verificar antes de habilitar peer review em atividade
+
+**Student session join (StudentView):**
+- Verificar limite de alunos por sala antes de permitir entrada
+
+### Tarefa 4: Contabilizar uso de IA nas Edge Functions
+
+**`supabase/functions/generate-quiz/index.ts`:**
+- Antes de gerar, consultar `ai_usage_log` do mes atual para o usuario
+- Comparar com limite do plano
+- Se excedido, retornar erro 403 com mensagem clara
+- Apos sucesso, inserir registro em `ai_usage_log`
+
+**`supabase/functions/ai-grade/index.ts`:**
+- Mesma logica para correcoes
+
+### Tarefa 5: Gerenciamento de assinatura in-app
+
+**`src/pages/MyAccount.tsx`:**
+- Adicionar secao "Gerenciar Assinatura" com botoes:
+  - "Alterar Plano" - abre pagina de pricing
+  - "Cancelar Assinatura" - abre dialog de confirmacao, chama `customer-portal`
+- Mostrar data de renovacao/expiracao
+- Se plano concedido por admin, mostrar badge "Concedido pelo Administrador"
+
+**`src/pages/Pricing.tsx`:**
+- Para usuario ja assinante de outro plano, mostrar "Alterar para este plano" ao inves de "Iniciar Teste Gratis"
+- Botao "Gerenciar Assinatura" para plano atual (ja existe parcialmente)
+
+### Tarefa 6: Admin pode escolher plano ao convidar
+
+**`src/pages/AdminPanel.tsx`:**
+- Adicionar Select de plano no formulario de convite (Gratuito, Professor, Institucional)
+- Passar `granted_plan` na chamada da Edge Function
+
+**`supabase/functions/admin-invite/index.ts`:**
+- Receber `granted_plan` no body
+- Salvar na coluna `granted_plan` da tabela `admin_invites`
+
+**`src/hooks/useFeatureGate.ts` (ja criado na Tarefa 2):**
+- Consultar `admin_invites` pelo email do usuario para verificar plano concedido
+
+### Tarefa 7: Admin pode revogar acesso de convidados ativos
+
+**`supabase/functions/admin-invite/index.ts`:**
+- Na acao `revoke_invite`, tambem funcionar para usuarios ativos:
+  - Remover registro de `admin_invites`
+  - Mudar `approval_status` do profile para "rejected"
+  - Efetivamente bloqueia o acesso do usuario
+
+**`src/pages/AdminPanel.tsx`:**
+- Mostrar opcao de revogar tanto para invites pendentes quanto ativos
+- Para ativos, dialog de confirmacao diferente: "O usuario perdera acesso imediatamente"
 
 ---
 
 ## Detalhes Tecnicos
 
-### Dashboard vazio (Tarefa 1)
+### Hook useFeatureGate (Tarefa 2)
 ```text
-// Dentro de Dashboard.tsx, apos o loading e quando rooms.length === 0:
-<div className="text-center py-16 space-y-6">
-  <h2>Bem-vindo ao FlipClass!</h2>
-  <p>Siga 3 passos para comecar:</p>
-  <div className="grid grid-cols-3 gap-6">
-    [Passo 1: Criar Sala] [Passo 2: Adicionar Materiais] [Passo 3: Compartilhar PIN]
-  </div>
-  <Button onClick={() => navigate("/dashboard/rooms")}>
-    Criar Minha Primeira Sala
-  </Button>
-</div>
+// src/hooks/useFeatureGate.ts
+export function useFeatureGate() {
+  const { user } = useAuth();
+  const { planKey: stripePlan } = useSubscription(user?.id);
+  const [grantedPlan, setGrantedPlan] = useState<PlanKey | null>(null);
+
+  // Query admin_invites for granted_plan by user email
+  useEffect(() => { /* fetch granted_plan */ }, [user?.email]);
+
+  const effectivePlan = resolveHighestPlan(stripePlan, grantedPlan);
+  const limits = getPlanLimits(effectivePlan);
+
+  return {
+    effectivePlan,
+    limits,
+    canCreateRoom: (currentCount) => limits.max_rooms === -1 || currentCount < limits.max_rooms,
+    canUploadFile: () => limits.file_upload,
+    // ... etc
+  };
+}
 ```
 
-### Esqueci minha senha (Tarefa 2)
+### Componente UpgradeGate (reutilizavel)
 ```text
-// Em Auth.tsx, dentro do form quando isLogin === true, adicionar:
-<button type="button" onClick={handleForgotPassword}
-  className="text-xs text-primary hover:underline">
-  Esqueci minha senha
-</button>
-
-// Handler:
-const handleForgotPassword = async () => {
-  if (!email) {
-    toast({ title: "Digite seu email primeiro" });
-    return;
-  }
-  await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
-  });
-  toast({ title: "Email enviado!", description: "Verifique sua caixa para redefinir a senha." });
-};
+// Componente que envolve features bloqueadas
+<UpgradeGate feature="question_bank" planRequired="professor">
+  <QuestionBankContent />
+</UpgradeGate>
 ```
+Quando bloqueado, mostra overlay com icone de cadeado e botao "Fazer Upgrade".
 
-### MyAccount sync (Tarefa 5)
-```text
-// Adicionar useEffect:
-useEffect(() => {
-  if (fullName) setNewName(fullName);
-}, [fullName]);
-```
-
-### FloatingAuth estados separados (Tarefa 6)
-```text
-// Substituir estados compartilhados por:
-const [loginEmail, setLoginEmail] = useState("");
-const [loginPassword, setLoginPassword] = useState("");
-const [signupEmail, setSignupEmail] = useState("");
-const [signupPassword, setSignupPassword] = useState("");
-const [signupName, setSignupName] = useState("");
-```
-
+### Sequencia de implementacao
+1. Migration (tabela + coluna) -- Tarefa 1
+2. Hook useFeatureGate -- Tarefa 2
+3. Componente UpgradeGate -- Tarefa 3
+4. Travas nas paginas -- Tarefa 3
+5. Contagem de IA nas Edge Functions -- Tarefa 4
+6. Gerenciamento in-app -- Tarefa 5
+7. Admin escolher plano + revogar -- Tarefas 6 e 7
