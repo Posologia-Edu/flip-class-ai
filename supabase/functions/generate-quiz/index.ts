@@ -125,6 +125,17 @@ const PRODUCT_TO_PLAN: Record<string, string> = {
   "prod_U1yOWsVEIi6joe": "institutional",
 };
 
+async function stripeGet(path: string, stripeKey: string): Promise<any> {
+  const res = await fetch(`https://api.stripe.com/v1${path}`, {
+    headers: { "Authorization": `Bearer ${stripeKey}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Stripe API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
 async function resolveServerPlan(serviceSupabase: any, userId: string): Promise<string> {
   const { data: userData } = await serviceSupabase.auth.admin.getUserById(userId);
   const email = userData?.user?.email;
@@ -145,17 +156,16 @@ async function resolveServerPlan(serviceSupabase: any, userId: string): Promise<
     }
   }
 
-  // Check Stripe subscription
+  // Check Stripe subscription using direct fetch
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (stripeKey && email) {
-      const Stripe = (await import("npm:stripe@18.5.0")).default;
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-      const customers = await stripe.customers.list({ email, limit: 1 });
+      const customers = await stripeGet(`/customers?email=${encodeURIComponent(email)}&limit=1`, stripeKey);
       if (customers.data.length > 0) {
+        const customerId = customers.data[0].id;
         const [activeSubs, trialingSubs] = await Promise.all([
-          stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 }),
-          stripe.subscriptions.list({ customer: customers.data[0].id, status: "trialing", limit: 1 }),
+          stripeGet(`/subscriptions?customer=${customerId}&status=active&limit=1`, stripeKey),
+          stripeGet(`/subscriptions?customer=${customerId}&status=trialing&limit=1`, stripeKey),
         ]);
         const sub = activeSubs.data[0] || trialingSubs.data[0];
         if (sub) {

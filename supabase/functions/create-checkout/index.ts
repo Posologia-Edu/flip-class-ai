@@ -1,11 +1,37 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function stripePost(path: string, stripeKey: string, body: Record<string, string>): Promise<any> {
+  const res = await fetch(`https://api.stripe.com/v1${path}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${stripeKey}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams(body).toString(),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Stripe API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+async function stripeGet(path: string, stripeKey: string): Promise<any> {
+  const res = await fetch(`https://api.stripe.com/v1${path}`, {
+    headers: { "Authorization": `Bearer ${stripeKey}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Stripe API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -27,27 +53,34 @@ serve(async (req) => {
     const { priceId } = await req.json();
     if (!priceId) throw new Error("priceId is required");
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" });
-    
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
+
+    // Find or identify customer
+    const customers = await stripeGet(`/customers?email=${encodeURIComponent(user.email)}&limit=1`, stripeKey);
+    let customerId: string | undefined;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
     }
 
     const origin = req.headers.get("origin") || "http://localhost:3000";
 
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : user.email,
-      line_items: [{ price: priceId, quantity: 1 }],
-      mode: "subscription",
-      subscription_data: {
-        trial_period_days: 14,
-      },
-      success_url: `${origin}/dashboard?checkout=success`,
-      cancel_url: `${origin}/pricing?checkout=cancelled`,
-    });
+    // Build checkout session params
+    const params: Record<string, string> = {
+      "line_items[0][price]": priceId,
+      "line_items[0][quantity]": "1",
+      "mode": "subscription",
+      "subscription_data[trial_period_days]": "14",
+      "success_url": `${origin}/dashboard?checkout=success`,
+      "cancel_url": `${origin}/pricing?checkout=cancelled`,
+    };
+
+    if (customerId) {
+      params["customer"] = customerId;
+    } else {
+      params["customer_email"] = user.email;
+    }
+
+    const session = await stripePost("/checkout/sessions", stripeKey, params);
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
