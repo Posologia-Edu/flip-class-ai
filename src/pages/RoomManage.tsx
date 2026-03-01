@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
 import DiscussionForum from "@/components/DiscussionForum";
@@ -72,6 +72,12 @@ const getMaterialLabel = (type: string) => {
   return found ? found.label : type;
 };
 
+const LEVEL_TEMPLATES = [
+  { level: 1, label: "Nível 1 — Aplicação Básica" },
+  { level: 2, label: "Nível 2 — Análise Intermediária" },
+  { level: 3, label: "Nível 3 — Síntese Complexa" },
+];
+
 const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -113,6 +119,14 @@ const RoomManage = () => {
   const [newMaterialContent, setNewMaterialContent] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null);
+
+  // Manual activity creation state
+  const [manualActivityDialogOpen, setManualActivityDialogOpen] = useState(false);
+  const [manualActivityTitle, setManualActivityTitle] = useState("");
+  const [manualLevels, setManualLevels] = useState<QuizLevel[]>(
+    LEVEL_TEMPLATES.map(t => ({ ...t, questions: [{ question: "", type: "case_study", context: "", correct_answer: "" }] }))
+  );
+  const [savingManualActivity, setSavingManualActivity] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -169,15 +183,11 @@ const RoomManage = () => {
 
   const addMaterial = async () => {
     if (!roomId) return;
-
-    // Gate file upload for non-video/article types
     if (newMaterialType !== "video" && newMaterialType !== "article" && !canUploadFile()) {
       toast({ title: "Upload de arquivos bloqueado", description: "Faça upgrade para o plano Professor para enviar arquivos.", variant: "destructive" });
       return;
     }
-
     setAddingMaterial(true);
-
     try {
       if (newMaterialType === "video") {
         const ytId = extractYoutubeId(newMaterialUrl);
@@ -189,12 +199,8 @@ const RoomManage = () => {
         const title = newMaterialTitle || "Vídeo do YouTube";
         const thumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
         await supabase.from("materials").insert({
-          room_id: roomId,
-          type: "video",
-          title,
-          url: newMaterialUrl,
-          thumbnail_url: thumbnail,
-          content_text_for_ai: `YouTube video ID: ${ytId}. URL: ${newMaterialUrl}`,
+          room_id: roomId, type: "video", title, url: newMaterialUrl,
+          thumbnail_url: thumbnail, content_text_for_ai: `YouTube video ID: ${ytId}. URL: ${newMaterialUrl}`,
         });
       } else if (newMaterialType === "article") {
         if (!newMaterialContent.trim()) {
@@ -203,52 +209,37 @@ const RoomManage = () => {
           return;
         }
         await supabase.from("materials").insert({
-          room_id: roomId,
-          type: "article",
-          title: newMaterialTitle || "Artigo",
+          room_id: roomId, type: "article", title: newMaterialTitle || "Artigo",
           content_text_for_ai: newMaterialContent.trim(),
         });
       } else if (selectedFile) {
-        // Upload file to storage
         setUploadingFile(true);
         const fileExt = selectedFile.name.split(".").pop();
         const filePath = `${roomId}/${crypto.randomUUID()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from("materials").upload(filePath, selectedFile);
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("materials").getPublicUrl(filePath);
-        
-        // Read text content from file for AI
         let contentForAi = "";
         if (selectedFile.type === "text/plain" || selectedFile.name.endsWith(".txt") || selectedFile.name.endsWith(".md")) {
           contentForAi = await selectedFile.text();
         } else {
-          // For PDFs and other files, we store the file and let teacher paste content
           contentForAi = newMaterialContent.trim() || "";
         }
-
         await supabase.from("materials").insert({
-          room_id: roomId,
-          type: newMaterialType,
-          title: newMaterialTitle || selectedFile.name,
-          url: urlData.publicUrl,
-          content_text_for_ai: contentForAi || null,
+          room_id: roomId, type: newMaterialType, title: newMaterialTitle || selectedFile.name,
+          url: urlData.publicUrl, content_text_for_ai: contentForAi || null,
         });
         setUploadingFile(false);
       } else if (newMaterialUrl.trim()) {
-        // Link-based material (podcast URL, external link, etc.)
         await supabase.from("materials").insert({
-          room_id: roomId,
-          type: newMaterialType,
-          title: newMaterialTitle || newMaterialUrl,
-          url: newMaterialUrl,
-          content_text_for_ai: newMaterialContent.trim() || null,
+          room_id: roomId, type: newMaterialType, title: newMaterialTitle || newMaterialUrl,
+          url: newMaterialUrl, content_text_for_ai: newMaterialContent.trim() || null,
         });
       } else {
         toast({ title: "Dados insuficientes", description: "Adicione um arquivo, URL ou conteúdo.", variant: "destructive" });
         setAddingMaterial(false);
         return;
       }
-
       resetMaterialForm();
       fetchData();
       toast({ title: "Material adicionado!" });
@@ -284,22 +275,18 @@ const RoomManage = () => {
   const openTranscriptDialog = (material: Material) => {
     setSelectedMaterialForQuiz(material);
     if (isYoutubeLink(material)) {
-      // YouTube: needs manual transcript
       const cached = material.content_text_for_ai || "";
       const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
       setManualTranscript(isPlaceholder ? "" : cached);
       setTranscriptDialogOpen(true);
     } else if (material.url && material.type !== "article") {
-      // File-based material (PDF, PPTX, etc.): AI reads it automatically
       const content = material.content_text_for_ai || "";
       if (content.length >= 50) {
         generateQuizDirect(material, content);
       } else {
-        // Let edge function extract content from file via AI multimodal
         generateQuizFromFile(material);
       }
     } else {
-      // Article or text-based: check if content_text_for_ai is available
       const content = material.content_text_for_ai || "";
       if (content.length >= 50) {
         generateQuizDirect(material, content);
@@ -313,23 +300,15 @@ const RoomManage = () => {
   const generateQuizFromFile = async (material: Material) => {
     setGeneratingQuiz(material.id);
     try {
-      const timeoutPromise = new Promise<never>((_, reject) => 
+      const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Tempo limite excedido. O arquivo pode ser muito grande. Tente colar o conteúdo textual manualmente.")), 150000)
       );
       const fetchPromise = supabase.functions.invoke("generate-quiz", {
-        body: {
-          materialId: material.id,
-          contentText: material.content_text_for_ai || "",
-          roomId: roomId,
-          materialType: material.type,
-          fileUrl: material.url,
-        },
+        body: { materialId: material.id, contentText: material.content_text_for_ai || "", roomId, materialType: material.type, fileUrl: material.url },
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       if (response.error) {
-        const errorMsg = typeof response.error === "object" && response.error.message 
-          ? response.error.message 
-          : String(response.error);
+        const errorMsg = typeof response.error === "object" && response.error.message ? response.error.message : String(response.error);
         if (errorMsg.includes("muito grande") || errorMsg.includes("WORKER_LIMIT")) {
           setGeneratingQuiz(null);
           setSelectedMaterialForQuiz(material);
@@ -358,12 +337,7 @@ const RoomManage = () => {
     setGeneratingQuiz(material.id);
     try {
       const response = await supabase.functions.invoke("generate-quiz", {
-        body: {
-          materialId: material.id,
-          contentText: content,
-          roomId: roomId,
-          materialType: material.type,
-        },
+        body: { materialId: material.id, contentText: content, roomId, materialType: material.type },
       });
       if (response.error) throw response.error;
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
@@ -383,14 +357,8 @@ const RoomManage = () => {
     setGeneratingQuiz(selectedMaterialForQuiz.id);
     try {
       await supabase.from("materials").update({ content_text_for_ai: manualTranscript.trim() }).eq("id", selectedMaterialForQuiz.id);
-
       const response = await supabase.functions.invoke("generate-quiz", {
-        body: {
-          materialId: selectedMaterialForQuiz.id,
-          contentText: manualTranscript.trim(),
-          roomId: roomId,
-          materialType: selectedMaterialForQuiz.type,
-        },
+        body: { materialId: selectedMaterialForQuiz.id, contentText: manualTranscript.trim(), roomId, materialType: selectedMaterialForQuiz.type },
       });
       if (response.error) throw response.error;
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
@@ -421,10 +389,8 @@ const RoomManage = () => {
       const { error } = await supabase
         .from("teacher_feedback" as any)
         .upsert({
-          session_id: sessionId,
-          question_key: questionKey,
-          feedback_text: fb.feedback_text,
-          grade: fb.grade,
+          session_id: sessionId, question_key: questionKey,
+          feedback_text: fb.feedback_text, grade: fb.grade,
         } as any, { onConflict: "session_id,question_key" });
       if (error) throw error;
       setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: true } }));
@@ -439,12 +405,7 @@ const RoomManage = () => {
     const fbKey = `${sessionId}-${questionKey}`;
     setFeedbacks(prev => ({
       ...prev,
-      [fbKey]: {
-        feedback_text: prev[fbKey]?.feedback_text || "",
-        grade: prev[fbKey]?.grade ?? null,
-        saved: false,
-        [field]: value,
-      },
+      [fbKey]: { feedback_text: prev[fbKey]?.feedback_text || "", grade: prev[fbKey]?.grade ?? null, saved: false, [field]: value },
     }));
   };
 
@@ -459,9 +420,7 @@ const RoomManage = () => {
       if (data?.error) throw new Error(data.error);
       const result = data.results?.[0];
       if (!result) throw new Error("Sem resultado da IA");
-      
       setAiResults(prev => ({ ...prev, [fbKey]: result }));
-      // Pre-fill feedback fields with AI suggestion
       const feedbackText = `${result.feedback}\n\n✅ Pontos fortes: ${result.strengths.join("; ")}\n⚠️ A melhorar: ${result.weaknesses.join("; ")}\n💡 Sugestão: ${result.suggestion}`;
       updateFeedbackField(sessionId, questionKey, "feedback_text", feedbackText);
       updateFeedbackField(sessionId, questionKey, "grade", result.grade);
@@ -481,21 +440,12 @@ const RoomManage = () => {
         level.questions?.forEach((q, qi) => {
           const key = `${li}-${qi}`;
           keys.push(key);
-          batchItems.push({
-            question: q.question,
-            context: q.context || "",
-            correctAnswer: q.correct_answer,
-            studentAnswer: studentAnswers[key] || "",
-          });
+          batchItems.push({ question: q.question, context: q.context || "", correctAnswer: q.correct_answer, studentAnswer: studentAnswers[key] || "" });
         });
       });
-
-      const { data, error } = await supabase.functions.invoke("ai-grade", {
-        body: { batchItems },
-      });
+      const { data, error } = await supabase.functions.invoke("ai-grade", { body: { batchItems } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-
       const results = data.results || [];
       results.forEach((result: any, i: number) => {
         const key = keys[i];
@@ -528,11 +478,7 @@ const RoomManage = () => {
       if (!user) throw new Error("Não autenticado");
       const { error } = await supabase
         .from("question_bank" as any)
-        .insert({
-          teacher_id: user.id,
-          title: bankTitle.trim(),
-          quiz_data: activityToSave.quiz_data,
-        } as any);
+        .insert({ teacher_id: user.id, title: bankTitle.trim(), quiz_data: activityToSave.quiz_data } as any);
       if (error) throw error;
       toast({ title: "Salvo no banco!", description: "Atividade salva na sua biblioteca pessoal." });
       setSaveBankDialogOpen(false);
@@ -547,10 +493,7 @@ const RoomManage = () => {
   const loadBankItems = async () => {
     setLoadingBank(true);
     try {
-      const { data, error } = await supabase
-        .from("question_bank" as any)
-        .select("*")
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("question_bank" as any).select("*").order("created_at", { ascending: false });
       if (error) throw error;
       setBankItems(data || []);
     } catch (err: any) {
@@ -562,10 +505,7 @@ const RoomManage = () => {
   const importFromBank = async (bankItem: any) => {
     if (!roomId) return;
     try {
-      const { error } = await supabase.from("activities").insert({
-        room_id: roomId,
-        quiz_data: bankItem.quiz_data,
-      });
+      const { error } = await supabase.from("activities").insert({ room_id: roomId, quiz_data: bankItem.quiz_data });
       if (error) throw error;
       toast({ title: "Atividade importada!", description: `"${bankItem.title}" foi adicionada a esta sala.` });
       setBankDialogOpen(false);
@@ -586,6 +526,74 @@ const RoomManage = () => {
     }
   };
 
+  // Toggle publish/unpublish for materials or activities
+  const togglePublish = async (table: "materials" | "activities", id: string, currentValue: boolean) => {
+    const { error } = await supabase.from(table).update({ is_published: !currentValue } as any).eq("id", id);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: !currentValue ? "Publicado para alunos" : "Ocultado dos alunos" });
+    fetchData();
+  };
+
+  // Manual activity creation
+  const resetManualActivityForm = () => {
+    setManualActivityTitle("");
+    setManualLevels(LEVEL_TEMPLATES.map(t => ({ ...t, questions: [{ question: "", type: "case_study", context: "", correct_answer: "" }] })));
+    setManualActivityDialogOpen(false);
+  };
+
+  const addManualQuestion = (levelIndex: number) => {
+    setManualLevels(prev => prev.map((l, i) =>
+      i === levelIndex ? { ...l, questions: [...l.questions, { question: "", type: "case_study", context: "", correct_answer: "" }] } : l
+    ));
+  };
+
+  const removeManualQuestion = (levelIndex: number, questionIndex: number) => {
+    setManualLevels(prev => prev.map((l, i) =>
+      i === levelIndex ? { ...l, questions: l.questions.filter((_, qi) => qi !== questionIndex) } : l
+    ));
+  };
+
+  const updateManualQuestion = (levelIndex: number, questionIndex: number, field: keyof QuizQuestion, value: string) => {
+    setManualLevels(prev => prev.map((l, li) =>
+      li === levelIndex ? {
+        ...l, questions: l.questions.map((q, qi) => qi === questionIndex ? { ...q, [field]: value } : q)
+      } : l
+    ));
+  };
+
+  const saveManualActivity = async () => {
+    if (!roomId) return;
+    // Validate: at least one question with content
+    const hasContent = manualLevels.some(l => l.questions.some(q => q.question.trim()));
+    if (!hasContent) {
+      toast({ title: "Atividade vazia", description: "Adicione pelo menos uma questão.", variant: "destructive" });
+      return;
+    }
+    // Filter out empty levels/questions
+    const filteredLevels = manualLevels
+      .map(l => ({ ...l, questions: l.questions.filter(q => q.question.trim()) }))
+      .filter(l => l.questions.length > 0);
+
+    setSavingManualActivity(true);
+    try {
+      const { error } = await supabase.from("activities").insert({
+        room_id: roomId,
+        quiz_data: { levels: filteredLevels } as unknown as Json,
+        title: manualActivityTitle.trim() || "Atividade Manual",
+      } as any);
+      if (error) throw error;
+      toast({ title: "Atividade criada!", description: "A atividade manual foi adicionada à sala." });
+      resetManualActivityForm();
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Erro ao criar", description: err.message, variant: "destructive" });
+    }
+    setSavingManualActivity(false);
+  };
+
   // Count unique emails for student count
   const uniqueEmails = new Set(sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean));
   const totalStudents = uniqueEmails.size || sessions.length;
@@ -593,17 +601,10 @@ const RoomManage = () => {
   const studentStats: StudentStats[] = sessions.map(session => {
     const sessionLogs = activityLogs.filter(l => l.session_id === session.id);
     const totalTime = sessionLogs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
-    // Only count material as viewed if student watched >= 50% (using 15+ seconds of logged time as proxy)
     const materialViews = sessionLogs.filter(l => l.activity_type === "material_view" && l.material_id);
     const materialsWithTime = new Set<string>();
     materialViews.forEach(l => {
-      if (l.material_id) {
-        const totalViewTime = sessionLogs
-          .filter(ll => ll.material_id === l.material_id && (ll.activity_type === "material_view" || ll.activity_type === "page_active"))
-          .reduce((sum, ll) => sum + (ll.duration_seconds || 0), 0);
-        // Consider viewed if at least some engagement time
-        if (totalViewTime >= 0) materialsWithTime.add(l.material_id);
-      }
+      if (l.material_id) materialsWithTime.add(l.material_id);
     });
     const materialsViewed = materialsWithTime.size;
     const quizTime = sessionLogs.filter(l => l.activity_type === "quiz_start" || l.activity_type === "quiz_complete")
@@ -674,7 +675,6 @@ const RoomManage = () => {
               <DialogContent className="max-w-lg">
                 <DialogHeader><DialogTitle className="font-display">Adicionar Material</DialogTitle></DialogHeader>
                 <div className="space-y-4 pt-2">
-                  {/* Material Type Selection */}
                   <div className="space-y-2">
                     <Label>Tipo de material</Label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -697,51 +697,30 @@ const RoomManage = () => {
                       })}
                     </div>
                   </div>
-
-                  {/* Title */}
                   <div className="space-y-2">
                     <Label>Título (opcional)</Label>
-                    <Input
-                      placeholder="Ex: Aula 1 — Introdução"
-                      value={newMaterialTitle}
-                      onChange={(e) => setNewMaterialTitle(e.target.value)}
-                    />
+                    <Input placeholder="Ex: Aula 1 — Introdução" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} />
                   </div>
 
-                  {/* Conditional fields based on type */}
                   {newMaterialType === "video" && (
                     <div className="space-y-2">
                       <Label>URL do YouTube</Label>
                       <Input placeholder="https://youtube.com/watch?v=..." value={newMaterialUrl} onChange={(e) => setNewMaterialUrl(e.target.value)} />
                     </div>
                   )}
-
                   {newMaterialType === "article" && (
                     <div className="space-y-2">
                       <Label>Conteúdo do artigo</Label>
-                      <Textarea
-                        placeholder="Cole aqui o texto completo do artigo..."
-                        value={newMaterialContent}
-                        onChange={(e) => setNewMaterialContent(e.target.value)}
-                        rows={8}
-                        className="resize-y"
-                      />
+                      <Textarea placeholder="Cole aqui o texto completo do artigo..." value={newMaterialContent} onChange={(e) => setNewMaterialContent(e.target.value)} rows={8} className="resize-y" />
                     </div>
                   )}
-
                   {(newMaterialType === "pdf" || newMaterialType === "presentation") && (
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <Label>Upload do arquivo</Label>
                         <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
                           <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                          <input
-                            type="file"
-                            accept={newMaterialType === "pdf" ? ".pdf" : ".pdf,.ppt,.pptx,.odp"}
-                            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                            className="hidden"
-                            id="file-upload"
-                          />
+                          <input type="file" accept={newMaterialType === "pdf" ? ".pdf" : ".pdf,.ppt,.pptx,.odp"} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="hidden" id="file-upload" />
                           <label htmlFor="file-upload" className="cursor-pointer text-sm text-primary hover:underline">
                             {selectedFile ? selectedFile.name : "Clique para selecionar arquivo"}
                           </label>
@@ -749,33 +728,20 @@ const RoomManage = () => {
                       </div>
                       <div className="space-y-2">
                         <Label>Conteúdo textual para IA (cole o texto do {newMaterialType === "pdf" ? "PDF" : "slides"})</Label>
-                        <Textarea
-                          placeholder={`Cole aqui o conteúdo textual do ${newMaterialType === "pdf" ? "PDF" : "apresentação"} para que a IA possa gerar atividades...`}
-                          value={newMaterialContent}
-                          onChange={(e) => setNewMaterialContent(e.target.value)}
-                          rows={6}
-                          className="resize-y"
-                        />
-                        <p className="text-xs text-muted-foreground">A IA usará este texto para gerar atividades. Você pode copiar e colar o conteúdo do arquivo.</p>
+                        <Textarea placeholder={`Cole aqui o conteúdo textual...`} value={newMaterialContent} onChange={(e) => setNewMaterialContent(e.target.value)} rows={6} className="resize-y" />
+                        <p className="text-xs text-muted-foreground">A IA usará este texto para gerar atividades.</p>
                       </div>
                     </div>
                   )}
-
                   {newMaterialType === "podcast" && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label>URL do podcast (opcional)</Label>
+                        <Label>URL do podcast / áudio (MP3, etc.)</Label>
                         <Input placeholder="https://..." value={newMaterialUrl} onChange={(e) => setNewMaterialUrl(e.target.value)} />
                       </div>
                       <div className="space-y-2">
                         <Label>Transcrição / conteúdo do podcast</Label>
-                        <Textarea
-                          placeholder="Cole aqui a transcrição do podcast..."
-                          value={newMaterialContent}
-                          onChange={(e) => setNewMaterialContent(e.target.value)}
-                          rows={6}
-                          className="resize-y"
-                        />
+                        <Textarea placeholder="Cole aqui a transcrição do podcast..." value={newMaterialContent} onChange={(e) => setNewMaterialContent(e.target.value)} rows={6} className="resize-y" />
                       </div>
                     </div>
                   )}
@@ -802,8 +768,9 @@ const RoomManage = () => {
               {materials.map((mat) => {
                 const MatIcon = getMaterialIcon(mat.type);
                 const hasContent = mat.content_text_for_ai && mat.content_text_for_ai.length >= 50 && !mat.content_text_for_ai.startsWith("YouTube video ID:");
+                const isPublished = (mat as any).is_published !== false;
                 return (
-                  <div key={mat.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
+                  <div key={mat.id} className={`bg-card border rounded-xl p-4 flex items-center gap-4 ${isPublished ? "border-border" : "border-dashed border-muted-foreground/30 opacity-70"}`}>
                     {mat.thumbnail_url ? (
                       <img src={mat.thumbnail_url} alt="" className="w-24 h-16 rounded-lg object-cover flex-shrink-0" />
                     ) : (
@@ -820,9 +787,24 @@ const RoomManage = () => {
                             <Check className="w-3 h-3" /> Conteúdo para IA
                           </span>
                         )}
+                        {!isPublished && (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <EyeOff className="w-3 h-3" /> Oculto
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="sm" variant="ghost" onClick={() => togglePublish("materials", mat.id, isPublished)}>
+                              {isPublished ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{isPublished ? "Ocultar dos alunos" : "Publicar para alunos"}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -869,26 +851,12 @@ const RoomManage = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
-              <p className="text-sm text-muted-foreground">
-                {getTranscriptDialogDescription()}
-              </p>
-              <Textarea
-                placeholder="Cole aqui o conteúdo do material..."
-                value={manualTranscript}
-                onChange={(e) => setManualTranscript(e.target.value)}
-                rows={12}
-                className="resize-y"
-              />
+              <p className="text-sm text-muted-foreground">{getTranscriptDialogDescription()}</p>
+              <Textarea placeholder="Cole aqui o conteúdo do material..." value={manualTranscript} onChange={(e) => setManualTranscript(e.target.value)} rows={12} className="resize-y" />
               <div className="flex justify-between items-center">
-                <p className="text-xs text-muted-foreground">
-                  {manualTranscript.length > 0 ? `${manualTranscript.length} caracteres` : ""}
-                </p>
+                <p className="text-xs text-muted-foreground">{manualTranscript.length > 0 ? `${manualTranscript.length} caracteres` : ""}</p>
                 <Button onClick={generateQuizFromTranscript} disabled={!manualTranscript.trim() || !!generatingQuiz}>
-                  {generatingQuiz ? (
-                    <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Gerando...</>
-                  ) : (
-                    <><Sparkles className="w-4 h-4 mr-1" /> Gerar Atividade</>
-                  )}
+                  {generatingQuiz ? (<><Loader2 className="w-4 h-4 animate-spin mr-1" /> Gerando...</>) : (<><Sparkles className="w-4 h-4 mr-1" /> Gerar Atividade</>)}
                 </Button>
               </div>
             </div>
@@ -898,27 +866,51 @@ const RoomManage = () => {
         {/* Activities Section */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-lg font-semibold">Atividades Geradas</h2>
-            <Button size="sm" variant="outline" onClick={() => { setBankDialogOpen(true); loadBankItems(); }}>
-              <Library className="w-4 h-4 mr-1" /> Banco de Questões
-            </Button>
+            <h2 className="font-display text-lg font-semibold">Atividades</h2>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setManualActivityDialogOpen(true)}>
+                <PenLine className="w-4 h-4 mr-1" /> Criar Manualmente
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { setBankDialogOpen(true); loadBankItems(); }}>
+                <Library className="w-4 h-4 mr-1" /> Banco de Questões
+              </Button>
+            </div>
           </div>
           {activities.length > 0 ? (
             <div className="space-y-3">
               {activities.map((act, i) => {
                 const quiz = act.quiz_data as unknown as QuizData;
                 const isExpanded = expandedActivity === act.id;
+                const isPublished = (act as any).is_published !== false;
+                const actTitle = (act as any).title || `Atividade ${i + 1}`;
                 return (
-                  <div key={act.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div key={act.id} className={`bg-card border rounded-xl overflow-hidden ${isPublished ? "border-border" : "border-dashed border-muted-foreground/30 opacity-70"}`}>
                     <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedActivity(isExpanded ? null : act.id)}>
                       <div>
-                        <p className="font-medium text-card-foreground">Atividade {i + 1}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")} •{" "}
-                          {quiz?.levels?.reduce((sum, l) => sum + (l.questions?.length || 0), 0) || 0} questões
-                        </p>
+                        <p className="font-medium text-card-foreground">{actTitle}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground">
+                            Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")} •{" "}
+                            {quiz?.levels?.reduce((sum, l) => sum + (l.questions?.length || 0), 0) || 0} questões
+                          </p>
+                          {!isPublished && (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <EyeOff className="w-3 h-3" /> Oculta
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); togglePublish("activities", act.id, isPublished); }}>
+                                {isPublished ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>{isPublished ? "Ocultar dos alunos" : "Publicar para alunos"}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openSaveToBankDialog(act); }} title="Salvar no Banco de Questões">
                           {savingToBank === act.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookmarkPlus className="w-4 h-4" />}
                         </Button>
@@ -935,13 +927,9 @@ const RoomManage = () => {
                             <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
                             {level.questions?.map((q, qi) => (
                               <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
-                                {q.context && (
-                                  <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>
-                                )}
+                                {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
                                 <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  <span className="font-semibold">Resposta esperada:</span> {q.correct_answer}
-                                </p>
+                                <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
                               </div>
                             ))}
                           </div>
@@ -955,10 +943,82 @@ const RoomManage = () => {
           ) : (
             <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-border">
               <FileText className="w-8 h-8 mx-auto mb-2" />
-              <p>Nenhuma atividade gerada ainda. Use "Gerar Atividade" ou importe do Banco de Questões.</p>
+              <p>Nenhuma atividade criada ainda. Use "Gerar Atividade" nos materiais, "Criar Manualmente" ou importe do Banco de Questões.</p>
             </div>
           )}
         </section>
+
+        {/* Manual Activity Dialog */}
+        <Dialog open={manualActivityDialogOpen} onOpenChange={(open) => { if (!open) resetManualActivityForm(); else setManualActivityDialogOpen(true); }}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="font-display flex items-center gap-2">
+                <PenLine className="w-5 h-5" /> Criar Atividade Manualmente
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 pt-2">
+              <div className="space-y-2">
+                <Label>Título da atividade</Label>
+                <Input placeholder="Ex: Estudo de caso — Farmacologia" value={manualActivityTitle} onChange={(e) => setManualActivityTitle(e.target.value)} />
+              </div>
+
+              {manualLevels.map((level, li) => (
+                <div key={li} className="border border-border rounded-xl p-4 space-y-4">
+                  <h3 className="font-semibold text-sm text-primary">{level.label}</h3>
+                  {level.questions.map((q, qi) => (
+                    <div key={qi} className="bg-secondary rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground">Questão {qi + 1}</p>
+                        {level.questions.length > 1 && (
+                          <Button size="sm" variant="ghost" className="h-6 text-xs text-destructive" onClick={() => removeManualQuestion(li, qi)}>
+                            <Trash2 className="w-3 h-3 mr-1" /> Remover
+                          </Button>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Contexto do caso (opcional)</Label>
+                        <Textarea
+                          placeholder="Descreva o cenário clínico, caso ou situação..."
+                          value={q.context || ""}
+                          onChange={(e) => updateManualQuestion(li, qi, "context", e.target.value)}
+                          rows={3}
+                          className="resize-y text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Pergunta *</Label>
+                        <Textarea
+                          placeholder="Qual a pergunta para o aluno?"
+                          value={q.question}
+                          onChange={(e) => updateManualQuestion(li, qi, "question", e.target.value)}
+                          rows={2}
+                          className="resize-y text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Resposta esperada</Label>
+                        <Textarea
+                          placeholder="Resposta de referência para correção..."
+                          value={q.correct_answer}
+                          onChange={(e) => updateManualQuestion(li, qi, "correct_answer", e.target.value)}
+                          rows={2}
+                          className="resize-y text-sm"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <Button size="sm" variant="outline" onClick={() => addManualQuestion(li)}>
+                    <Plus className="w-3 h-3 mr-1" /> Adicionar Questão
+                  </Button>
+                </div>
+              ))}
+
+              <Button onClick={saveManualActivity} disabled={savingManualActivity} className="w-full">
+                {savingManualActivity ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Salvando...</> : <><PenLine className="w-4 h-4 mr-1" /> Criar Atividade</>}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Student Statistics Section */}
         <section>
@@ -990,32 +1050,10 @@ const RoomManage = () => {
           </div>
 
           <div className="flex gap-4 mb-4 border-b border-border">
-            <button
-              onClick={() => setStatsTab("overview")}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-            >
-              Resumo
-            </button>
-            <button
-              onClick={() => setStatsTab("details")}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "details" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-            >
-              Detalhado
-            </button>
-            <button
-              onClick={() => setStatsTab("answers")}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "answers" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-            >
-              <MessageSquare className="w-3.5 h-3.5 inline mr-1" />
-              Respostas
-            </button>
-            <button
-              onClick={() => setStatsTab("reports")}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "reports" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-            >
-              <TrendingUp className="w-3.5 h-3.5 inline mr-1" />
-              Relatórios
-            </button>
+            <button onClick={() => setStatsTab("overview")} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>Resumo</button>
+            <button onClick={() => setStatsTab("details")} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "details" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>Detalhado</button>
+            <button onClick={() => setStatsTab("answers")} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "answers" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}><MessageSquare className="w-3.5 h-3.5 inline mr-1" />Respostas</button>
+            <button onClick={() => setStatsTab("reports")} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "reports" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}><TrendingUp className="w-3.5 h-3.5 inline mr-1" />Relatórios</button>
           </div>
 
           {sessions.length === 0 ? (
@@ -1080,12 +1118,17 @@ const RoomManage = () => {
               </table>
             </div>
           ) : (
-            /* Answers tab - show student answers per question */
+            /* Answers tab */
             <div className="space-y-3">
               {sessions.filter(s => s.completed_at && s.answers).map((s) => {
                 const studentAnswers = s.answers as Record<string, string>;
                 const isExpanded = expandedStudent === s.id;
-                const quiz = activities[0]?.quiz_data as unknown as QuizData;
+                // Use all activities for answers display
+                const allQuizLevels = activities.flatMap(act => {
+                  const q = act.quiz_data as unknown as QuizData;
+                  return q?.levels || [];
+                });
+                const combinedQuiz: QuizData = { levels: allQuizLevels };
                 return (
                   <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
@@ -1094,44 +1137,31 @@ const RoomManage = () => {
                         <p className="text-xs text-muted-foreground">{(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {isExpanded && quiz?.levels && (
+                        {isExpanded && combinedQuiz.levels.length > 0 && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
                                   <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs"
+                                    size="sm" variant="outline" className="text-xs"
                                     disabled={aiGradingAll === s.id || !canUseAiCorrection()}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      aiGradeAllStudent(s.id, quiz, studentAnswers || {});
-                                    }}
+                                    onClick={(e) => { e.stopPropagation(); aiGradeAllStudent(s.id, combinedQuiz, studentAnswers || {}); }}
                                   >
-                                    {aiGradingAll === s.id ? (
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-                                    ) : !canUseAiCorrection() ? (
-                                      <Lock className="w-3.5 h-3.5 mr-1" />
-                                    ) : (
-                                      <Bot className="w-3.5 h-3.5 mr-1" />
-                                    )}
+                                    {aiGradingAll === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5 mr-1" /> : <Bot className="w-3.5 h-3.5 mr-1" />}
                                     Corrigir Todas com IA
                                   </Button>
                                 </span>
                               </TooltipTrigger>
-                              {!canUseAiCorrection() && (
-                                <TooltipContent>Limite de correções IA atingido neste mês. Faça upgrade para mais.</TooltipContent>
-                              )}
+                              {!canUseAiCorrection() && <TooltipContent>Limite de correções IA atingido neste mês.</TooltipContent>}
                             </Tooltip>
                           </TooltipProvider>
                         )}
                         {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>
                     </div>
-                    {isExpanded && quiz?.levels && (
+                    {isExpanded && combinedQuiz.levels.length > 0 && (
                       <div className="border-t border-border p-4 space-y-4">
-                        {quiz.levels.map((level, li) => (
+                        {combinedQuiz.levels.map((level, li) => (
                           <div key={li}>
                             <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
                             {level.questions?.map((q, qi) => {
@@ -1139,115 +1169,63 @@ const RoomManage = () => {
                               const answer = studentAnswers?.[key];
                               return (
                                 <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
-                                  {q.context && (
-                                    <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>
-                                  )}
+                                  {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
                                   <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
                                   <div className="bg-background rounded-lg p-3 mb-2">
                                     <p className="text-xs font-semibold text-muted-foreground mb-1">Resposta do aluno:</p>
                                     <p className="text-sm text-foreground">{answer || <span className="italic text-muted-foreground">Não respondida</span>}</p>
                                   </div>
-                                  <p className="text-xs text-muted-foreground mb-3">
-                                    <span className="font-semibold">Resposta esperada:</span> {q.correct_answer}
-                                  </p>
+                                  <p className="text-xs text-muted-foreground mb-3"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
                                   {/* Feedback do professor */}
                                   <div className="border-t border-border pt-3 mt-3 space-y-3">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
-                                        {feedbacks[`${s.id}-${key}`]?.saved && (
-                                          <Check className="w-3.5 h-3.5 text-level-easy" />
-                                        )}
+                                        {feedbacks[`${s.id}-${key}`]?.saved && <Check className="w-3.5 h-3.5 text-level-easy" />}
                                       </div>
                                       <TooltipProvider>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <span>
-                                              <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="text-xs h-7 gap-1"
+                                              <Button size="sm" variant="ghost" className="text-xs h-7 gap-1"
                                                 disabled={aiGrading === `${s.id}-${key}` || !answer || !canUseAiCorrection()}
                                                 onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
                                               >
-                                                {aiGrading === `${s.id}-${key}` ? (
-                                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                ) : !canUseAiCorrection() ? (
-                                                  <Lock className="w-3.5 h-3.5" />
-                                                ) : (
-                                                  <Bot className="w-3.5 h-3.5" />
-                                                )}
+                                                {aiGrading === `${s.id}-${key}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                                                 Corrigir com IA
                                               </Button>
                                             </span>
                                           </TooltipTrigger>
-                                          {!canUseAiCorrection() && (
-                                            <TooltipContent>Limite de correções IA atingido.</TooltipContent>
-                                          )}
+                                          {!canUseAiCorrection() && <TooltipContent>Limite de correções IA atingido.</TooltipContent>}
                                         </Tooltip>
                                       </TooltipProvider>
                                     </div>
                                     {aiResults[`${s.id}-${key}`] && (
                                       <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs space-y-1.5">
-                                        <div className="flex items-center gap-2 font-semibold text-primary">
-                                          <Bot className="w-3.5 h-3.5" />
-                                          Sugestão da IA — Nota: {aiResults[`${s.id}-${key}`].grade}/10
-                                        </div>
-                                        {aiResults[`${s.id}-${key}`].strengths.length > 0 && (
-                                          <p className="text-foreground/80">
-                                            <ThumbsUp className="w-3 h-3 inline mr-1 text-primary" />
-                                            {aiResults[`${s.id}-${key}`].strengths.join("; ")}
-                                          </p>
-                                        )}
-                                        {aiResults[`${s.id}-${key}`].weaknesses.length > 0 && (
-                                          <p className="text-foreground/80">
-                                            <ThumbsDown className="w-3 h-3 inline mr-1 text-destructive" />
-                                            {aiResults[`${s.id}-${key}`].weaknesses.join("; ")}
-                                          </p>
-                                        )}
-                                        {aiResults[`${s.id}-${key}`].suggestion && (
-                                          <p className="text-foreground/80">
-                                            <Lightbulb className="w-3 h-3 inline mr-1 text-accent" />
-                                            {aiResults[`${s.id}-${key}`].suggestion}
-                                          </p>
-                                        )}
+                                        <div className="flex items-center gap-2 font-semibold text-primary"><Bot className="w-3.5 h-3.5" /> Sugestão da IA — Nota: {aiResults[`${s.id}-${key}`].grade}/10</div>
+                                        {aiResults[`${s.id}-${key}`].strengths.length > 0 && <p className="text-foreground/80"><ThumbsUp className="w-3 h-3 inline mr-1 text-primary" />{aiResults[`${s.id}-${key}`].strengths.join("; ")}</p>}
+                                        {aiResults[`${s.id}-${key}`].weaknesses.length > 0 && <p className="text-foreground/80"><ThumbsDown className="w-3 h-3 inline mr-1 text-destructive" />{aiResults[`${s.id}-${key}`].weaknesses.join("; ")}</p>}
+                                        {aiResults[`${s.id}-${key}`].suggestion && <p className="text-foreground/80"><Lightbulb className="w-3 h-3 inline mr-1 text-accent" />{aiResults[`${s.id}-${key}`].suggestion}</p>}
                                       </div>
                                     )}
                                     <Textarea
                                       placeholder="Escreva seu feedback para esta resposta..."
                                       value={feedbacks[`${s.id}-${key}`]?.feedback_text || ""}
                                       onChange={(e) => updateFeedbackField(s.id, key, "feedback_text", e.target.value)}
-                                      rows={3}
-                                      className="resize-y text-sm"
+                                      rows={3} className="resize-y text-sm"
                                     />
                                     <div className="flex items-center gap-3">
                                       <div className="flex items-center gap-2">
                                         <Label className="text-xs text-muted-foreground">Nota:</Label>
-                                        <Select
-                                          value={feedbacks[`${s.id}-${key}`]?.grade?.toString() ?? ""}
-                                          onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}
-                                        >
-                                          <SelectTrigger className="w-20 h-8 text-sm">
-                                            <SelectValue placeholder="—" />
-                                          </SelectTrigger>
+                                        <Select value={feedbacks[`${s.id}-${key}`]?.grade?.toString() ?? ""} onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}>
+                                          <SelectTrigger className="w-20 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
                                           <SelectContent>
-                                            {Array.from({ length: 11 }, (_, i) => (
-                                              <SelectItem key={i} value={i.toString()}>{i}</SelectItem>
-                                            ))}
+                                            {Array.from({ length: 11 }, (_, i) => (<SelectItem key={i} value={i.toString()}>{i}</SelectItem>))}
                                           </SelectContent>
                                         </Select>
                                       </div>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => saveFeedback(s.id, key)}
-                                        disabled={savingFeedback === `${s.id}-${key}`}
-                                      >
-                                        {savingFeedback === `${s.id}-${key}` ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-                                        ) : (
-                                          <Save className="w-3.5 h-3.5 mr-1" />
-                                        )}
+                                      <Button size="sm" variant="outline" onClick={() => saveFeedback(s.id, key)} disabled={savingFeedback === `${s.id}-${key}`}>
+                                        {savingFeedback === `${s.id}-${key}` ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
                                         Salvar
                                       </Button>
                                     </div>
@@ -1273,7 +1251,7 @@ const RoomManage = () => {
         </section>
 
         {/* Peer Review Section */}
-        {activities.length > 0 && (
+        {activities.filter(a => (a as any).is_published !== false).length > 0 && (
           <section className="bg-card rounded-xl border border-border p-6">
             {!canUsePeerReview() ? (
               <div className="flex items-center gap-3 text-muted-foreground">
@@ -1285,12 +1263,12 @@ const RoomManage = () => {
               </div>
             ) : (
               <PeerReviewTeacher
-                activityId={activities[0].id}
+                activityId={activities.filter(a => (a as any).is_published !== false)[0].id}
                 roomId={roomId!}
                 sessions={sessions}
-                quizData={activities[0].quiz_data as unknown as QuizData}
-                peerReviewEnabled={(activities[0] as any).peer_review_enabled || false}
-                peerReviewCriteria={((activities[0] as any).peer_review_criteria as any[]) || []}
+                quizData={activities.filter(a => (a as any).is_published !== false)[0].quiz_data as unknown as QuizData}
+                peerReviewEnabled={(activities.filter(a => (a as any).is_published !== false)[0] as any).peer_review_enabled || false}
+                peerReviewCriteria={((activities.filter(a => (a as any).is_published !== false)[0] as any).peer_review_criteria as any[]) || []}
                 onUpdate={fetchData}
               />
             )}
@@ -1302,12 +1280,7 @@ const RoomManage = () => {
           <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
             <MessageSquare className="w-5 h-5 text-primary" /> Fórum de Discussão
           </h2>
-          {roomId && (
-            <DiscussionForum
-              roomId={roomId}
-              teacherUserId={room.teacher_id}
-            />
-          )}
+          {roomId && <DiscussionForum roomId={roomId} teacherUserId={room.teacher_id} />}
         </section>
       </main>
 
@@ -1315,18 +1288,12 @@ const RoomManage = () => {
       <Dialog open={saveBankDialogOpen} onOpenChange={setSaveBankDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <BookmarkPlus className="w-5 h-5" /> Salvar no Banco de Questões
-            </DialogTitle>
+            <DialogTitle className="font-display flex items-center gap-2"><BookmarkPlus className="w-5 h-5" /> Salvar no Banco de Questões</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label>Título da atividade</Label>
-              <Input
-                placeholder="Ex: Farmacologia — Casos de Antibióticos"
-                value={bankTitle}
-                onChange={(e) => setBankTitle(e.target.value)}
-              />
+              <Input placeholder="Ex: Farmacologia — Casos de Antibióticos" value={bankTitle} onChange={(e) => setBankTitle(e.target.value)} />
             </div>
             {activityToSave && (
               <p className="text-xs text-muted-foreground">
@@ -1344,18 +1311,12 @@ const RoomManage = () => {
       <Dialog open={bankDialogOpen} onOpenChange={setBankDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <Library className="w-5 h-5" /> Banco de Questões
-            </DialogTitle>
+            <DialogTitle className="font-display flex items-center gap-2"><Library className="w-5 h-5" /> Banco de Questões</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
-            <p className="text-sm text-muted-foreground">
-              Sua biblioteca pessoal de atividades. Importe qualquer uma para esta sala.
-            </p>
+            <p className="text-sm text-muted-foreground">Sua biblioteca pessoal de atividades. Importe qualquer uma para esta sala.</p>
             {loadingBank ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
-              </div>
+              <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
             ) : bankItems.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Library className="w-8 h-8 mx-auto mb-2" />
@@ -1370,17 +1331,11 @@ const RoomManage = () => {
                   <div key={item.id} className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <p className="font-medium text-card-foreground">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {totalQ} questões • Salva em {new Date(item.created_at).toLocaleDateString("pt-BR")}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{totalQ} questões • Salva em {new Date(item.created_at).toLocaleDateString("pt-BR")}</p>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => importFromBank(item)}>
-                        <Download className="w-4 h-4 mr-1" /> Importar
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => deleteBankItem(item.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <Button size="sm" onClick={() => importFromBank(item)}><Download className="w-4 h-4 mr-1" /> Importar</Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteBankItem(item.id)}><Trash2 className="w-4 h-4" /></Button>
                     </div>
                   </div>
                 );

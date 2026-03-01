@@ -49,7 +49,6 @@ interface Badge {
 }
 
 const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, answers }: ProgressDashboardProps) => {
-  // Compute metrics
   const viewedMaterialIds = new Set(
     activityLogs
       .filter((l: any) => l.activity_type === "material_view" && l.material_id)
@@ -95,30 +94,22 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
-              <BookOpen className="w-5 h-5 text-primary" />
-            </div>
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2"><BookOpen className="w-5 h-5 text-primary" /></div>
             <p className="font-display text-2xl font-bold text-foreground">{materialsWatched}/{totalMaterials}</p>
             <p className="text-xs text-muted-foreground">Materiais Vistos</p>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-level-easy/10 flex items-center justify-center mx-auto mb-2">
-              <Target className="w-5 h-5 text-level-easy" />
-            </div>
+            <div className="w-12 h-12 rounded-full bg-level-easy/10 flex items-center justify-center mx-auto mb-2"><Target className="w-5 h-5 text-level-easy" /></div>
             <p className="font-display text-2xl font-bold text-foreground">{answeredQuestions}/{totalQuestions}</p>
             <p className="text-xs text-muted-foreground">Questões Respondidas</p>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-level-medium/10 flex items-center justify-center mx-auto mb-2">
-              <Award className="w-5 h-5 text-level-medium" />
-            </div>
+            <div className="w-12 h-12 rounded-full bg-level-medium/10 flex items-center justify-center mx-auto mb-2"><Award className="w-5 h-5 text-level-medium" /></div>
             <p className="font-display text-2xl font-bold text-foreground">{highestLevel}/{quizData?.levels?.length || 0}</p>
             <p className="text-xs text-muted-foreground">Nível Alcançado</p>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2">
-              <Flame className="w-5 h-5 text-accent" />
-            </div>
+            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2"><Flame className="w-5 h-5 text-accent" /></div>
             <p className="font-display text-2xl font-bold text-foreground">{totalMinutes} min</p>
             <p className="text-xs text-muted-foreground">Tempo na Plataforma</p>
           </div>
@@ -149,22 +140,13 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="font-display text-lg font-bold flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-yellow-500" /> Conquistas
-          </h3>
+          <h3 className="font-display text-lg font-bold flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500" /> Conquistas</h3>
           <span className="text-sm text-muted-foreground">{earnedCount}/{badges.length} desbloqueadas</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {badges.map((badge, i) => (
-            <motion.div
-              key={badge.id}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 + i * 0.08 }}
-              className={`relative border rounded-xl p-4 text-center transition-all ${
-                badge.earned ? "border-primary/30 bg-primary/5" : "border-border bg-secondary/30 opacity-50 grayscale"
-              }`}
-            >
+            <motion.div key={badge.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + i * 0.08 }}
+              className={`relative border rounded-xl p-4 text-center transition-all ${badge.earned ? "border-primary/30 bg-primary/5" : "border-border bg-secondary/30 opacity-50 grayscale"}`}>
               {badge.earned && (
                 <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-level-easy rounded-full flex items-center justify-center">
                   <CheckCircle2 className="w-3.5 h-3.5 text-white" />
@@ -215,22 +197,25 @@ const StudentView = () => {
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const viewedMaterials = useRef<Set<string>>(new Set());
 
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
     try {
       await supabase.functions.invoke("student-session", {
         body: {
-          action: "log_activity",
-          sessionId,
-          roomId,
-          data: {
-            activity_type: activityType,
-            material_id: materialId || null,
-            duration_seconds: durationSeconds || 0,
-          },
+          action: "log_activity", sessionId, roomId,
+          data: { activity_type: activityType, material_id: materialId || null, duration_seconds: durationSeconds || 0 },
         },
       });
+      // Update local state so progress updates in real-time
+      setActivityLogs(prev => [...prev, {
+        activity_type: activityType,
+        material_id: materialId || null,
+        duration_seconds: durationSeconds || 0,
+        session_id: sessionId,
+        created_at: new Date().toISOString(),
+      }]);
     } catch (e) {
       console.warn("Activity log failed", e);
     }
@@ -254,21 +239,28 @@ const StudentView = () => {
     const [roomRes, matRes, actRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("id", roomId).single(),
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
-      supabase.from("activities").select("*").eq("room_id", roomId).order("created_at").limit(1),
+      supabase.from("activities").select("*").eq("room_id", roomId).order("created_at"),
     ]);
     setRoom(roomRes.data);
     setMaterials(matRes.data || []);
-    if (actRes.data?.[0]) {
-      setQuizData(actRes.data[0].quiz_data as unknown as QuizData);
+
+    // Merge all published activities' quiz data into one
+    if (actRes.data && actRes.data.length > 0) {
+      const allLevels: QuizLevel[] = [];
+      for (const act of actRes.data) {
+        const qd = act.quiz_data as unknown as QuizData;
+        if (qd?.levels) {
+          allLevels.push(...qd.levels);
+        }
+      }
+      setQuizData({ levels: allLevels });
     }
+
     if (sessionId) {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}`, {
-        headers: {
-          "apikey": supabaseKey,
-          "Content-Type": "application/json",
-        },
+        headers: { "apikey": supabaseKey, "Content-Type": "application/json" },
       });
       const sessionResult = await res.json();
       if (sessionResult && !sessionResult.error) {
@@ -304,12 +296,7 @@ const StudentView = () => {
     if (!room?.unlock_at || unlocked) return;
     const interval = setInterval(() => {
       const diff = new Date(room.unlock_at!).getTime() - Date.now();
-      if (diff <= 0) {
-        setUnlocked(true);
-        setTimeLeft("");
-        clearInterval(interval);
-        return;
-      }
+      if (diff <= 0) { setUnlocked(true); setTimeLeft(""); clearInterval(interval); return; }
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
@@ -334,9 +321,7 @@ const StudentView = () => {
   const currentQ = currentLevelData?.questions?.[currentQuestion];
   const qKey = `${currentLevel}-${currentQuestion}`;
 
-  const checkAnswer = () => {
-    setShowResult(true);
-  };
+  const checkAnswer = () => { setShowResult(true); };
 
   const nextQuestion = () => {
     setShowResult(false);
@@ -358,7 +343,10 @@ const StudentView = () => {
   };
 
   const handleViewMaterial = (materialId: string) => {
-    logActivity("material_view", materialId);
+    if (!viewedMaterials.current.has(materialId)) {
+      viewedMaterials.current.add(materialId);
+      logActivity("material_view", materialId, 1);
+    }
   };
 
   const submitQuiz = async () => {
@@ -369,12 +357,8 @@ const StudentView = () => {
     if (sessionId) {
       await supabase.functions.invoke("student-session", {
         body: {
-          action: "submit",
-          sessionId,
-          data: {
-            score: Object.keys(answers).length,
-            answers: answers,
-          },
+          action: "submit", sessionId,
+          data: { score: Object.keys(answers).length, answers },
         },
       });
     }
@@ -389,16 +373,9 @@ const StudentView = () => {
       return (
         <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
           <div className="aspect-video">
-            <iframe
-              src={`https://www.youtube.com/embed/${ytId}`}
-              className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <iframe src={`https://www.youtube.com/embed/${ytId}`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
           </div>
-          <div className="p-4">
-            <h3 className="font-medium text-card-foreground">{mat.title || "Vídeo"}</h3>
-          </div>
+          <div className="p-4"><h3 className="font-medium text-card-foreground">{mat.title || "Vídeo"}</h3></div>
         </div>
       );
     }
@@ -408,28 +385,14 @@ const StudentView = () => {
         <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
           {mat.url ? (
             <>
-              <div className="aspect-[4/3]">
-                <iframe
-                  src={mat.url}
-                  className="w-full h-full"
-                  title={mat.title}
-                />
-              </div>
+              <div className="aspect-[4/3]"><iframe src={mat.url} className="w-full h-full" title={mat.title} /></div>
               <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MatIcon className="w-5 h-5 text-muted-foreground" />
-                  <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
-                </div>
-                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  <ExternalLink className="w-4 h-4" /> Abrir
-                </a>
+                <div className="flex items-center gap-2"><MatIcon className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
+                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}><ExternalLink className="w-4 h-4" /> Abrir</a>
               </div>
             </>
           ) : (
-            <div className="p-6 flex items-center gap-3">
-              <MatIcon className="w-8 h-8 text-muted-foreground" />
-              <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
-            </div>
+            <div className="p-6 flex items-center gap-3"><MatIcon className="w-8 h-8 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
           )}
         </div>
       );
@@ -442,18 +405,12 @@ const StudentView = () => {
       return (
         <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
           <div className="p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <File className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3>
-            </div>
+            <div className="flex items-center gap-2 mb-3"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
             {content && (
               <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
                 {isExpanded ? content : preview}
                 {content.length > 300 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setExpandedArticle(isExpanded ? null : mat.id); }}
-                    className="text-primary text-sm font-medium ml-1 hover:underline"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); setExpandedArticle(isExpanded ? null : mat.id); }} className="text-primary text-sm font-medium ml-1 hover:underline">
                     {isExpanded ? "Ver menos" : "Ler mais"}
                   </button>
                 )}
@@ -473,9 +430,15 @@ const StudentView = () => {
               <h3 className="font-medium text-card-foreground">{mat.title || "Podcast"}</h3>
             </div>
             {mat.url && (
-              <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                <ExternalLink className="w-4 h-4" /> Ouvir podcast
-              </a>
+              <div className="space-y-3">
+                <audio controls className="w-full" preload="metadata">
+                  <source src={mat.url} />
+                  Seu navegador não suporta áudio.
+                </audio>
+                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <ExternalLink className="w-4 h-4" /> Abrir em nova aba
+                </a>
+              </div>
             )}
           </div>
         </div>
@@ -516,52 +479,25 @@ const StudentView = () => {
         </div>
         <div className="flex items-center gap-2">
           <NotificationCenter sessionId={sessionId} roomId={roomId} />
-          <Button variant="outline" size="sm" onClick={() => navigate("/")}>
-            <LogOut className="w-4 h-4 mr-2" /> Sair
-          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate("/")}><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
         </div>
       </header>
 
       <div className="border-b border-border bg-card px-6">
-        <div className="flex gap-6">
-          <button
-            onClick={() => setTab("materials")}
-            className={`py-3 text-sm font-medium border-b-2 transition-colors ${tab === "materials" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
+        <div className="flex gap-6 overflow-x-auto">
+          <button onClick={() => setTab("materials")} className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === "materials" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <BookOpen className="w-4 h-4 inline mr-1.5" /> Materiais
           </button>
-          <button
-            onClick={() => unlocked && quizData && handleStartQuiz()}
-            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-              !unlocked || !quizData ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" :
-              tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {!unlocked && <Lock className="w-3.5 h-3.5" />}
-            Atividade
+          <button onClick={() => unlocked && quizData && handleStartQuiz()} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${!unlocked || !quizData ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" : tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            {!unlocked && <Lock className="w-3.5 h-3.5" />} Atividade
           </button>
-          <button
-            onClick={() => setTab("progress")}
-            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-              tab === "progress" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
+          <button onClick={() => setTab("progress")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "progress" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Trophy className="w-4 h-4" /> Progresso
           </button>
-          <button
-            onClick={() => setTab("forum")}
-            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-              tab === "forum" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
+          <button onClick={() => setTab("forum")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "forum" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <MessageSquare className="w-4 h-4" /> Fórum
           </button>
-          <button
-            onClick={() => setTab("peer-review")}
-            className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-              tab === "peer-review" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
+          <button onClick={() => setTab("peer-review")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "peer-review" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Users className="w-4 h-4" /> Avaliação por Pares
           </button>
         </div>
@@ -577,37 +513,17 @@ const StudentView = () => {
                 <p className="font-display text-3xl font-bold text-accent mt-1">{timeLeft}</p>
               </div>
             )}
-
             {materials.map((mat) => renderMaterialCard(mat))}
-
             {materials.length === 0 && (
-              <div className="text-center py-16 text-muted-foreground">
-                <BookOpen className="w-8 h-8 mx-auto mb-2" />
-                <p>Nenhum material disponível ainda.</p>
-              </div>
+              <div className="text-center py-16 text-muted-foreground"><BookOpen className="w-8 h-8 mx-auto mb-2" /><p>Nenhum material disponível ainda.</p></div>
             )}
           </div>
         ) : tab === "progress" ? (
-          <ProgressDashboard
-            materials={materials}
-            activityLogs={activityLogs}
-            sessionData={sessionData}
-            quizData={quizData}
-            answers={answers}
-          />
+          <ProgressDashboard materials={materials} activityLogs={activityLogs} sessionData={sessionData} quizData={quizData} answers={answers} />
         ) : tab === "forum" ? (
-          <DiscussionForum
-            roomId={roomId!}
-            studentName={sessionData?.student_name}
-            studentEmail={sessionData?.student_email || undefined}
-          />
+          <DiscussionForum roomId={roomId!} studentName={sessionData?.student_name} studentEmail={sessionData?.student_email || undefined} />
         ) : tab === "peer-review" ? (
-          <PeerReviewStudent
-            sessionId={sessionId!}
-            roomId={roomId!}
-            quizData={quizData}
-            studentName={sessionData?.student_name || "Aluno"}
-          />
+          <PeerReviewStudent sessionId={sessionId!} roomId={roomId!} quizData={quizData} studentName={sessionData?.student_name || "Aluno"} />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
@@ -616,15 +532,10 @@ const StudentView = () => {
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={async () => {
                 if (!sessionId) return;
-                const { data } = await supabase
-                  .from("teacher_feedback" as any)
-                  .select("*")
-                  .eq("session_id", sessionId);
+                const { data } = await supabase.from("teacher_feedback" as any).select("*").eq("session_id", sessionId);
                 if (data) {
                   const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
-                  (data as any[]).forEach((fb: any) => {
-                    fbMap[fb.question_key] = { feedback_text: fb.feedback_text || "", grade: fb.grade };
-                  });
+                  (data as any[]).forEach((fb: any) => { fbMap[fb.question_key] = { feedback_text: fb.feedback_text || "", grade: fb.grade }; });
                   setTeacherFeedbacks(fbMap);
                 }
                 setShowFeedback(true);
@@ -660,9 +571,7 @@ const StudentView = () => {
                                   </span>
                                 )}
                               </div>
-                              {fb.feedback_text && (
-                                <p className="text-sm text-foreground bg-secondary rounded-lg p-3">{fb.feedback_text}</p>
-                              )}
+                              {fb.feedback_text && <p className="text-sm text-foreground bg-secondary rounded-lg p-3">{fb.feedback_text}</p>}
                             </div>
                           ) : (
                             <p className="text-xs text-muted-foreground italic mt-2">Aguardando avaliação do professor</p>
@@ -673,10 +582,7 @@ const StudentView = () => {
                   </div>
                 ))}
                 {Object.keys(teacherFeedbacks).length === 0 && (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <MessageSquare className="w-8 h-8 mx-auto mb-2" />
-                    <p>Nenhum feedback disponível ainda. Aguarde a avaliação do professor.</p>
-                  </div>
+                  <div className="text-center py-6 text-muted-foreground"><MessageSquare className="w-8 h-8 mx-auto mb-2" /><p>Nenhum feedback disponível ainda. Aguarde a avaliação do professor.</p></div>
                 )}
               </div>
             )}
@@ -684,14 +590,12 @@ const StudentView = () => {
         ) : currentQ ? (
           <AnimatePresence mode="wait">
             <motion.div key={qKey} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-6 ${levelStyles[currentLevel]?.bg} ${levelStyles[currentLevel]?.text}`}>
-                {levelStyles[currentLevel]?.label}
+              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-6 ${levelStyles[currentLevel % levelStyles.length]?.bg} ${levelStyles[currentLevel % levelStyles.length]?.text}`}>
+                {levelStyles[currentLevel % levelStyles.length]?.label || currentLevelData?.label}
               </div>
 
-              <div className={`bg-card border-2 ${levelStyles[currentLevel]?.border} rounded-xl p-6`}>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Questão {currentQuestion + 1} de {currentLevelData.questions.length}
-                </p>
+              <div className={`bg-card border-2 ${levelStyles[currentLevel % levelStyles.length]?.border} rounded-xl p-6`}>
+                <p className="text-xs text-muted-foreground mb-2">Questão {currentQuestion + 1} de {currentLevelData.questions.length}</p>
 
                 {currentQ.context && (
                   <div className="bg-secondary rounded-lg p-4 mb-4 text-sm text-foreground leading-relaxed">
@@ -700,33 +604,24 @@ const StudentView = () => {
                   </div>
                 )}
 
-                <h3 className="font-display text-xl font-semibold text-card-foreground mb-6">
-                  {currentQ.question}
-                </h3>
+                <h3 className="font-display text-xl font-semibold text-card-foreground mb-6">{currentQ.question}</h3>
 
                 <div className="space-y-4">
                   <textarea
                     className="w-full p-4 bg-secondary rounded-lg border-none text-foreground resize-none min-h-[150px] focus:outline-none focus:ring-2 focus:ring-ring"
                     placeholder="Desenvolva sua resposta com base no caso apresentado..."
                     value={answers[qKey] || openAnswer}
-                    onChange={(e) => {
-                      setOpenAnswer(e.target.value);
-                      setAnswers((prev) => ({ ...prev, [qKey]: e.target.value }));
-                    }}
+                    onChange={(e) => { setOpenAnswer(e.target.value); setAnswers((prev) => ({ ...prev, [qKey]: e.target.value })); }}
                     disabled={showResult}
                   />
                 </div>
 
                 <div className="mt-6 flex justify-end">
                   {!showResult ? (
-                    <Button onClick={checkAnswer} disabled={!answers[qKey]}>
-                      Enviar Resposta
-                    </Button>
+                    <Button onClick={checkAnswer} disabled={!answers[qKey]}>Enviar Resposta</Button>
                   ) : (
                     <Button onClick={nextQuestion}>
-                      {currentLevel === levels.length - 1 && currentQuestion === currentLevelData.questions.length - 1
-                        ? "Finalizar"
-                        : "Próxima"}
+                      {currentLevel === levels.length - 1 && currentQuestion === currentLevelData.questions.length - 1 ? "Finalizar" : "Próxima"}
                       <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                   )}
@@ -735,9 +630,7 @@ const StudentView = () => {
             </motion.div>
           </AnimatePresence>
         ) : (
-          <div className="text-center py-16 text-muted-foreground">
-            <p>Nenhuma atividade disponível ainda.</p>
-          </div>
+          <div className="text-center py-16 text-muted-foreground"><p>Nenhuma atividade disponível ainda.</p></div>
         )}
       </main>
     </div>
