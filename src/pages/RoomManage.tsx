@@ -6,14 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
 import DiscussionForum from "@/components/DiscussionForum";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Tables, Json } from "@/integrations/supabase/types";
+import { useFeatureGate } from "@/hooks/useFeatureGate";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
@@ -74,6 +76,7 @@ const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { canUploadFile, canGenerateQuiz, canUseAiCorrection, canUsePeerReview, loading: gateLoading } = useFeatureGate();
   const [room, setRoom] = useState<Room | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -166,6 +169,13 @@ const RoomManage = () => {
 
   const addMaterial = async () => {
     if (!roomId) return;
+
+    // Gate file upload for non-video/article types
+    if (newMaterialType !== "video" && newMaterialType !== "article" && !canUploadFile()) {
+      toast({ title: "Upload de arquivos bloqueado", description: "Faça upgrade para o plano Professor para enviar arquivos.", variant: "destructive" });
+      return;
+    }
+
     setAddingMaterial(true);
 
     try {
@@ -813,19 +823,32 @@ const RoomManage = () => {
                       </div>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openTranscriptDialog(mat)}
-                        disabled={generatingQuiz === mat.id}
-                      >
-                        {generatingQuiz === mat.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                        ) : (
-                          <Sparkles className="w-4 h-4 mr-1" />
-                        )}
-                        Gerar Atividade
-                      </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openTranscriptDialog(mat)}
+                                disabled={generatingQuiz === mat.id || !canGenerateQuiz()}
+                              >
+                                {generatingQuiz === mat.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                ) : !canGenerateQuiz() ? (
+                                  <Lock className="w-4 h-4 mr-1" />
+                                ) : (
+                                  <Sparkles className="w-4 h-4 mr-1" />
+                                )}
+                                Gerar Atividade
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {!canGenerateQuiz() && (
+                            <TooltipContent>Limite de gerações IA atingido neste mês. Faça upgrade para mais.</TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                       <Button size="sm" variant="ghost" onClick={() => deleteMaterial(mat.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -1072,23 +1095,36 @@ const RoomManage = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         {isExpanded && quiz?.levels && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                            disabled={aiGradingAll === s.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              aiGradeAllStudent(s.id, quiz, studentAnswers || {});
-                            }}
-                          >
-                            {aiGradingAll === s.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-                            ) : (
-                              <Bot className="w-3.5 h-3.5 mr-1" />
-                            )}
-                            Corrigir Todas com IA
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    disabled={aiGradingAll === s.id || !canUseAiCorrection()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      aiGradeAllStudent(s.id, quiz, studentAnswers || {});
+                                    }}
+                                  >
+                                    {aiGradingAll === s.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                                    ) : !canUseAiCorrection() ? (
+                                      <Lock className="w-3.5 h-3.5 mr-1" />
+                                    ) : (
+                                      <Bot className="w-3.5 h-3.5 mr-1" />
+                                    )}
+                                    Corrigir Todas com IA
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {!canUseAiCorrection() && (
+                                <TooltipContent>Limite de correções IA atingido neste mês. Faça upgrade para mais.</TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                         {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>
@@ -1123,20 +1159,33 @@ const RoomManage = () => {
                                           <Check className="w-3.5 h-3.5 text-level-easy" />
                                         )}
                                       </div>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="text-xs h-7 gap-1"
-                                        disabled={aiGrading === `${s.id}-${key}` || !answer}
-                                        onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
-                                      >
-                                        {aiGrading === `${s.id}-${key}` ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        ) : (
-                                          <Bot className="w-3.5 h-3.5" />
-                                        )}
-                                        Corrigir com IA
-                                      </Button>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="text-xs h-7 gap-1"
+                                                disabled={aiGrading === `${s.id}-${key}` || !answer || !canUseAiCorrection()}
+                                                onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
+                                              >
+                                                {aiGrading === `${s.id}-${key}` ? (
+                                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                ) : !canUseAiCorrection() ? (
+                                                  <Lock className="w-3.5 h-3.5" />
+                                                ) : (
+                                                  <Bot className="w-3.5 h-3.5" />
+                                                )}
+                                                Corrigir com IA
+                                              </Button>
+                                            </span>
+                                          </TooltipTrigger>
+                                          {!canUseAiCorrection() && (
+                                            <TooltipContent>Limite de correções IA atingido.</TooltipContent>
+                                          )}
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     </div>
                                     {aiResults[`${s.id}-${key}`] && (
                                       <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs space-y-1.5">
@@ -1226,15 +1275,25 @@ const RoomManage = () => {
         {/* Peer Review Section */}
         {activities.length > 0 && (
           <section className="bg-card rounded-xl border border-border p-6">
-            <PeerReviewTeacher
-              activityId={activities[0].id}
-              roomId={roomId!}
-              sessions={sessions}
-              quizData={activities[0].quiz_data as unknown as QuizData}
-              peerReviewEnabled={(activities[0] as any).peer_review_enabled || false}
-              peerReviewCriteria={((activities[0] as any).peer_review_criteria as any[]) || []}
-              onUpdate={fetchData}
-            />
+            {!canUsePeerReview() ? (
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <Lock className="w-5 h-5" />
+                <div>
+                  <p className="font-medium text-foreground">Avaliação por Pares</p>
+                  <p className="text-sm">Disponível a partir do plano Professor. <button onClick={() => navigate("/pricing")} className="text-primary underline">Fazer upgrade</button></p>
+                </div>
+              </div>
+            ) : (
+              <PeerReviewTeacher
+                activityId={activities[0].id}
+                roomId={roomId!}
+                sessions={sessions}
+                quizData={activities[0].quiz_data as unknown as QuizData}
+                peerReviewEnabled={(activities[0] as any).peer_review_enabled || false}
+                peerReviewCriteria={((activities[0] as any).peer_review_criteria as any[]) || []}
+                onUpdate={fetchData}
+              />
+            )}
           </section>
         )}
 
