@@ -14,6 +14,7 @@ export const PLANS = {
       advanced_analytics: false,
       peer_review: false,
       question_bank: false,
+      max_teachers: 0,
     },
   },
   professor: {
@@ -30,6 +31,7 @@ export const PLANS = {
       advanced_analytics: true,
       peer_review: true,
       question_bank: true,
+      max_teachers: 0,
     },
   },
   institutional: {
@@ -46,6 +48,7 @@ export const PLANS = {
       advanced_analytics: true,
       peer_review: true,
       question_bank: true,
+      max_teachers: 10,
     },
   },
 } as const;
