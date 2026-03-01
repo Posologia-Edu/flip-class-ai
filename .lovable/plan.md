@@ -1,182 +1,110 @@
 
-# Auditoria e Implementacao Completa de Travas de Plano, Stripe e Convites
 
-## Diagnostico: Problemas Encontrados
+# Implementacao das 3 Funcionalidades do Plano Institucional
 
-### 1. NENHUMA trava de plano esta implementada
-A funcao `getPlanLimits()` existe em `src/lib/subscription.ts` mas **nunca e chamada** em nenhum lugar do sistema. Isso significa que:
-- Usuarios do plano gratuito podem criar salas ilimitadas
-- Podem fazer upload de arquivos sem restricao
-- Podem acessar Analytics, Banco de Questoes, Calendario, Peer Review sem limitacao
-- Geracoes e correcoes de IA nao sao contabilizadas
-- Nao ha limite de alunos por sala
+## 1. Exportacao de Relatorios (PDF/CSV)
 
-### 2. Stripe parcialmente configurado
-- Checkout, check-subscription e customer-portal existem como Edge Functions
-- Produtos e precos estao definidos no codigo (`prod_U1yOTsueyuc6SQ`, `prod_U1yOWsVEIi6joe`)
-- Gerenciamento de assinatura so e possivel via portal externo do Stripe (abre em nova aba)
-- **Precisa verificar**: se estes produtos realmente existem no Stripe conectado
+Adicionar botoes de exportacao na pagina de Analytics e no AnalyticsReport para que professores do plano Institucional possam baixar relatorios.
 
-### 3. Convites nao permitem escolher plano
-- Admin convida com "Premium Vitalicio" fixo sem opcao de escolha
-- Nao existe coluna `granted_plan` na tabela `admin_invites`
-- `useSubscription` nao considera plano concedido por admin
+**Abordagem:**
+- **CSV**: Gerar client-side usando JS puro (sem dependencia extra). Exportar dados de sessoes, notas, tempo por material e alunos em risco.
+- **PDF**: Usar `window.print()` com CSS de impressao dedicado, ou gerar via uma abordagem simples de HTML-to-PDF no cliente. Para manter simplicidade, usaremos `window.print()` com um layout otimizado para impressao.
+- Gate: Apenas planos `institutional` (ja definido como `advanced_analytics: true` + checagem adicional de plano).
 
-### 4. Revogacao funciona parcialmente
-- Revoga convites pendentes e deleta usuario do auth
-- Nao revoga/downgrade usuarios ja ativos
+**Arquivos modificados:**
+- `src/components/AnalyticsReport.tsx` -- Adicionar botoes "Exportar CSV" e "Exportar PDF"
+- `src/pages/AnalyticsPage.tsx` -- Adicionar botoes de exportacao no nivel geral (cross-room)
+- `src/hooks/useFeatureGate.ts` -- Adicionar `canExportReports()` (retorna `effectivePlan === "institutional"`)
 
 ---
 
-## Plano de Implementacao
+## 2. Painel Multi-professores
 
-### Tarefa 1: Criar tabela de contagem de uso de IA
-Adicionar uma tabela `ai_usage_log` para rastrear geracoes e correcoes de IA por professor por mes.
+Permitir que instituicoes vejam e gerenciem as salas de todos os professores vinculados. Um usuario com plano Institucional tera acesso a uma pagina que agrega dados de todos os professores convidados pela mesma instituicao.
 
-```text
-CREATE TABLE public.ai_usage_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  usage_type TEXT NOT NULL, -- 'generation' ou 'correction'
-  created_at TIMESTAMPTZ DEFAULT now()
-);
--- RLS: users can view own, service role can insert
-```
+**Abordagem:**
+- Criar nova pagina `src/pages/InstitutionalDashboard.tsx`
+- Buscar todos os professores cujo email esta em `admin_invites` onde `invited_by = user.id` e `status = 'active'`
+- Para cada professor, buscar suas salas e estatisticas
+- Exibir em tabela com filtros por professor
+- Adicionar rota `/dashboard/institutional` e link no sidebar (visivel apenas para plano institucional)
 
-Adicionar coluna `granted_plan` na tabela `admin_invites`:
-```text
-ALTER TABLE public.admin_invites ADD COLUMN granted_plan TEXT DEFAULT 'institutional';
-```
+**Arquivos modificados/criados:**
+- `src/pages/InstitutionalDashboard.tsx` (novo)
+- `src/App.tsx` -- Adicionar rota
+- `src/components/AppSidebar.tsx` -- Adicionar link condicional
+- `src/hooks/useFeatureGate.ts` -- Adicionar `canUseMultiTeacher()`
 
-### Tarefa 2: Criar hook `useFeatureGate`
-Novo hook centralizado que combina `useSubscription` com planos concedidos por admin.
+**Banco de dados:**
+- Nenhuma migracao necessaria. Usaremos `admin_invites` + `profiles` + `rooms` + `student_sessions` existentes.
+- Sera necessario criar uma RLS policy ou usar edge function para permitir que o usuario institucional leia salas de outros professores. Usaremos uma **edge function** (`institutional-dashboard`) para buscar dados com `service_role`, evitando mudancas complexas em RLS.
 
-**Arquivo:** `src/hooks/useFeatureGate.ts`
+---
 
-Funcionalidades:
-- Verificar se o usuario tem um plano concedido via convite admin (consulta `admin_invites` pelo email do usuario)
-- Usar o maior plano entre Stripe e admin-grant
-- Expor funcoes: `canCreateRoom()`, `canUploadFile()`, `canUsePeerReview()`, `canUseQuestionBank()`, `canUseAdvancedAnalytics()`, `canGenerateQuiz()`, `canUseAiCorrection()`, `getRoomStudentLimit()`, `getRoomLimit()`
+## 3. White-label Basico
 
-### Tarefa 3: Implementar travas em todas as paginas
+Permitir que instituicoes personalizem logo e cores da plataforma.
 
-**`src/pages/RoomsList.tsx`:**
-- Antes de criar sala, verificar `rooms.length < limit.max_rooms` (ou ilimitado se -1)
-- Mostrar mensagem e link para upgrade quando atingir limite
+**Abordagem:**
+- Criar tabela `institution_settings` com colunas: `id`, `user_id`, `logo_url`, `primary_color`, `institution_name`, `created_at`, `updated_at`
+- Adicionar secao de configuracao na pagina `MyAccount` (ou na nova pagina institucional)
+- Upload de logo no bucket `materials` (ja existente e publico)
+- Aplicar cores e logo dinamicamente no sidebar e header
 
-**`src/pages/RoomManage.tsx`:**
-- Upload de arquivo: verificar `canUploadFile()`
-- Geracao de quiz: verificar `canGenerateQuiz()` e contagem mensal
-- Correcao AI: verificar `canUseAiCorrection()` e contagem mensal
-- Peer Review: verificar `canUsePeerReview()`
-- Esconder/desabilitar botoes bloqueados com tooltip "Disponivel no plano Professor"
-
-**`src/pages/QuestionBank.tsx`:**
-- Verificar `canUseQuestionBank()` no topo; se bloqueado, mostrar tela de upgrade
-
-**`src/pages/AnalyticsPage.tsx`:**
-- Verificar `canUseAdvancedAnalytics()`; se bloqueado, mostrar preview com blur e CTA de upgrade
-
-**`src/pages/CalendarPage.tsx`:**
-- Bloquear para plano gratuito (calendario e feature do plano Professor+)
-
-**`src/components/PeerReview.tsx`:**
-- Verificar antes de habilitar peer review em atividade
-
-**Student session join (StudentView):**
-- Verificar limite de alunos por sala antes de permitir entrada
-
-### Tarefa 4: Contabilizar uso de IA nas Edge Functions
-
-**`supabase/functions/generate-quiz/index.ts`:**
-- Antes de gerar, consultar `ai_usage_log` do mes atual para o usuario
-- Comparar com limite do plano
-- Se excedido, retornar erro 403 com mensagem clara
-- Apos sucesso, inserir registro em `ai_usage_log`
-
-**`supabase/functions/ai-grade/index.ts`:**
-- Mesma logica para correcoes
-
-### Tarefa 5: Gerenciamento de assinatura in-app
-
-**`src/pages/MyAccount.tsx`:**
-- Adicionar secao "Gerenciar Assinatura" com botoes:
-  - "Alterar Plano" - abre pagina de pricing
-  - "Cancelar Assinatura" - abre dialog de confirmacao, chama `customer-portal`
-- Mostrar data de renovacao/expiracao
-- Se plano concedido por admin, mostrar badge "Concedido pelo Administrador"
-
-**`src/pages/Pricing.tsx`:**
-- Para usuario ja assinante de outro plano, mostrar "Alterar para este plano" ao inves de "Iniciar Teste Gratis"
-- Botao "Gerenciar Assinatura" para plano atual (ja existe parcialmente)
-
-### Tarefa 6: Admin pode escolher plano ao convidar
-
-**`src/pages/AdminPanel.tsx`:**
-- Adicionar Select de plano no formulario de convite (Gratuito, Professor, Institucional)
-- Passar `granted_plan` na chamada da Edge Function
-
-**`supabase/functions/admin-invite/index.ts`:**
-- Receber `granted_plan` no body
-- Salvar na coluna `granted_plan` da tabela `admin_invites`
-
-**`src/hooks/useFeatureGate.ts` (ja criado na Tarefa 2):**
-- Consultar `admin_invites` pelo email do usuario para verificar plano concedido
-
-### Tarefa 7: Admin pode revogar acesso de convidados ativos
-
-**`supabase/functions/admin-invite/index.ts`:**
-- Na acao `revoke_invite`, tambem funcionar para usuarios ativos:
-  - Remover registro de `admin_invites`
-  - Mudar `approval_status` do profile para "rejected"
-  - Efetivamente bloqueia o acesso do usuario
-
-**`src/pages/AdminPanel.tsx`:**
-- Mostrar opcao de revogar tanto para invites pendentes quanto ativos
-- Para ativos, dialog de confirmacao diferente: "O usuario perdera acesso imediatamente"
+**Arquivos modificados/criados:**
+- Migracao: criar tabela `institution_settings`
+- `src/pages/InstitutionalDashboard.tsx` -- Adicionar aba de configuracoes white-label
+- `src/components/AppSidebar.tsx` -- Carregar e exibir logo personalizado
+- `src/hooks/useFeatureGate.ts` -- Adicionar `canUseWhiteLabel()`
 
 ---
 
 ## Detalhes Tecnicos
 
-### Hook useFeatureGate (Tarefa 2)
+### Nova Edge Function: `institutional-dashboard`
 ```text
-// src/hooks/useFeatureGate.ts
-export function useFeatureGate() {
-  const { user } = useAuth();
-  const { planKey: stripePlan } = useSubscription(user?.id);
-  const [grantedPlan, setGrantedPlan] = useState<PlanKey | null>(null);
-
-  // Query admin_invites for granted_plan by user email
-  useEffect(() => { /* fetch granted_plan */ }, [user?.email]);
-
-  const effectivePlan = resolveHighestPlan(stripePlan, grantedPlan);
-  const limits = getPlanLimits(effectivePlan);
-
-  return {
-    effectivePlan,
-    limits,
-    canCreateRoom: (currentCount) => limits.max_rooms === -1 || currentCount < limits.max_rooms,
-    canUploadFile: () => limits.file_upload,
-    // ... etc
-  };
-}
+POST /institutional-dashboard
+Body: { action: "get_teachers" | "get_teacher_rooms" }
+- Autentica usuario
+- Verifica se tem plano institucional
+- Busca professores vinculados via admin_invites
+- Retorna dados agregados
 ```
 
-### Componente UpgradeGate (reutilizavel)
-```text
-// Componente que envolve features bloqueadas
-<UpgradeGate feature="question_bank" planRequired="professor">
-  <QuestionBankContent />
-</UpgradeGate>
-```
-Quando bloqueado, mostra overlay com icone de cadeado e botao "Fazer Upgrade".
+### Migracao SQL
+```sql
+CREATE TABLE public.institution_settings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  logo_url text,
+  primary_color text DEFAULT '#0d9488',
+  institution_name text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id)
+);
 
-### Sequencia de implementacao
-1. Migration (tabela + coluna) -- Tarefa 1
-2. Hook useFeatureGate -- Tarefa 2
-3. Componente UpgradeGate -- Tarefa 3
-4. Travas nas paginas -- Tarefa 3
-5. Contagem de IA nas Edge Functions -- Tarefa 4
-6. Gerenciamento in-app -- Tarefa 5
-7. Admin escolher plano + revogar -- Tarefas 6 e 7
+ALTER TABLE public.institution_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own settings"
+  ON public.institution_settings FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+```
+
+### Feature Gate (novas funcoes)
+```text
+canExportReports() -> effectivePlan === "institutional"
+canUseMultiTeacher() -> effectivePlan === "institutional"
+canUseWhiteLabel() -> effectivePlan === "institutional"
+```
+
+### Sequencia de Implementacao
+1. Migracao do banco (institution_settings)
+2. useFeatureGate -- adicionar 3 novas funcoes
+3. Exportacao PDF/CSV no AnalyticsReport e AnalyticsPage
+4. Edge function institutional-dashboard
+5. Pagina InstitutionalDashboard (multi-professores + white-label)
+6. Sidebar e App.tsx -- rota e link condicional
+7. Aplicar white-label dinamico no sidebar
+
