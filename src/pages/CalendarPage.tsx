@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useFeatureGate } from "@/hooks/useFeatureGate";
+import UpgradeGate from "@/components/UpgradeGate";
 import { CalendarDays } from "lucide-react";
 import RoomCalendar from "@/components/RoomCalendar";
 import type { Tables } from "@/integrations/supabase/types";
@@ -10,6 +12,7 @@ type Room = Tables<"rooms">;
 
 const CalendarPage = () => {
   const { user, loading: authLoading } = useAuth();
+  const { canUseAdvancedAnalytics } = useFeatureGate();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -33,7 +36,7 @@ const CalendarPage = () => {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
 
-  return (
+  const calendarContent = (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-8">
         <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
@@ -63,6 +66,12 @@ const CalendarPage = () => {
         />
       )}
     </div>
+  );
+
+  return (
+    <UpgradeGate allowed={canUseAdvancedAnalytics()} featureName="Calendário" planRequired="Professor">
+      {calendarContent}
+    </UpgradeGate>
   );
 };
 

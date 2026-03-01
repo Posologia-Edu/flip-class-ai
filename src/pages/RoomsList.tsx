@@ -2,10 +2,11 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3 } from "lucide-react";
+import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Tables } from "@/integrations/supabase/types";
@@ -29,6 +30,7 @@ const RoomsList = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const auth = useAuth();
+  const { canCreateRoom, getRoomLimit, effectivePlan } = useFeatureGate();
 
   const generatePin = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -68,6 +70,17 @@ const RoomsList = () => {
 
   const createRoom = async () => {
     if (!newTitle.trim() || !auth.user) return;
+
+    if (!canCreateRoom(rooms.length)) {
+      const limit = getRoomLimit();
+      toast({
+        title: "Limite de salas atingido",
+        description: `Seu plano permite até ${limit} sala${limit !== 1 ? "s" : ""}. Faça upgrade para criar mais.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setCreating(true);
     const { error } = await supabase.from("rooms").insert({
       title: newTitle.trim(),
@@ -94,6 +107,9 @@ const RoomsList = () => {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
 
+  const roomLimit = getRoomLimit();
+  const atLimit = roomLimit !== -1 && rooms.length >= roomLimit;
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -102,12 +118,18 @@ const RoomsList = () => {
             <BookOpen className="w-6 h-6 text-primary" />
             Minhas Salas
           </h1>
-          <p className="text-muted-foreground mt-1">Gerencie suas salas de aula invertida</p>
+          <p className="text-muted-foreground mt-1">
+            Gerencie suas salas de aula invertida
+            {roomLimit !== -1 && (
+              <span className="ml-2 text-xs">({rooms.length}/{roomLimit} salas)</span>
+            )}
+          </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="font-semibold">
-              <Plus className="w-4 h-4 mr-2" /> Nova Sala
+            <Button className="font-semibold" disabled={atLimit}>
+              {atLimit ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              {atLimit ? "Limite atingido" : "Nova Sala"}
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -131,6 +153,21 @@ const RoomsList = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {atLimit && (
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Lock className="w-5 h-5 text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Limite de salas atingido</p>
+              <p className="text-xs text-muted-foreground">Faça upgrade do seu plano para criar mais salas.</p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => navigate("/pricing")}>
+            Ver Planos
+          </Button>
+        </div>
+      )}
 
       {rooms.length === 0 ? (
         <div className="text-center py-20">

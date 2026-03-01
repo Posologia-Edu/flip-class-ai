@@ -36,6 +36,13 @@ Regras:
 - Respostas em branco ou irrelevantes recebem nota 0
 - Retorne APENAS o JSON, sem markdown, sem explicação adicional`;
 
+// Plan limits for AI corrections
+const PLAN_LIMITS: Record<string, number> = {
+  free: 5,
+  professor: 100,
+  institutional: -1,
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -52,6 +59,7 @@ serve(async (req) => {
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -62,6 +70,36 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid authentication" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    const userId = claimsData.claims.sub;
+    
+    const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check AI usage limits
+    const { data: userData } = await serviceSupabase.auth.admin.getUserById(userId);
+    const email = userData?.user?.email;
+    let planKey = "free";
+    if (email) {
+      const { data: invite } = await serviceSupabase
+        .from("admin_invites").select("granted_plan")
+        .eq("email", email).in("status", ["active", "pending"]).maybeSingle();
+      if (invite?.granted_plan) planKey = invite.granted_plan;
+    }
+    
+    const limit = PLAN_LIMITS[planKey] ?? 5;
+    if (limit !== -1) {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { count } = await serviceSupabase
+        .from("ai_usage_log").select("id", { count: "exact", head: true })
+        .eq("user_id", userId).eq("usage_type", "correction").gte("created_at", startOfMonth);
+      if ((count || 0) >= limit) {
+        return new Response(JSON.stringify({ 
+          error: `Limite de correções por IA atingido (${count}/${limit} este mês). Faça upgrade do seu plano.` 
+        }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const { question, context, correctAnswer, studentAnswer, batchItems } = await req.json();
@@ -130,6 +168,16 @@ Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fo
         }
         throw err;
       }
+    }
+
+    // Log successful AI corrections
+    const correctionCount = items.filter((item: any) => item.studentAnswer?.trim().length > 0).length;
+    if (correctionCount > 0) {
+      const logs = Array.from({ length: correctionCount }, () => ({
+        user_id: userId,
+        usage_type: "correction",
+      }));
+      await serviceSupabase.from("ai_usage_log").insert(logs);
     }
 
     return new Response(JSON.stringify({ success: true, results }), {
