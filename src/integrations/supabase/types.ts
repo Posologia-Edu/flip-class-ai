@@ -64,6 +64,7 @@ export type Database = {
           activated_at: string | null
           created_at: string
           email: string
+          granted_plan: string | null
           id: string
           invited_by: string
           status: string
@@ -72,6 +73,7 @@ export type Database = {
           activated_at?: string | null
           created_at?: string
           email: string
+          granted_plan?: string | null
           id?: string
           invited_by: string
           status?: string
@@ -80,6 +82,7 @@ export type Database = {
           activated_at?: string | null
           created_at?: string
           email?: string
+          granted_plan?: string | null
           id?: string
           invited_by?: string
           status?: string
@@ -107,6 +110,27 @@ export type Database = {
           id?: string
           provider?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      ai_usage_log: {
+        Row: {
+          created_at: string
+          id: string
+          usage_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          usage_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          usage_type?: string
+          user_id?: string
         }
         Relationships: []
       }

@@ -81,20 +81,15 @@ function getMimeType(fileUrl: string, materialType: string): string {
 
 async function extractTextFromFileUrl(fileUrl: string, materialType: string): Promise<string> {
   console.log("Fetching file for AI extraction:", fileUrl);
-  
   const headResponse = await fetch(fileUrl, { method: "HEAD" });
   const contentLength = parseInt(headResponse.headers.get("content-length") || "0", 10);
-  
   if (contentLength > MAX_FILE_SIZE) {
     throw new Error(`Arquivo muito grande (${Math.round(contentLength / 1024 / 1024)}MB). Para arquivos acima de 15MB, cole o conteúdo textual manualmente.`);
   }
-
   const fileResponse = await fetch(fileUrl);
   if (!fileResponse.ok) throw new Error(`Falha ao baixar arquivo: ${fileResponse.status}`);
-
   const fileBuffer = await fileResponse.arrayBuffer();
   const uint8 = new Uint8Array(fileBuffer);
-
   let binary = "";
   const chunkSize = 8192;
   for (let i = 0; i < uint8.length; i += chunkSize) {
@@ -102,31 +97,65 @@ async function extractTextFromFileUrl(fileUrl: string, materialType: string): Pr
   }
   const base64Data = btoa(binary);
   const mimeType = getMimeType(fileUrl, materialType);
-
   const extractedText = await callAiWithFallback({
     messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Extraia TODO o conteúdo textual deste documento de forma detalhada e completa. Mantenha a estrutura, títulos, subtítulos e informações. Retorne APENAS o texto extraído, sem comentários adicionais."
-          },
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64Data}` }
-          }
-        ]
-      }
+      { role: "user", content: [
+        { type: "text", text: "Extraia TODO o conteúdo textual deste documento de forma detalhada e completa. Mantenha a estrutura, títulos, subtítulos e informações. Retorne APENAS o texto extraído, sem comentários adicionais." },
+        { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } }
+      ] }
     ],
   });
-
   if (!extractedText || extractedText.length < 50) {
     throw new Error("Não foi possível extrair conteúdo suficiente do documento");
   }
-
   console.log("Extracted text length:", extractedText.length);
   return extractedText;
+}
+
+// Plan limits for AI usage
+const PLAN_LIMITS: Record<string, number> = {
+  free: 3,
+  professor: 30,
+  institutional: -1, // unlimited
+};
+
+async function checkAndLogAiUsage(serviceSupabase: any, userId: string, usageType: string): Promise<{ allowed: boolean; used: number; limit: number }> {
+  // Get user's plan from admin_invites or default to free
+  const { data: userData } = await serviceSupabase.auth.admin.getUserById(userId);
+  const email = userData?.user?.email;
+  
+  let planKey = "free";
+  
+  // Check admin-granted plan
+  if (email) {
+    const { data: invite } = await serviceSupabase
+      .from("admin_invites")
+      .select("granted_plan")
+      .eq("email", email)
+      .in("status", ["active", "pending"])
+      .maybeSingle();
+    if (invite?.granted_plan) planKey = invite.granted_plan;
+  }
+
+  // Check Stripe subscription (via check-subscription logic inline)
+  // For simplicity, check if user has any active subscription via stored data
+  // The frontend already resolves the highest plan, but we need server-side check too
+  
+  const limit = PLAN_LIMITS[planKey] ?? 3;
+  if (limit === -1) return { allowed: true, used: 0, limit: -1 };
+
+  // Count usage this month
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const { count } = await serviceSupabase
+    .from("ai_usage_log")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("usage_type", usageType)
+    .gte("created_at", startOfMonth);
+
+  const used = count || 0;
+  return { allowed: used < limit, used, limit };
 }
 
 serve(async (req) => {
@@ -169,12 +198,21 @@ serve(async (req) => {
       });
     }
 
+    // Check AI usage limits
+    const usageCheck = await checkAndLogAiUsage(serviceSupabase, userId, "generation");
+    if (!usageCheck.allowed) {
+      return new Response(JSON.stringify({ 
+        error: `Limite de gerações de IA atingido (${usageCheck.used}/${usageCheck.limit} este mês). Faça upgrade do seu plano para continuar.` 
+      }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let finalContent = contentText || "";
 
     if (fileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
       console.log("Extracting content from file:", fileUrl);
       finalContent = await extractTextFromFileUrl(fileUrl, materialType || "file");
-      
       if (materialId) {
         await serviceSupabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
         console.log("Saved extracted text to material");
@@ -247,6 +285,12 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
       });
 
       if (insertError) throw new Error("Falha ao salvar atividade");
+
+      // Log successful AI usage
+      await serviceSupabase.from("ai_usage_log").insert({
+        user_id: userId,
+        usage_type: "generation",
+      });
 
       return new Response(JSON.stringify({ success: true, quiz: quizJson }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

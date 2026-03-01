@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useFeatureGate } from "@/hooks/useFeatureGate";
+import UpgradeGate from "@/components/UpgradeGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +33,7 @@ interface QuizData {
 
 const QuestionBank = () => {
   const { user, loading: authLoading } = useAuth();
+  const { canUseQuestionBank } = useFeatureGate();
   const [items, setItems] = useState<QuestionBankItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -130,7 +133,7 @@ const QuestionBank = () => {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
 
-  return (
+  const bankContent = (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -189,10 +192,7 @@ const QuestionBank = () => {
                     {item.tags && item.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {item.tags.map((tag, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-muted-foreground"
-                          >
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-muted-foreground">
                             <Tag className="w-3 h-3" />
                             {tag}
                           </span>
@@ -228,7 +228,6 @@ const QuestionBank = () => {
 
           {selectedItem && editData && (
             <div className="space-y-4 pt-2">
-              {/* Title & Description */}
               {editing ? (
                 <div className="space-y-3">
                   <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Título" />
@@ -241,7 +240,6 @@ const QuestionBank = () => {
                 </div>
               )}
 
-              {/* Questions by level */}
               {editData.levels?.map((level, li) => (
                 <div key={li} className="space-y-3">
                   <h4 className="font-display font-semibold text-sm text-primary border-b border-border pb-1">
@@ -252,18 +250,12 @@ const QuestionBank = () => {
                       <div className="flex items-start gap-2">
                         <span className="text-xs font-bold text-muted-foreground mt-0.5 shrink-0">Q{qi + 1}</span>
                         {editing ? (
-                          <Textarea
-                            value={q.question}
-                            onChange={(e) => updateQuestion(li, qi, "question", e.target.value)}
-                            className="text-sm min-h-[60px]"
-                          />
+                          <Textarea value={q.question} onChange={(e) => updateQuestion(li, qi, "question", e.target.value)} className="text-sm min-h-[60px]" />
                         ) : (
                           <p className="text-sm font-medium">{q.question}</p>
                         )}
                       </div>
-                      {q.context && (
-                        <p className="text-xs text-muted-foreground italic ml-6">Contexto: {q.context}</p>
-                      )}
+                      {q.context && <p className="text-xs text-muted-foreground italic ml-6">Contexto: {q.context}</p>}
                       {q.options && q.options.length > 0 && (
                         <div className="ml-6 space-y-1">
                           {q.options.map((opt, oi) => (
@@ -272,11 +264,7 @@ const QuestionBank = () => {
                                 {String.fromCharCode(65 + oi)})
                               </span>
                               {editing ? (
-                                <Input
-                                  value={opt}
-                                  onChange={(e) => updateOption(li, qi, oi, e.target.value)}
-                                  className="text-sm h-8"
-                                />
+                                <Input value={opt} onChange={(e) => updateOption(li, qi, oi, e.target.value)} className="text-sm h-8" />
                               ) : (
                                 <span className={`text-sm ${opt === q.correct_answer ? "font-medium text-primary" : ""}`}>{opt}</span>
                               )}
@@ -287,11 +275,7 @@ const QuestionBank = () => {
                       <div className="ml-6">
                         <span className="text-xs text-muted-foreground">Resposta correta: </span>
                         {editing ? (
-                          <Input
-                            value={q.correct_answer}
-                            onChange={(e) => updateQuestion(li, qi, "correct_answer", e.target.value)}
-                            className="text-sm h-8 mt-1"
-                          />
+                          <Input value={q.correct_answer} onChange={(e) => updateQuestion(li, qi, "correct_answer", e.target.value)} className="text-sm h-8 mt-1" />
                         ) : (
                           <span className="text-xs font-medium text-primary">{q.correct_answer}</span>
                         )}
@@ -301,7 +285,6 @@ const QuestionBank = () => {
                 </div>
               ))}
 
-              {/* Actions */}
               <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 {editing ? (
                   <>
@@ -323,6 +306,12 @@ const QuestionBank = () => {
         </DialogContent>
       </Dialog>
     </div>
+  );
+
+  return (
+    <UpgradeGate allowed={canUseQuestionBank()} featureName="Banco de Atividades" planRequired="Professor">
+      {bankContent}
+    </UpgradeGate>
   );
 };
 

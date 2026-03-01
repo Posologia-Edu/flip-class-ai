@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Sparkles, Building2, GraduationCap, ArrowLeft, Loader2, Crown } from "lucide-react";
+import { Check, Sparkles, Building2, GraduationCap, Loader2, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,18 +53,13 @@ const planIcons: Record<PlanKey, React.ReactNode> = {
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { planKey: currentPlan, loading: subLoading } = useSubscription(user?.id);
+  const { planKey: currentPlan, subscribed, loading: subLoading } = useSubscription(user?.id);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
   const handleCheckout = async (planKey: PlanKey) => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-
+    if (!user) { navigate("/auth"); return; }
     const plan = PLANS[planKey];
     if (!plan.price_id) return;
-
     setCheckoutLoading(planKey);
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
@@ -92,11 +87,8 @@ export default function Pricing() {
   return (
     <div className="bg-background">
       <div className="max-w-5xl mx-auto px-6 py-8">
-
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold font-heading mb-4">
-            Escolha o plano ideal para você
-          </h1>
+          <h1 className="text-4xl font-bold font-heading mb-4">Escolha o plano ideal para você</h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Comece gratuitamente e evolua conforme suas necessidades. Todos os planos incluem 14 dias de teste grátis.
           </p>
@@ -109,18 +101,9 @@ export default function Pricing() {
             const isCurrent = currentPlan === key;
 
             return (
-              <Card
-                key={key}
-                className={`relative flex flex-col ${
-                  isPopular
-                    ? "border-primary shadow-lg scale-105 ring-2 ring-primary/20"
-                    : "border-border"
-                }`}
-              >
+              <Card key={key} className={`relative flex flex-col ${isPopular ? "border-primary shadow-lg scale-105 ring-2 ring-primary/20" : "border-border"}`}>
                 {isPopular && (
-                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">
-                    Mais Popular
-                  </Badge>
+                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">Mais Popular</Badge>
                 )}
                 {isCurrent && (
                   <Badge className="absolute -top-3 right-4 bg-accent text-accent-foreground">
@@ -129,18 +112,14 @@ export default function Pricing() {
                 )}
 
                 <CardHeader className="text-center pb-2">
-                  <div className="mx-auto mb-3 p-3 rounded-full bg-primary/10 text-primary w-fit">
-                    {planIcons[key]}
-                  </div>
+                  <div className="mx-auto mb-3 p-3 rounded-full bg-primary/10 text-primary w-fit">{planIcons[key]}</div>
                   <CardTitle className="text-xl">{plan.name}</CardTitle>
                   <CardDescription>
                     {plan.price === 0 ? (
                       <span className="text-3xl font-bold text-foreground">Grátis</span>
                     ) : (
                       <>
-                        <span className="text-3xl font-bold text-foreground">
-                          R$ {plan.price.toFixed(2).replace(".", ",")}
-                        </span>
+                        <span className="text-3xl font-bold text-foreground">R$ {plan.price.toFixed(2).replace(".", ",")}</span>
                         <span className="text-muted-foreground">/mês</span>
                         <p className="text-xs text-muted-foreground mt-1">14 dias grátis, cancele quando quiser</p>
                       </>
@@ -161,24 +140,17 @@ export default function Pricing() {
 
                 <CardFooter>
                   {isCurrent ? (
-                    <Button
-                      className="w-full"
-                      variant="outline"
-                      onClick={handleManage}
-                      disabled={key === "free"}
-                    >
+                    <Button className="w-full" variant="outline" onClick={handleManage} disabled={key === "free"}>
                       {key === "free" ? "Plano Atual" : "Gerenciar Assinatura"}
                     </Button>
+                  ) : subscribed && key !== "free" ? (
+                    <Button className="w-full" variant={isPopular ? "default" : "outline"} onClick={() => handleCheckout(key)} disabled={checkoutLoading !== null || subLoading}>
+                      {checkoutLoading === key ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Alterar para este plano
+                    </Button>
                   ) : (
-                    <Button
-                      className="w-full"
-                      variant={isPopular ? "default" : "outline"}
-                      onClick={() => handleCheckout(key)}
-                      disabled={checkoutLoading !== null || subLoading || key === "free"}
-                    >
-                      {checkoutLoading === key ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : null}
+                    <Button className="w-full" variant={isPopular ? "default" : "outline"} onClick={() => handleCheckout(key)} disabled={checkoutLoading !== null || subLoading || key === "free"}>
+                      {checkoutLoading === key ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       {key === "free" ? "Plano Atual" : "Iniciar Teste Grátis"}
                     </Button>
                   )}
