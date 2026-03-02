@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
             .update({
               status: "active",
               activated_at: new Date().toISOString(),
-              granted_plan: "institutional",
+              granted_plan: "teacher",
             })
             .eq("id", anyExisting.id);
 
@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
             .insert({
               email,
               invited_by: userId,
-              granted_plan: "institutional",
+              granted_plan: "teacher",
               status: "active",
               activated_at: new Date().toISOString(),
             });
@@ -392,7 +392,7 @@ Deno.serve(async (req) => {
         .insert({
           email,
           invited_by: userId,
-          granted_plan: "institutional",
+          granted_plan: "teacher",
           status: "pending",
         });
 
