@@ -1,0 +1,1 @@
+ALTER TABLE public.admin_invites ALTER COLUMN granted_plan SET DEFAULT 'teacher';
