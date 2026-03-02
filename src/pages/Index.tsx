@@ -1,12 +1,48 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BookOpen, Users, Sparkles, ArrowRight, FileText } from "lucide-react";
+import {
+  BookOpen, Users, Sparkles, ArrowRight, FileText, Brain,
+  BarChart3, Shield, MessageSquare, ClipboardCheck, Upload
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import FloatingAuth from "@/components/FloatingAuth";
+
+const features = [
+  {
+    icon: <Brain className="w-5 h-5" />,
+    title: "Quizzes gerados por IA",
+    desc: "Atividades com múltiplos níveis de dificuldade criadas automaticamente a partir do material.",
+  },
+  {
+    icon: <ClipboardCheck className="w-5 h-5" />,
+    title: "Correção com IA",
+    desc: "Respostas dissertativas avaliadas por inteligência artificial com feedback detalhado.",
+  },
+  {
+    icon: <BarChart3 className="w-5 h-5" />,
+    title: "Analytics em tempo real",
+    desc: "Acompanhe engajamento, desempenho por questão e identifique alunos em risco.",
+  },
+  {
+    icon: <MessageSquare className="w-5 h-5" />,
+    title: "Fórum de Discussão",
+    desc: "Espaço para dúvidas e debates integrado a cada sala de aula.",
+  },
+  {
+    icon: <Shield className="w-5 h-5" />,
+    title: "Peer Review",
+    desc: "Avaliação entre pares com critérios personalizáveis pelo professor.",
+  },
+  {
+    icon: <Upload className="w-5 h-5" />,
+    title: "Materiais diversos",
+    desc: "Suporte a vídeos, artigos, PDFs e links — tudo organizado por sala.",
+  },
+];
 
 const Index = () => {
   const [pin, setPin] = useState("");
@@ -31,7 +67,6 @@ const Index = () => {
       toast({ title: "Sala não encontrada", description: "Verifique o PIN e tente novamente.", variant: "destructive" });
       return;
     }
-    // Check if room is expired
     const now = new Date();
     const isExpiredByDate = data.expire_at && new Date(data.expire_at) < now;
     const isExpiredByIdle = data.last_student_activity_at && 
@@ -92,7 +127,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background sticky top-0 z-30">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <BookOpen className="w-4 h-4 text-primary-foreground" />
@@ -102,7 +137,8 @@ const Index = () => {
         <FloatingAuth />
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6">
+      {/* Hero */}
+      <section className="flex-1 flex items-center justify-center px-6 py-12 md:py-0">
         <div className="max-w-5xl w-full grid md:grid-cols-2 gap-16 items-center">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
             <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-sm font-medium mb-6">
@@ -110,20 +146,24 @@ const Index = () => {
               Sala de Aula Invertida com IA
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground leading-tight mb-4">
-              Aprenda no seu ritmo, prove seu{" "}
-              <span className="text-gradient-primary">conhecimento</span>
+              Ensine melhor.{" "}
+              <span className="text-gradient-primary">Avalie com IA.</span>
             </h1>
             <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-              Estude os materiais primeiro, depois enfrente atividades geradas por IA que escalam em complexidade. Entre com o PIN da sua sala para começar.
+              Crie salas, envie materiais, gere quizzes inteligentes e acompanhe o desempenho dos alunos em tempo real — tudo em uma plataforma completa para a sala de aula invertida.
             </p>
-            <div className="flex items-center gap-8 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-primary" />
                 Acesso com PIN + email
               </div>
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-accent" />
-                Quiz gerado por IA
+                <Brain className="w-4 h-4 text-primary" />
+                Geração e correção por IA
+              </div>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                Analytics avançado
               </div>
             </div>
           </motion.div>
@@ -192,20 +232,64 @@ const Index = () => {
             </div>
           </motion.div>
         </div>
-      </main>
+      </section>
 
-      {/* Teacher CTA Section */}
-      <section className="py-16 px-6 border-t border-border bg-card">
+      {/* Features Grid */}
+      <section className="py-20 px-6 bg-card border-t border-border">
+        <div className="max-w-5xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12"
+          >
+            <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-3">
+              Tudo o que você precisa para a sala invertida
+            </h2>
+            <p className="text-muted-foreground max-w-lg mx-auto">
+              Recursos pensados para professores que querem mais engajamento e menos trabalho operacional.
+            </p>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {features.map((f, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="bg-background rounded-xl border border-border p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-4">
+                  {f.icon}
+                </div>
+                <h3 className="font-display font-semibold text-foreground mb-1">{f.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Teacher CTA */}
+      <section className="py-16 px-6 border-t border-border bg-background">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-3">
-            É professor? Crie salas inteligentes
+            É professor? Comece gratuitamente
           </h2>
           <p className="text-muted-foreground mb-8 max-w-lg mx-auto leading-relaxed">
-            Envie materiais, gere quizzes com IA e acompanhe o desempenho dos seus alunos em tempo real — tudo em uma única plataforma.
+            Crie sua primeira sala, envie materiais e gere atividades com IA. Planos a partir de R$ 0 com upgrade flexível.
           </p>
-          <Button size="lg" className="font-semibold" onClick={() => navigate("/auth")}>
-            Começar como Professor <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button size="lg" className="font-semibold" onClick={() => navigate("/auth")}>
+              Criar Conta Grátis <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+            <Button size="lg" variant="outline" className="font-semibold" onClick={() => navigate("/pricing")}>
+              Ver Planos
+            </Button>
+          </div>
         </div>
       </section>
 
