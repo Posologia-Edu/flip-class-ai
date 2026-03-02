@@ -1,0 +1,1 @@
+UPDATE public.admin_invites SET granted_plan = 'professor' WHERE granted_plan = 'teacher';
