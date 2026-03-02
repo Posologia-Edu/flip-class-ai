@@ -334,72 +334,18 @@ Deno.serve(async (req) => {
       // New user OR unconfirmed user (created by previous invite but never signed in)
       const origin2 = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
 
-      // Generate the invite link (does NOT send email)
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: "invite",
-        email,
-        options: {
-          redirectTo: `${origin2}/reset-password`,
-        },
+      // Use native invite flow so auth email delivery is handled by the auth system
+      const { data: invitedData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: { invited_by_admin: true },
+        redirectTo: `${origin2}/reset-password`,
       });
 
-      if (linkError) {
-        console.error("Error generating invite link:", linkError);
-        return new Response(JSON.stringify({ error: `Erro ao gerar convite: ${linkError.message}` }), {
+      if (inviteError) {
+        console.error("Error sending auth invite:", inviteError);
+        return new Response(JSON.stringify({ error: `Erro ao enviar convite: ${inviteError.message}` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      // Build the confirmation URL with the token
-      const actionLink = linkData?.properties?.action_link;
-      if (!actionLink) {
-        console.error("No action_link in generateLink response:", linkData);
-        return new Response(JSON.stringify({ error: "Erro ao gerar link de convite" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Email sending is handled later with fallback sender (non-blocking)
-
-      const emailHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"></head>
-        <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Roboto,sans-serif;">
-          <div style="max-width:520px;margin:40px auto;padding:32px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
-            <div style="text-align:center;margin-bottom:24px;">
-              <h1 style="font-size:24px;color:#0d9488;margin:0;">FlipClass</h1>
-            </div>
-            <h2 style="font-size:18px;color:#111827;margin-bottom:16px;">Você foi convidado!</h2>
-            <p style="font-size:15px;color:#374151;line-height:1.6;">
-              Você recebeu um convite para fazer parte da plataforma <strong>FlipClass</strong> como professor.
-            </p>
-            <p style="font-size:15px;color:#374151;line-height:1.6;">
-              Clique no botão abaixo para criar sua senha e acessar o sistema:
-            </p>
-            <div style="text-align:center;margin:32px 0;">
-              <a href="${actionLink}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
-                Aceitar Convite
-              </a>
-            </div>
-            <p style="font-size:13px;color:#6b7280;line-height:1.5;">
-              Se o botão não funcionar, copie e cole este link no seu navegador:<br>
-              <a href="${actionLink}" style="color:#0d9488;word-break:break-all;">${actionLink}</a>
-            </p>
-            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-            <p style="font-size:12px;color:#9ca3af;text-align:center;">
-              FlipClass — Plataforma de Sala de Aula Invertida
-            </p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      const sendResult = await sendEmailWithFallback({
-        to: email,
-        subject: "Você foi convidado para o FlipClass!",
-        html: emailHtml,
-      });
 
       // Save invite as pending FIRST — idempotent by email
       const { error: insertError } = await adminClient
@@ -420,27 +366,18 @@ Deno.serve(async (req) => {
       }
 
       // Create/update profile for the newly invited user
-      if (linkData?.user) {
+      if (invitedData?.user) {
         await adminClient
           .from("profiles")
           .upsert({
-            user_id: linkData.user.id,
+            user_id: invitedData.user.id,
             approval_status: "approved",
             approved_by: userId,
             approved_at: new Date().toISOString(),
           }, { onConflict: "user_id" });
       }
 
-      // Try to send the email — non-blocking
-      let emailWarning = null;
-      if (!sendResult.ok) {
-        console.error("Resend error:", sendResult.error);
-        emailWarning = "Convite salvo, mas houve um erro ao enviar o email. Verifique a configuração do domínio de email.";
-      } else if (sendResult.warning) {
-        emailWarning = sendResult.warning;
-      }
-
-      return new Response(JSON.stringify({ success: true, warning: emailWarning }), {
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
