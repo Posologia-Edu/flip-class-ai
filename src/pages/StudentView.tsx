@@ -423,6 +423,9 @@ const StudentView = () => {
     const quizDuration = Math.round((Date.now() - quizStartTime.current) / 1000);
     logActivity("quiz_complete", undefined, quizDuration);
 
+    // Update sessionData locally so progress bar reflects completion immediately
+    setSessionData(prev => prev ? { ...prev, completed_at: new Date().toISOString(), score: Object.keys(answers).length, answers: answers as any } : prev);
+
     if (sessionId) {
       await supabase.functions.invoke("student-session", {
         body: {

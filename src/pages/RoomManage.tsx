@@ -675,7 +675,7 @@ const RoomManage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 bg-card flex items-center gap-4">
+      <header className="border-b border-border px-6 py-4 bg-card flex items-center gap-4 sticky top-0 z-20">
         <div>
           <h1 className="font-display text-xl font-bold">{room.title}</h1>
           <p className="text-sm text-muted-foreground">PIN: <span className="font-mono font-bold text-foreground">{room.pin_code}</span></p>
