@@ -67,6 +67,7 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
   const totalQuestions = quizData?.levels?.reduce((s, l) => s + (l.questions?.length || 0), 0) || 0;
   const answeredQuestions = Object.keys(answers).length;
   const quizProgress = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
+  const finalQuizProgress = isCompleted ? 100 : quizProgress;
 
   const totalTimeSeconds = activityLogs.reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
   const totalMinutes = Math.round(totalTimeSeconds / 60);
@@ -129,16 +130,16 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
             <span className="text-muted-foreground">{materialsProgress}%</span>
           </div>
           <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${materialsProgress}%` }} transition={{ duration: 0.8, ease: "easeOut" }} className="h-full bg-primary rounded-full" />
+            <motion.div key={`mat-${materialsProgress}`} initial={{ width: 0 }} animate={{ width: `${materialsProgress}%` }} transition={{ duration: 0.8, ease: "easeOut" }} className="h-full bg-primary rounded-full" />
           </div>
         </div>
         <div>
           <div className="flex justify-between text-sm mb-1.5">
             <span className="text-foreground font-medium">Atividade</span>
-            <span className="text-muted-foreground">{isCompleted ? "100" : quizProgress}%</span>
+            <span className="text-muted-foreground">{finalQuizProgress}%</span>
           </div>
           <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${isCompleted ? 100 : quizProgress}%` }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} className="h-full bg-level-easy rounded-full" />
+            <motion.div key={`quiz-${finalQuizProgress}`} initial={{ width: 0 }} animate={{ width: `${finalQuizProgress}%` }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} className={`h-full rounded-full ${finalQuizProgress >= 100 ? "bg-level-easy" : "bg-level-medium"}`} />
           </div>
         </div>
       </motion.div>
@@ -177,6 +178,13 @@ const getMaterialIcon = (type: string) => {
     case "presentation": return Presentation;
     default: return FileText;
   }
+};
+
+// Helper: detect Spotify URLs
+const isSpotifyUrl = (url: string) => /open\.spotify\.com/i.test(url);
+const getSpotifyEmbedUrl = (url: string) => {
+  // Convert open.spotify.com/episode/xxx or /show/xxx to embed
+  return url.replace("open.spotify.com", "open.spotify.com/embed");
 };
 
 const StudentView = () => {
@@ -274,6 +282,12 @@ const StudentView = () => {
       const sessionResult = await res.json();
       if (sessionResult && !sessionResult.error) {
         setActivityLogs(sessionResult.activityLogs || []);
+        // Populate viewedMaterials ref from existing logs
+        const viewedIds = (sessionResult.activityLogs || [])
+          .filter((l: any) => l.activity_type === "material_view" && l.material_id)
+          .map((l: any) => l.material_id);
+        viewedIds.forEach((id: string) => viewedMaterials.current.add(id));
+
         if (sessionResult.session) {
           setSessionData(sessionResult.session);
           if (sessionResult.session.completed_at) {
@@ -301,7 +315,29 @@ const StudentView = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Real-time: only listen for teacher_feedback changes, don't poll everything
+  // Fetch only teacher feedbacks (lightweight)
+  const fetchFeedbacks = useCallback(async () => {
+    if (!sessionId) return;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}`, {
+        headers: { "apikey": supabaseKey, "Content-Type": "application/json" },
+      });
+      const result = await res.json();
+      if (result?.teacherFeedbacks) {
+        const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
+        for (const fb of result.teacherFeedbacks) {
+          fbMap[fb.question_key] = { feedback_text: fb.feedback_text, grade: fb.grade };
+        }
+        setTeacherFeedbacks(fbMap);
+      }
+    } catch {
+      // ignore
+    }
+  }, [sessionId]);
+
+  // Real-time subscriptions + polling fallback for feedback
   useEffect(() => {
     if (!roomId || !sessionId) return;
 
@@ -331,16 +367,19 @@ const StudentView = () => {
         table: "teacher_feedback",
         filter: `session_id=eq.${sessionId}`,
       }, () => {
-        // Update feedbacks and show them automatically
-        fetchData();
+        fetchFeedbacks();
         setShowFeedback(true);
       })
       .subscribe();
 
+    // Polling fallback for feedback (every 15s) since student may not have auth for realtime
+    const feedbackPoll = setInterval(fetchFeedbacks, 15000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(feedbackPoll);
     };
-  }, [roomId, sessionId, fetchData]);
+  }, [roomId, sessionId, fetchData, fetchFeedbacks]);
 
   useEffect(() => {
     if (!room?.unlock_at || unlocked) return;
@@ -378,7 +417,6 @@ const StudentView = () => {
       const start = accumulated;
       accumulated += act.levels.length;
       if (levelIndex >= start && levelIndex < accumulated) {
-        // Show title only at the first level of each activity
         if (levelIndex === start) return act.title;
         return null;
       }
@@ -387,7 +425,6 @@ const StudentView = () => {
   };
 
   const handleSubmitAnswer = () => {
-    // Save answer and auto-advance to next question
     setShowResult(false);
     setOpenAnswer("");
     if (currentQuestion < (currentLevelData?.questions?.length || 0) - 1) {
@@ -450,9 +487,7 @@ const StudentView = () => {
               className="w-full h-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              onLoad={() => {
-                // Track when iframe is interacted with (approximation via focus)
-              }}
+              onLoad={() => handleMediaPlay(mat.id)}
             />
           </div>
           <div className="p-4 flex items-center justify-between">
@@ -507,6 +542,9 @@ const StudentView = () => {
     }
 
     if (mat.type === "podcast") {
+      const url = mat.url || "";
+      const spotify = isSpotifyUrl(url);
+
       return (
         <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
@@ -514,26 +552,42 @@ const StudentView = () => {
               <Headphones className="w-5 h-5 text-muted-foreground" />
               <h3 className="font-medium text-card-foreground">{mat.title || "Podcast"}</h3>
             </div>
-            {mat.url && (
+            {url && spotify ? (
               <div className="space-y-3">
-                <audio
-                  controls
-                  className="w-full"
-                  preload="auto"
-                  onPlay={() => handleMediaPlay(mat.id)}
-                  crossOrigin="anonymous"
-                >
-                  <source src={mat.url} type="audio/mpeg" />
-                  <source src={mat.url} type="audio/ogg" />
-                  <source src={mat.url} type="audio/wav" />
-                  <source src={mat.url} />
-                  Seu navegador não suporta áudio.
-                </audio>
-                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => { e.stopPropagation(); handleViewMaterial(mat.id); }}>
-                  <ExternalLink className="w-4 h-4" /> Abrir em nova aba
-                </a>
+                <iframe
+                  src={getSpotifyEmbedUrl(url)}
+                  width="100%"
+                  height="152"
+                  frameBorder="0"
+                  allow="encrypted-media"
+                  className="rounded-lg"
+                  onLoad={() => handleMediaPlay(mat.id)}
+                />
               </div>
-            )}
+            ) : url ? (
+              <div className="space-y-3">
+                <div className="bg-secondary rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                      <Headphones className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{mat.title || "Podcast"}</p>
+                      <p className="text-xs text-muted-foreground">Player não disponível para este host</p>
+                    </div>
+                  </div>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                    onClick={() => handleMediaPlay(mat.id)}
+                  >
+                    <ExternalLink className="w-4 h-4" /> Ouvir
+                  </a>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       );
@@ -719,7 +773,10 @@ const StudentView = () => {
             </motion.div>
           </AnimatePresence>
         ) : (
-          <div className="text-center py-16 text-muted-foreground"><p>Nenhuma atividade disponível ainda.</p></div>
+          <div className="text-center py-16 text-muted-foreground">
+            <BookOpen className="w-8 h-8 mx-auto mb-2" />
+            <p>Nenhuma atividade disponível ainda.</p>
+          </div>
         )}
       </main>
     </div>

@@ -196,6 +196,17 @@ const RoomManage = () => {
         table: "student_activity_logs",
         filter: `room_id=eq.${roomId}`,
       }, fetchData)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "teacher_feedback",
+      }, (payload: any) => {
+        // Only refresh if this feedback is for a session in this room
+        const sessionIds = sessions.map(s => s.id);
+        if (payload.new && sessionIds.includes(payload.new.session_id)) {
+          fetchData();
+        }
+      })
       .subscribe();
 
     return () => {
