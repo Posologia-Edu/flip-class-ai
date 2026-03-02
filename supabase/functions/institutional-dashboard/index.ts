@@ -210,11 +210,14 @@ Deno.serve(async (req) => {
         .eq("email", email)
         .maybeSingle();
 
-      if (existing && existing.invited_by === userId && ["active", "pending"].includes(existing.status)) {
-        return new Response(JSON.stringify({ success: true, warning: "Este professor já foi convidado." }), {
+      if (existing && existing.invited_by === userId && existing.status === "active") {
+        return new Response(JSON.stringify({ success: true, warning: "Este professor já foi convidado e já está ativo." }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // If invite is pending for this same admin, allow re-send attempt.
+      // We intentionally do not early-return here so the auth invite email can be sent again.
 
       // Check if user already exists in auth
       let existingUser: any = null;
