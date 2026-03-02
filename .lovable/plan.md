@@ -1,110 +1,43 @@
 
 
-# Implementacao das 3 Funcionalidades do Plano Institucional
+## Diferenciar Analytics entre Planos e Atualizar Pagina de Precos
 
-## 1. Exportacao de Relatorios (PDF/CSV)
+### Problema Atual
+O componente `CrossRoomAnalytics` (comparacao entre salas) e exibido para qualquer usuario com 2+ salas, sem restricao de plano. Nao ha diferenca real entre o analytics do Professor e do Institucional, exceto os botoes de exportacao.
 
-Adicionar botoes de exportacao na pagina de Analytics e no AnalyticsReport para que professores do plano Institucional possam baixar relatorios.
+### O que muda
 
-**Abordagem:**
-- **CSV**: Gerar client-side usando JS puro (sem dependencia extra). Exportar dados de sessoes, notas, tempo por material e alunos em risco.
-- **PDF**: Usar `window.print()` com CSS de impressao dedicado, ou gerar via uma abordagem simples de HTML-to-PDF no cliente. Para manter simplicidade, usaremos `window.print()` com um layout otimizado para impressao.
-- Gate: Apenas planos `institutional` (ja definido como `advanced_analytics: true` + checagem adicional de plano).
+**Plano Professor -- Analytics Individual:**
+- Cards de resumo (salas, alunos, concluidos, taxa geral, tempo medio)
+- Tendencia de engajamento (ultimos 14 dias)
+- Detalhamento sala a sala (expandir para ver desempenho por questao)
+- Relatorio por sala (tempo por material, alunos em risco, distribuicao de notas)
 
-**Arquivos modificados:**
-- `src/components/AnalyticsReport.tsx` -- Adicionar botoes "Exportar CSV" e "Exportar PDF"
-- `src/pages/AnalyticsPage.tsx` -- Adicionar botoes de exportacao no nivel geral (cross-room)
-- `src/hooks/useFeatureGate.ts` -- Adicionar `canExportReports()` (retorna `effectivePlan === "institutional"`)
+**Plano Institucional -- Analytics Completo (tudo acima +):**
+- Comparacao cruzada entre salas (graficos lado a lado de conclusao e media)
+- Alertas de salas com baixa conclusao (<50%)
+- Exportacao de relatorios (CSV e PDF)
+- Ranking de salas por desempenho
+- Metricas agregadas de todos os professores vinculados (via Dashboard Institucional)
 
----
+### Alteracoes Planejadas
 
-## 2. Painel Multi-professores
+**1. `src/hooks/useFeatureGate.ts`**
+- Adicionar funcao `canUseCrossRoomAnalytics()` que retorna `true` apenas para plano `institutional`
 
-Permitir que instituicoes vejam e gerenciem as salas de todos os professores vinculados. Um usuario com plano Institucional tera acesso a uma pagina que agrega dados de todos os professores convidados pela mesma instituicao.
+**2. `src/pages/AnalyticsPage.tsx`**
+- Condicionar a renderizacao de `CrossRoomAnalytics` a `canUseCrossRoomAnalytics()`
+- Quando o professor nao tem acesso, exibir um card de preview borrado com botao "Fazer upgrade para Institucional" no lugar do componente de comparacao cruzada
 
-**Abordagem:**
-- Criar nova pagina `src/pages/InstitutionalDashboard.tsx`
-- Buscar todos os professores cujo email esta em `admin_invites` onde `invited_by = user.id` e `status = 'active'`
-- Para cada professor, buscar suas salas e estatisticas
-- Exibir em tabela com filtros por professor
-- Adicionar rota `/dashboard/institutional` e link no sidebar (visivel apenas para plano institucional)
+**3. `src/pages/Pricing.tsx`**
+- Atualizar as features listadas para serem mais descritivas:
+  - Professor: trocar "Analytics completo" por "Analytics por sala (engajamento, desempenho por questao, alunos em risco)"
+  - Institucional: trocar "Analytics cruzado entre salas" por "Analytics cruzado entre salas (comparacao de conclusao, media, alertas de baixa performance)" e adicionar "Ranking de salas por desempenho"
 
-**Arquivos modificados/criados:**
-- `src/pages/InstitutionalDashboard.tsx` (novo)
-- `src/App.tsx` -- Adicionar rota
-- `src/components/AppSidebar.tsx` -- Adicionar link condicional
-- `src/hooks/useFeatureGate.ts` -- Adicionar `canUseMultiTeacher()`
+### Detalhes Tecnicos
 
-**Banco de dados:**
-- Nenhuma migracao necessaria. Usaremos `admin_invites` + `profiles` + `rooms` + `student_sessions` existentes.
-- Sera necessario criar uma RLS policy ou usar edge function para permitir que o usuario institucional leia salas de outros professores. Usaremos uma **edge function** (`institutional-dashboard`) para buscar dados com `service_role`, evitando mudancas complexas em RLS.
-
----
-
-## 3. White-label Basico
-
-Permitir que instituicoes personalizem logo e cores da plataforma.
-
-**Abordagem:**
-- Criar tabela `institution_settings` com colunas: `id`, `user_id`, `logo_url`, `primary_color`, `institution_name`, `created_at`, `updated_at`
-- Adicionar secao de configuracao na pagina `MyAccount` (ou na nova pagina institucional)
-- Upload de logo no bucket `materials` (ja existente e publico)
-- Aplicar cores e logo dinamicamente no sidebar e header
-
-**Arquivos modificados/criados:**
-- Migracao: criar tabela `institution_settings`
-- `src/pages/InstitutionalDashboard.tsx` -- Adicionar aba de configuracoes white-label
-- `src/components/AppSidebar.tsx` -- Carregar e exibir logo personalizado
-- `src/hooks/useFeatureGate.ts` -- Adicionar `canUseWhiteLabel()`
-
----
-
-## Detalhes Tecnicos
-
-### Nova Edge Function: `institutional-dashboard`
-```text
-POST /institutional-dashboard
-Body: { action: "get_teachers" | "get_teacher_rooms" }
-- Autentica usuario
-- Verifica se tem plano institucional
-- Busca professores vinculados via admin_invites
-- Retorna dados agregados
-```
-
-### Migracao SQL
-```sql
-CREATE TABLE public.institution_settings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  logo_url text,
-  primary_color text DEFAULT '#0d9488',
-  institution_name text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(user_id)
-);
-
-ALTER TABLE public.institution_settings ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can manage own settings"
-  ON public.institution_settings FOR ALL
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-```
-
-### Feature Gate (novas funcoes)
-```text
-canExportReports() -> effectivePlan === "institutional"
-canUseMultiTeacher() -> effectivePlan === "institutional"
-canUseWhiteLabel() -> effectivePlan === "institutional"
-```
-
-### Sequencia de Implementacao
-1. Migracao do banco (institution_settings)
-2. useFeatureGate -- adicionar 3 novas funcoes
-3. Exportacao PDF/CSV no AnalyticsReport e AnalyticsPage
-4. Edge function institutional-dashboard
-5. Pagina InstitutionalDashboard (multi-professores + white-label)
-6. Sidebar e App.tsx -- rota e link condicional
-7. Aplicar white-label dinamico no sidebar
+- Nova funcao no `useFeatureGate`: `canUseCrossRoomAnalytics = useCallback(() => effectivePlan === "institutional", [effectivePlan])`
+- No `AnalyticsPage`, importar `canUseCrossRoomAnalytics` e usar condicionalmente no bloco que renderiza `CrossRoomAnalytics`
+- O card de upgrade usara `blur` CSS com overlay centralizado contendo icone, texto e botao de navegacao para `/pricing`
+- Nenhuma alteracao de banco de dados necessaria
 
