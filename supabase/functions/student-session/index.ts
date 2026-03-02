@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -80,13 +79,43 @@ serve(async (req) => {
           });
         }
 
-        // Verify room exists and get teacher_id
+        // Verify room exists and get teacher_id + expiration info
         const { data: room, error: roomErr } = await supabase
-          .from("rooms").select("id, teacher_id").eq("id", roomId).single();
+          .from("rooms").select("id, teacher_id, expire_at, last_student_activity_at").eq("id", roomId).single();
         if (roomErr || !room) {
           return new Response(JSON.stringify({ error: "Sala não encontrada" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 404,
+          });
+        }
+
+        // Check if room is expired
+        const now = new Date();
+        const isExpiredByDate = room.expire_at && new Date(room.expire_at) < now;
+        const isExpiredByIdle = room.last_student_activity_at && 
+          (now.getTime() - new Date(room.last_student_activity_at).getTime()) > 7 * 24 * 60 * 60 * 1000;
+        
+        if (isExpiredByDate || isExpiredByIdle) {
+          return new Response(JSON.stringify({ error: "Esta sala expirou e não está mais aceitando novos acessos." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 403,
+          });
+        }
+
+        // Check if student already has a session in this room (same email)
+        const { data: existingSession } = await supabase
+          .from("student_sessions")
+          .select("id")
+          .eq("room_id", roomId)
+          .eq("student_email", email)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingSession) {
+          // Return existing session - preserve all student data
+          return new Response(JSON.stringify({ sessionId: existingSession.id }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
@@ -107,7 +136,6 @@ serve(async (req) => {
           teacherEmail = teacherAuth?.user?.email?.toLowerCase() || "";
           
           if (teacherEmail) {
-            // Check admin invite
             const { data: invite } = await supabase
               .from("admin_invites")
               .select("granted_plan, status")
@@ -118,7 +146,6 @@ serve(async (req) => {
               adminPlan = invite.granted_plan;
             }
 
-            // Check Stripe subscription using direct fetch
             const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
             if (stripeKey) {
               const stripeGet = async (path: string) => {
@@ -149,7 +176,6 @@ serve(async (req) => {
 
         const teacherPlan = (planHierarchy[adminPlan] ?? 0) >= (planHierarchy[stripePlan] ?? 0) ? adminPlan : stripePlan;
 
-        // Get current unique student count for this room
         const { count: currentStudentCount } = await supabase
           .from("student_sessions")
           .select("student_email", { count: "exact", head: true })
@@ -172,7 +198,6 @@ serve(async (req) => {
           .eq("room_id", roomId);
         
         if (whitelist && whitelist.length > 0) {
-          // Room has a whitelist - check if student email is registered
           const { data: allowed } = await supabase
             .from("room_students")
             .select("id")

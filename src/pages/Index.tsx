@@ -25,10 +25,19 @@ const Index = () => {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.from("rooms").select("id").eq("pin_code", pin.toUpperCase()).maybeSingle();
+    const { data, error } = await supabase.from("rooms").select("id, expire_at, last_student_activity_at").eq("pin_code", pin.toUpperCase()).maybeSingle();
     setLoading(false);
     if (error || !data) {
       toast({ title: "Sala não encontrada", description: "Verifique o PIN e tente novamente.", variant: "destructive" });
+      return;
+    }
+    // Check if room is expired
+    const now = new Date();
+    const isExpiredByDate = data.expire_at && new Date(data.expire_at) < now;
+    const isExpiredByIdle = data.last_student_activity_at && 
+      (now.getTime() - new Date(data.last_student_activity_at).getTime()) > 7 * 24 * 60 * 60 * 1000;
+    if (isExpiredByDate || isExpiredByIdle) {
+      toast({ title: "Sala expirada", description: "Esta sala não está mais ativa. Entre em contato com o professor.", variant: "destructive" });
       return;
     }
     setRoomId(data.id);
