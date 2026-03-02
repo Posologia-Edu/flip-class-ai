@@ -83,7 +83,11 @@ export function useFeatureGate() {
         event: "INSERT",
         schema: "public",
         table: "ai_usage_log",
-      }, fetchAiUsage)
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        // Small delay to ensure DB consistency before re-fetching
+        setTimeout(fetchAiUsage, 500);
+      })
       .subscribe();
 
     return () => {
