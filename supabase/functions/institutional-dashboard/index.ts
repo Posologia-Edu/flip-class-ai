@@ -166,27 +166,60 @@ Deno.serve(async (req) => {
       }
 
       // Check if user already exists in auth
-      const { data: authUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-      const existingUser = authUsers?.users?.find(
-        (u: any) => u.email?.toLowerCase() === email
-      );
+      let existingUser: any = null;
+      try {
+        const { data: authUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+        existingUser = authUsers?.users?.find(
+          (u: any) => u.email?.toLowerCase() === email
+        ) || null;
+      } catch (listErr) {
+        console.error("Error listing users:", listErr);
+      }
 
       if (existingUser) {
         // User already has an account — add them directly as active
-        const { error: insertError } = await adminClient
+        // Check for any existing record for this email (any status) to avoid conflicts
+        const { data: anyExisting } = await adminClient
           .from("admin_invites")
-          .insert({
-            email,
-            invited_by: userId,
-            granted_plan: "institutional",
-            status: "active",
-            activated_at: new Date().toISOString(),
-          });
+          .select("id, status")
+          .eq("email", email)
+          .eq("invited_by", userId)
+          .maybeSingle();
 
-        if (insertError) {
-          return new Response(JSON.stringify({ error: insertError.message }), {
-            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        if (anyExisting) {
+          // Update existing record instead of inserting
+          const { error: updateError } = await adminClient
+            .from("admin_invites")
+            .update({
+              status: "active",
+              activated_at: new Date().toISOString(),
+              granted_plan: "institutional",
+            })
+            .eq("id", anyExisting.id);
+
+          if (updateError) {
+            console.error("Error updating invite:", updateError);
+            return new Response(JSON.stringify({ error: updateError.message }), {
+              status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        } else {
+          const { error: insertError } = await adminClient
+            .from("admin_invites")
+            .insert({
+              email,
+              invited_by: userId,
+              granted_plan: "institutional",
+              status: "active",
+              activated_at: new Date().toISOString(),
+            });
+
+          if (insertError) {
+            console.error("Error inserting invite:", insertError);
+            return new Response(JSON.stringify({ error: insertError.message }), {
+              status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
         }
 
         // Approve their profile
@@ -282,6 +315,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.error("institutional-dashboard error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
