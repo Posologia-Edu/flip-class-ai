@@ -150,18 +150,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Check if already invited
       const { data: existing } = await adminClient
         .from("admin_invites")
-        .select("id, status")
+        .select("id, status, invited_by")
         .eq("email", email)
-        .eq("invited_by", userId)
-        .in("status", ["active", "pending"])
         .maybeSingle();
 
-      if (existing) {
-        return new Response(JSON.stringify({ error: "Este professor já foi convidado" }), {
-          status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      if (existing && existing.invited_by === userId && ["active", "pending"].includes(existing.status)) {
+        return new Response(JSON.stringify({ success: true, warning: "Este professor já foi convidado." }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -183,13 +180,11 @@ Deno.serve(async (req) => {
       if (isConfirmedUser) {
         const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
 
-        // User already has a confirmed account — add them and send notification email via Resend
-        // Check for any existing record for this email (any status) to avoid conflicts
+        // Check for any existing record for this email (any status / inviter) to avoid unique key conflicts
         const { data: anyExisting } = await adminClient
           .from("admin_invites")
           .select("id, status")
           .eq("email", email)
-          .eq("invited_by", userId)
           .maybeSingle();
 
         if (anyExisting) {
@@ -378,15 +373,16 @@ Deno.serve(async (req) => {
         }),
       });
 
-      // Insert as pending FIRST — so the invite is saved even if email fails
+      // Save invite as pending FIRST — idempotent by email
       const { error: insertError } = await adminClient
         .from("admin_invites")
-        .insert({
+        .upsert({
           email,
           invited_by: userId,
           granted_plan: "teacher",
           status: "pending",
-        });
+          activated_at: null,
+        }, { onConflict: "email" });
 
       if (insertError) {
         console.error("Error inserting invite:", insertError);
