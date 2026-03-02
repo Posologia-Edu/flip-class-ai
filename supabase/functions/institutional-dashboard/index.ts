@@ -233,20 +233,95 @@ Deno.serve(async (req) => {
         });
       }
 
-      // New user — invite via Supabase Auth (sends invite email with password setup link)
-      // Determine the app URL from the request origin or referer
-      const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "";
-      const redirectUrl = origin ? `${origin}/reset-password` : undefined;
+      // New user — create user and generate invite link, then send email via Resend
+      const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
 
-      const inviteOptions: any = {};
-      if (redirectUrl) {
-        inviteOptions.redirectTo = redirectUrl;
+      // Generate the invite link (does NOT send email)
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: {
+          redirectTo: `${origin}/reset-password`,
+        },
+      });
+
+      if (linkError) {
+        console.error("Error generating invite link:", linkError);
+        return new Response(JSON.stringify({ error: `Erro ao gerar convite: ${linkError.message}` }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
+      // Build the confirmation URL with the token
+      const actionLink = linkData?.properties?.action_link;
+      if (!actionLink) {
+        console.error("No action_link in generateLink response:", linkData);
+        return new Response(JSON.stringify({ error: "Erro ao gerar link de convite" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
-      if (inviteError) {
-        return new Response(JSON.stringify({ error: `Erro ao enviar convite: ${inviteError.message}` }), {
+      // Send invite email via Resend
+      const resendApiKey = Deno.env.get("RESEND_API_KEY");
+      if (!resendApiKey) {
+        console.error("RESEND_API_KEY not configured");
+        return new Response(JSON.stringify({ error: "Serviço de email não configurado" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Roboto,sans-serif;">
+          <div style="max-width:520px;margin:40px auto;padding:32px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+            <div style="text-align:center;margin-bottom:24px;">
+              <h1 style="font-size:24px;color:#0d9488;margin:0;">FlipClass</h1>
+            </div>
+            <h2 style="font-size:18px;color:#111827;margin-bottom:16px;">Você foi convidado!</h2>
+            <p style="font-size:15px;color:#374151;line-height:1.6;">
+              Você recebeu um convite para fazer parte da plataforma <strong>FlipClass</strong> como professor.
+            </p>
+            <p style="font-size:15px;color:#374151;line-height:1.6;">
+              Clique no botão abaixo para criar sua senha e acessar o sistema:
+            </p>
+            <div style="text-align:center;margin:32px 0;">
+              <a href="${actionLink}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
+                Aceitar Convite
+              </a>
+            </div>
+            <p style="font-size:13px;color:#6b7280;line-height:1.5;">
+              Se o botão não funcionar, copie e cole este link no seu navegador:<br>
+              <a href="${actionLink}" style="color:#0d9488;word-break:break-all;">${actionLink}</a>
+            </p>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+            <p style="font-size:12px;color:#9ca3af;text-align:center;">
+              FlipClass — Plataforma de Sala de Aula Invertida
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "FlipClass <noreply@notify.tbl.posologia.app>",
+          to: [email],
+          subject: "Você foi convidado para o FlipClass!",
+          html: emailHtml,
+        }),
+      });
+
+      if (!resendRes.ok) {
+        const resendError = await resendRes.text();
+        console.error("Resend error:", resendRes.status, resendError);
+        return new Response(JSON.stringify({ error: `Erro ao enviar email: ${resendError}` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -262,17 +337,18 @@ Deno.serve(async (req) => {
         });
 
       if (insertError) {
+        console.error("Error inserting invite:", insertError);
         return new Response(JSON.stringify({ error: insertError.message }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Create profile as pending for the newly invited user
-      if (inviteData?.user) {
+      // Create/update profile for the newly invited user
+      if (linkData?.user) {
         await adminClient
           .from("profiles")
           .upsert({
-            user_id: inviteData.user.id,
+            user_id: linkData.user.id,
             approval_status: "approved",
             approved_by: userId,
             approved_at: new Date().toISOString(),
