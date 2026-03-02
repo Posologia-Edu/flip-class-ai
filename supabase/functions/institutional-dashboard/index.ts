@@ -337,20 +337,81 @@ Deno.serve(async (req) => {
       // New user OR unconfirmed user (created by previous invite but never signed in)
       const origin2 = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
 
-      // Use native invite flow so auth email delivery is handled by the auth system
-      const { data: invitedData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        data: { invited_by_admin: true },
-        redirectTo: `${origin2}/reset-password`,
+      console.log("[INVITE] Starting invite flow for NEW/unconfirmed user:", email);
+
+      // Step 1: Generate invite link (creates user in auth if needed) WITHOUT relying on auth-email-hook
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: {
+          data: { invited_by_admin: true },
+          redirectTo: `${origin2}/reset-password`,
+        },
       });
 
-      if (inviteError) {
-        console.error("Error sending auth invite:", inviteError);
-        return new Response(JSON.stringify({ error: `Erro ao enviar convite: ${inviteError.message}` }), {
+      if (linkError) {
+        console.error("[INVITE] generateLink error:", linkError);
+        return new Response(JSON.stringify({ error: `Erro ao gerar link de convite: ${linkError.message}` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Save invite as pending FIRST — idempotent by email
+      const confirmationUrl = linkData?.properties?.action_link;
+      if (!confirmationUrl) {
+        console.error("[INVITE] No action_link returned from generateLink");
+        return new Response(JSON.stringify({ error: "Erro interno: link de convite não gerado." }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("[INVITE] Link generated successfully for:", email);
+
+      // Step 2: Send invite email directly via Resend (same pipeline that works for existing users)
+      const inviteEmailHtml = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Roboto,sans-serif;">
+          <div style="max-width:520px;margin:40px auto;padding:32px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+            <div style="text-align:center;margin-bottom:24px;">
+              <span style="font-size:24px;">📚</span>
+              <h1 style="font-size:24px;color:#0d9488;margin:4px 0 0;display:inline-block;vertical-align:middle;margin-left:8px;">FlipClass</h1>
+            </div>
+            <h2 style="font-size:18px;color:#111827;margin-bottom:16px;">Você foi convidado! 🎉</h2>
+            <p style="font-size:15px;color:#374151;line-height:1.6;">
+              Você recebeu um convite para se juntar ao <strong>FlipClass</strong>.
+              Clique no botão abaixo para definir sua senha e acessar a plataforma.
+            </p>
+            <div style="text-align:center;margin:32px 0;">
+              <a href="${confirmationUrl}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
+                Definir Minha Senha
+              </a>
+            </div>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+            <p style="font-size:12px;color:#9ca3af;text-align:center;">
+              Se você não esperava este convite, pode ignorar este email com segurança.
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const sendResult = await sendEmailWithFallback({
+        to: email,
+        subject: "Convite para o FlipClass — Defina sua Senha",
+        html: inviteEmailHtml,
+      });
+
+      if (!sendResult.ok) {
+        console.error("[INVITE] Email delivery FAILED for:", email, "Error:", sendResult.error);
+        return new Response(JSON.stringify({ error: `Convite criado, mas o email não pôde ser enviado. Tente reenviar.` }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("[INVITE] Email sent successfully to:", email, "via:", sendResult.usedFrom);
+
+      // Step 3: Save invite as pending — idempotent by email
       const { error: insertError } = await adminClient
         .from("admin_invites")
         .upsert({
@@ -362,25 +423,27 @@ Deno.serve(async (req) => {
         }, { onConflict: "email" });
 
       if (insertError) {
-        console.error("Error inserting invite:", insertError);
-        return new Response(JSON.stringify({ error: insertError.message }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        console.error("[INVITE] Error inserting invite record:", insertError);
       }
 
-      // Create/update profile for the newly invited user
-      if (invitedData?.user) {
+      // Step 4: Create/update profile for the newly invited user
+      if (linkData?.user) {
         await adminClient
           .from("profiles")
           .upsert({
-            user_id: invitedData.user.id,
+            user_id: linkData.user.id,
             approval_status: "approved",
             approved_by: userId,
             approved_at: new Date().toISOString(),
           }, { onConflict: "user_id" });
       }
 
-      return new Response(JSON.stringify({ success: true }), {
+      const responsePayload: any = { success: true };
+      if (sendResult.warning) {
+        responsePayload.warning = sendResult.warning;
+      }
+
+      return new Response(JSON.stringify(responsePayload), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
