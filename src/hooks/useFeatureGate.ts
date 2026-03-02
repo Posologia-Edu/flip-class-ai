@@ -52,26 +52,44 @@ export function useFeatureGate() {
   }, [user?.email]);
 
   // Fetch AI usage for current month
-  useEffect(() => {
-    const fetchAiUsage = async () => {
-      if (!user?.id) return;
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      try {
-        const { data } = await supabase
-          .from("ai_usage_log")
-          .select("usage_type")
-          .eq("user_id", user.id)
-          .gte("created_at", startOfMonth);
-        const generations = (data || []).filter(d => d.usage_type === "generation").length;
-        const corrections = (data || []).filter(d => d.usage_type === "correction").length;
-        setAiUsage({ generations, corrections });
-      } catch {
-        // ignore
-      }
-    };
-    fetchAiUsage();
+  const fetchAiUsage = useCallback(async () => {
+    if (!user?.id) return;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    try {
+      const { data } = await supabase
+        .from("ai_usage_log")
+        .select("usage_type")
+        .eq("user_id", user.id)
+        .gte("created_at", startOfMonth);
+      const generations = (data || []).filter(d => d.usage_type === "generation").length;
+      const corrections = (data || []).filter(d => d.usage_type === "correction").length;
+      setAiUsage({ generations, corrections });
+    } catch {
+      // ignore
+    }
   }, [user?.id]);
+
+  useEffect(() => {
+    fetchAiUsage();
+  }, [fetchAiUsage]);
+
+  // Real-time AI usage updates
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`ai-usage:${user.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "ai_usage_log",
+      }, fetchAiUsage)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchAiUsage]);
 
   const effectivePlan = resolveHighestPlan(stripePlan, grantedPlan);
   const limits = getPlanLimits(effectivePlan);
