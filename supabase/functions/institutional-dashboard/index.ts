@@ -176,10 +176,14 @@ Deno.serve(async (req) => {
         console.error("Error listing users:", listErr);
       }
 
-      if (existingUser) {
+      // A user created by generateLink (invite) exists in auth but hasn't confirmed yet.
+      // Only treat as "existing active user" if they have actually signed in before.
+      const isConfirmedUser = existingUser && existingUser.last_sign_in_at;
+
+      if (isConfirmedUser) {
         const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
 
-        // User already has an account — add them and send notification email via Resend
+        // User already has a confirmed account — add them and send notification email via Resend
         // Check for any existing record for this email (any status) to avoid conflicts
         const { data: anyExisting } = await adminClient
           .from("admin_invites")
@@ -289,15 +293,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      // New user — create user and generate invite link, then send email via Resend
-      const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
+      // New user OR unconfirmed user (created by previous invite but never signed in)
+      const origin2 = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
 
       // Generate the invite link (does NOT send email)
       const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
         type: "invite",
         email,
         options: {
-          redirectTo: `${origin}/reset-password`,
+          redirectTo: `${origin2}/reset-password`,
         },
       });
 
