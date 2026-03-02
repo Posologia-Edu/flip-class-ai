@@ -8,6 +8,60 @@ const corsHeaders = {
 
 const MAX_TEACHERS = 10;
 
+async function sendEmailWithFallback({
+  to,
+  subject,
+  html,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+}) {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendApiKey) {
+    return { ok: false, error: "RESEND_API_KEY not configured" };
+  }
+
+  const primaryFrom = Deno.env.get("RESEND_FROM_EMAIL") || "FlipClass <noreply@notify.tbl.posologia.app>";
+  const fallbackFrom = "FlipClass <onboarding@resend.dev>";
+
+  const send = async (from: string) => {
+    return await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+      }),
+    });
+  };
+
+  const firstTry = await send(primaryFrom);
+  if (firstTry.ok) return { ok: true, usedFrom: primaryFrom };
+
+  const firstError = await firstTry.text();
+  console.error("Resend primary sender error:", firstTry.status, firstError);
+
+  if (primaryFrom === fallbackFrom) {
+    return { ok: false, error: firstError };
+  }
+
+  const secondTry = await send(fallbackFrom);
+  if (secondTry.ok) {
+    console.warn("Email sent using fallback sender:", fallbackFrom);
+    return { ok: true, usedFrom: fallbackFrom, warning: "Email enviado com remetente alternativo temporário." };
+  }
+
+  const secondError = await secondTry.text();
+  console.error("Resend fallback sender error:", secondTry.status, secondError);
+  return { ok: false, error: secondError };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -228,11 +282,9 @@ Deno.serve(async (req) => {
           .update({ approval_status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
           .eq("user_id", existingUser.id);
 
-        // Send notification email via Resend
-        const resendApiKey = Deno.env.get("RESEND_API_KEY");
-        if (resendApiKey) {
-          const loginUrl = `${origin}/auth`;
-          const emailHtml = `
+        // Send notification email via Resend (with fallback sender)
+        const loginUrl = `${origin}/auth`;
+        const emailHtml = `
             <!DOCTYPE html>
             <html>
             <head><meta charset="utf-8"></head>
@@ -260,27 +312,18 @@ Deno.serve(async (req) => {
             </html>
           `;
 
-          try {
-            const resendRes = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${resendApiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                from: "FlipClass <noreply@notify.tbl.posologia.app>",
-                to: [email],
-                subject: "Você foi adicionado ao FlipClass!",
-                html: emailHtml,
-              }),
-            });
-            if (!resendRes.ok) {
-              const resendErr = await resendRes.text();
-              console.error("Resend error (existing user):", resendRes.status, resendErr);
-            }
-          } catch (emailErr) {
-            console.error("Error sending email to existing user:", emailErr);
+        try {
+          const sendResult = await sendEmailWithFallback({
+            to: email,
+            subject: "Você foi adicionado ao FlipClass!",
+            html: emailHtml,
+          });
+
+          if (!sendResult.ok) {
+            console.error("Error sending email to existing user:", sendResult.error);
           }
+        } catch (emailErr) {
+          console.error("Error sending email to existing user:", emailErr);
         }
 
         return new Response(JSON.stringify({ success: true }), {
@@ -316,14 +359,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Send invite email via Resend
-      const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      if (!resendApiKey) {
-        console.error("RESEND_API_KEY not configured");
-        return new Response(JSON.stringify({ error: "Serviço de email não configurado" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      // Email sending is handled later with fallback sender (non-blocking)
 
       const emailHtml = `
         <!DOCTYPE html>
@@ -359,18 +395,10 @@ Deno.serve(async (req) => {
         </html>
       `;
 
-      const resendRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "FlipClass <noreply@notify.tbl.posologia.app>",
-          to: [email],
-          subject: "Você foi convidado para o FlipClass!",
-          html: emailHtml,
-        }),
+      const sendResult = await sendEmailWithFallback({
+        to: email,
+        subject: "Você foi convidado para o FlipClass!",
+        html: emailHtml,
       });
 
       // Save invite as pending FIRST — idempotent by email
@@ -405,10 +433,11 @@ Deno.serve(async (req) => {
 
       // Try to send the email — non-blocking
       let emailWarning = null;
-      if (!resendRes.ok) {
-        const resendError = await resendRes.text();
-        console.error("Resend error:", resendRes.status, resendError);
+      if (!sendResult.ok) {
+        console.error("Resend error:", sendResult.error);
         emailWarning = "Convite salvo, mas houve um erro ao enviar o email. Verifique a configuração do domínio de email.";
+      } else if (sendResult.warning) {
+        emailWarning = sendResult.warning;
       }
 
       return new Response(JSON.stringify({ success: true, warning: emailWarning }), {
