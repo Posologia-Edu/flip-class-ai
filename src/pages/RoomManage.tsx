@@ -1072,6 +1072,15 @@ const RoomManage = () => {
                               <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
                                 {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
                                 <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
+                                {q.type === "multiple_choice" && q.options && q.options.length > 0 && (
+                                  <div className="mt-2 mb-2 space-y-1">
+                                    {q.options.map((opt, oi) => (
+                                      <p key={oi} className={`text-xs px-3 py-1.5 rounded ${opt === q.correct_answer ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
+                                        {String.fromCharCode(65 + oi)}) {opt}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
                                 <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
                               </div>
                             ))}
