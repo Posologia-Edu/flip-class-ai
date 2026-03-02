@@ -94,7 +94,11 @@ const InstitutionalDashboard = () => {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast({ title: "Convite enviado!", description: `Professor ${inviteEmail} convidado com sucesso.` });
+      if (data?.warning) {
+        toast({ title: "Convite salvo com aviso", description: data.warning, variant: "default" });
+      } else {
+        toast({ title: "Convite enviado!", description: `Professor ${inviteEmail} convidado com sucesso.` });
+      }
       setInviteEmail("");
       fetchTeachers();
     } catch (err: any) {

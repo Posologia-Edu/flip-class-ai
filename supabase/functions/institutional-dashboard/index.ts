@@ -378,15 +378,7 @@ Deno.serve(async (req) => {
         }),
       });
 
-      if (!resendRes.ok) {
-        const resendError = await resendRes.text();
-        console.error("Resend error:", resendRes.status, resendError);
-        return new Response(JSON.stringify({ error: `Erro ao enviar email: ${resendError}` }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Insert as pending — will become active when user confirms
+      // Insert as pending FIRST — so the invite is saved even if email fails
       const { error: insertError } = await adminClient
         .from("admin_invites")
         .insert({
@@ -415,7 +407,15 @@ Deno.serve(async (req) => {
           }, { onConflict: "user_id" });
       }
 
-      return new Response(JSON.stringify({ success: true }), {
+      // Try to send the email — non-blocking
+      let emailWarning = null;
+      if (!resendRes.ok) {
+        const resendError = await resendRes.text();
+        console.error("Resend error:", resendRes.status, resendError);
+        emailWarning = "Convite salvo, mas houve um erro ao enviar o email. Verifique a configuração do domínio de email.";
+      }
+
+      return new Response(JSON.stringify({ success: true, warning: emailWarning }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
