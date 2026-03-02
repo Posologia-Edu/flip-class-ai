@@ -165,18 +165,67 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Try to invite via Supabase Auth
-      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email);
+      // Check if user already exists in auth
+      const { data: authUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+      const existingUser = authUsers?.users?.find(
+        (u: any) => u.email?.toLowerCase() === email
+      );
 
-      // Insert into admin_invites
+      if (existingUser) {
+        // User already has an account — add them directly as active
+        const { error: insertError } = await adminClient
+          .from("admin_invites")
+          .insert({
+            email,
+            invited_by: userId,
+            granted_plan: "institutional",
+            status: "active",
+            activated_at: new Date().toISOString(),
+          });
+
+        if (insertError) {
+          return new Response(JSON.stringify({ error: insertError.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Approve their profile
+        await adminClient
+          .from("profiles")
+          .update({ approval_status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
+          .eq("user_id", existingUser.id);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // New user — invite via Supabase Auth (sends invite email with password setup link)
+      // Determine the app URL from the request origin or referer
+      const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "";
+      const redirectUrl = origin ? `${origin}/reset-password` : undefined;
+
+      const inviteOptions: any = {};
+      if (redirectUrl) {
+        inviteOptions.redirectTo = redirectUrl;
+      }
+
+      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
+
+      if (inviteError) {
+        return new Response(JSON.stringify({ error: `Erro ao enviar convite: ${inviteError.message}` }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Insert as pending — will become active when user confirms
       const { error: insertError } = await adminClient
         .from("admin_invites")
         .insert({
           email,
           invited_by: userId,
           granted_plan: "institutional",
-          status: inviteData?.user ? "active" : "pending",
-          activated_at: inviteData?.user ? new Date().toISOString() : null,
+          status: "pending",
         });
 
       if (insertError) {
@@ -185,12 +234,16 @@ Deno.serve(async (req) => {
         });
       }
 
-      // If user already exists, update their profile to approved
+      // Create profile as pending for the newly invited user
       if (inviteData?.user) {
         await adminClient
           .from("profiles")
-          .update({ approval_status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
-          .eq("user_id", inviteData.user.id);
+          .upsert({
+            user_id: inviteData.user.id,
+            approval_status: "approved",
+            approved_by: userId,
+            approved_at: new Date().toISOString(),
+          }, { onConflict: "user_id" });
       }
 
       return new Response(JSON.stringify({ success: true }), {

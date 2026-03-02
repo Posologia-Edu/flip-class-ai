@@ -50,6 +50,19 @@ const ResetPassword = () => {
     if (error) {
       toast({ title: "Erro ao definir senha", description: error.message, variant: "destructive" });
     } else {
+      // Activate any pending invite for this user
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser?.email) {
+          await supabase
+            .from("admin_invites")
+            .update({ status: "active", activated_at: new Date().toISOString() })
+            .eq("email", currentUser.email.toLowerCase())
+            .eq("status", "pending");
+        }
+      } catch (e) {
+        console.error("Error activating invite:", e);
+      }
       toast({ title: "Senha definida com sucesso!" });
       navigate("/dashboard");
     }
