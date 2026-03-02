@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle } from "lucide-react";
+import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -63,7 +63,6 @@ export const PeerReviewTeacher = ({
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
-  // Only use realtime subscription, no polling to avoid refresh loops
   useEffect(() => {
     const channel = supabase
       .channel(`peer-review-teacher:${roomId}:${activityId}`)
@@ -125,7 +124,6 @@ export const PeerReviewTeacher = ({
         return;
       }
 
-      // Delete existing assignments first
       if (assignments.length > 0) {
         await supabase
           .from("peer_review_assignments" as any)
@@ -133,7 +131,6 @@ export const PeerReviewTeacher = ({
           .eq("activity_id", activityId);
       }
 
-      // Circular assignment
       const shuffled = [...completedSessions].sort(() => Math.random() - 0.5);
       const newAssignments = shuffled.map((session, i) => ({
         activity_id: activityId,
@@ -208,57 +205,96 @@ export const PeerReviewTeacher = ({
             </Button>
           </div>
 
-          {/* Assignment Status with Peer Review Results */}
+          {/* ========== REDESIGNED ASSIGNMENT STATUS & RESULTS ========== */}
           {assignments.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-4">
-              <h4 className="font-semibold text-sm mb-3">Status das Avaliações</h4>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="text-center p-3 bg-secondary rounded-lg">
-                  <p className="font-display text-xl font-bold text-foreground">{assignments.length}</p>
+            <div className="space-y-4">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="font-display text-2xl font-bold text-foreground">{assignments.length}</p>
                   <p className="text-xs text-muted-foreground">Atribuídas</p>
                 </div>
-                <div className="text-center p-3 bg-secondary rounded-lg">
-                  <p className="font-display text-xl font-bold text-foreground">{completedCount}</p>
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="font-display text-2xl font-bold text-level-easy">{completedCount}</p>
                   <p className="text-xs text-muted-foreground">Concluídas</p>
                 </div>
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="font-display text-2xl font-bold text-muted-foreground">{assignments.length - completedCount}</p>
+                  <p className="text-xs text-muted-foreground">Pendentes</p>
+                </div>
               </div>
+
+              {/* Individual review cards */}
               <div className="space-y-3">
                 {assignments.map((a: any) => {
                   const reviewer = sessions.find((s: any) => s.id === a.reviewer_session_id);
                   const reviewee = sessions.find((s: any) => s.id === a.reviewee_session_id);
                   const review = reviews.find((r: any) => r.assignment_id === a.id);
                   const reviewScores = review ? (review.criteria_scores as Record<string, number>) || {} : null;
+                  const avg = reviewScores
+                    ? (Object.values(reviewScores).reduce((s: number, v: any) => s + (Number(v) || 0), 0) / Math.max(Object.keys(reviewScores).length, 1))
+                    : 0;
+
                   return (
-                    <div key={a.id} className="bg-secondary/50 rounded-lg px-3 py-3 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span><span className="font-medium">{reviewer?.student_name || "?"}</span> → <span className="font-medium">{reviewee?.student_name || "?"}</span></span>
+                    <div key={a.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                      {/* Header row */}
+                      <div className="px-5 py-3 flex items-center justify-between border-b border-border bg-secondary/30">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Users className="w-3.5 h-3.5 text-primary" />
+                          </div>
+                          <div>
+                            <span className="text-sm font-semibold text-foreground">{reviewer?.student_name || "?"}</span>
+                            <span className="text-xs text-muted-foreground mx-1.5">avaliou</span>
+                            <span className="text-sm font-semibold text-foreground">{reviewee?.student_name || "?"}</span>
+                          </div>
+                        </div>
                         {review ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-level-easy"><CheckCircle2 className="w-3.5 h-3.5" /> Avaliado</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-level-easy bg-level-easy/10 px-2.5 py-1 rounded-full">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Avaliado
+                          </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Pendente</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-secondary px-2.5 py-1 rounded-full">
+                            <Clock className="w-3.5 h-3.5" /> Pendente
+                          </span>
                         )}
                       </div>
-                      {/* Show review results for professor */}
+
+                      {/* Review details */}
                       {review && reviewScores && (
-                        <div className="bg-background rounded-lg p-3 space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
-                            {criteria.map((c) => (
-                              <div key={c.id} className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">{c.label}</span>
-                                <span className="font-bold text-primary">{reviewScores[c.id] ?? "—"}/{c.maxScore}</span>
-                              </div>
-                            ))}
+                        <div className="px-5 py-4 space-y-3">
+                          {/* Scores grid */}
+                          <div className="flex flex-wrap gap-3">
+                            {criteria.map((c) => {
+                              const score = reviewScores[c.id] ?? 0;
+                              const maxScore = c.maxScore || 10;
+                              const ratio = score / maxScore;
+                              const colorClass = ratio >= 0.7 ? "text-level-easy" : ratio >= 0.4 ? "text-level-medium" : "text-destructive";
+                              return (
+                                <div key={c.id} className="flex-1 min-w-[120px] bg-secondary/50 rounded-lg px-3 py-2.5">
+                                  <p className="text-xs text-muted-foreground mb-0.5">{c.label}</p>
+                                  <p className={`text-lg font-bold ${colorClass}`}>
+                                    {score}<span className="text-xs font-normal text-muted-foreground">/{maxScore}</span>
+                                  </p>
+                                </div>
+                              );
+                            })}
                           </div>
+
+                          {/* Comment */}
                           {review.comment && (
-                            <div className="border-t border-border pt-2 mt-2">
-                              <p className="text-xs text-muted-foreground font-semibold mb-1">Comentário:</p>
-                              <p className="text-xs text-foreground">{review.comment}</p>
+                            <div className="bg-secondary/50 rounded-lg px-4 py-3">
+                              <p className="text-xs font-semibold text-muted-foreground mb-1">💬 Comentário</p>
+                              <p className="text-sm text-foreground leading-relaxed">{review.comment}</p>
                             </div>
                           )}
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-primary">
-                              Média: {(Object.values(reviewScores).reduce((s: number, v: any) => s + (Number(v) || 0), 0) / Math.max(Object.keys(reviewScores).length, 1)).toFixed(1)}
-                            </span>
+
+                          {/* Average score badge */}
+                          <div className="flex justify-end">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10">
+                              <Star className="w-3.5 h-3.5 text-primary" />
+                              <span className="text-sm font-bold text-primary">Média: {avg.toFixed(1)}</span>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -365,7 +401,6 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
           setComment(rev.comment || "");
         } else {
           setExistingReview(null);
-          // Don't reset scores/comment if they're mid-edit
           if (!hasFetched.current) {
             setScores({});
             setComment("");
@@ -408,7 +443,6 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     fetchData();
   }, [fetchData]);
 
-  // Only listen for new assignments via realtime, NO polling
   useEffect(() => {
     const channel = supabase
       .channel(`peer-review-student:${roomId}:${sessionId}`)
