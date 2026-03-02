@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key, CreditCard, Calendar } from "lucide-react";
 import AiApiKeysManager from "@/components/AiApiKeysManager";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -38,6 +38,17 @@ interface Invite {
   granted_plan?: string;
 }
 
+interface Subscriber {
+  email: string;
+  full_name: string | null;
+  plan: string;
+  status: string;
+  period_end: string;
+  subscribed_at: string;
+  last_sign_in: string | null;
+  room_count: number;
+}
+
 const AdminPanel = () => {
   const { user, isAdmin, loading } = useAuth();
   const [teachers, setTeachers] = useState<PendingTeacher[]>([]);
@@ -49,6 +60,8 @@ const AdminPanel = () => {
   const [sendingInvite, setSendingInvite] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
+  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
+  const [loadingSubscribers, setLoadingSubscribers] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -73,10 +86,19 @@ const AdminPanel = () => {
     setLoadingInvites(false);
   }, []);
 
+  const fetchSubscribers = useCallback(async () => {
+    setLoadingSubscribers(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("list-subscribers");
+      if (!error && data?.subscribers) setSubscribers(data.subscribers);
+    } catch {}
+    setLoadingSubscribers(false);
+  }, []);
+
   useEffect(() => {
     if (!loading && !isAdmin) { navigate("/dashboard"); return; }
-    if (!loading && isAdmin) { fetchData(); fetchInvites(); }
-  }, [loading, isAdmin, navigate, fetchData, fetchInvites]);
+    if (!loading && isAdmin) { fetchData(); fetchInvites(); fetchSubscribers(); }
+  }, [loading, isAdmin, navigate, fetchData, fetchInvites, fetchSubscribers]);
 
   const approveTeacher = async (teacher: PendingTeacher) => {
     setProcessing(teacher.id);
@@ -165,12 +187,69 @@ const AdminPanel = () => {
 
       <Tabs defaultValue="invites" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="invites">Convites</TabsTrigger>
+          <TabsTrigger value="subscribers"><CreditCard className="w-4 h-4 mr-1" /> Assinantes ({subscribers.length})</TabsTrigger>
+          <TabsTrigger value="invites">Convites ({invites.length})</TabsTrigger>
           <TabsTrigger value="api-keys"><Key className="w-4 h-4 mr-1" /> API Keys</TabsTrigger>
           <TabsTrigger value="pending">Pendentes ({pending.length})</TabsTrigger>
           <TabsTrigger value="approved">Aprovados ({approved.length})</TabsTrigger>
           <TabsTrigger value="rejected">Rejeitados ({rejected.length})</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="subscribers">
+          <div className="bg-card border border-border rounded-xl p-6">
+            <h3 className="font-display font-semibold text-lg mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" /> Assinantes Pagos
+            </h3>
+            {loadingSubscribers ? (
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            ) : subscribers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum assinante encontrado.</p>
+            ) : (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-secondary">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome / Email</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Plano</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Salas</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Último acesso</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Renova em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subscribers.map((sub, i) => (
+                      <tr key={i} className="border-t border-border">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{sub.full_name || "Sem nome"}</p>
+                          <p className="text-xs text-muted-foreground">{sub.email}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            sub.plan === "institutional" ? "bg-purple-500/10 text-purple-600" :
+                            sub.plan === "professor" ? "bg-primary/10 text-primary" :
+                            "bg-secondary text-muted-foreground"
+                          }`}>
+                            {planLabel(sub.plan)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{sub.room_count}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {sub.last_sign_in ? new Date(sub.last_sign_in).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Nunca"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(sub.period_end).toLocaleDateString("pt-BR")}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="invites">
           <div className="space-y-6">

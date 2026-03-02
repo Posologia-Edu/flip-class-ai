@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Library, Trash2, Search, Tag, Eye, Edit2, Save, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
@@ -255,7 +256,19 @@ const QuestionBank = () => {
                           <p className="text-sm font-medium">{q.question}</p>
                         )}
                       </div>
-                      {q.context && <p className="text-xs text-muted-foreground italic ml-6">Contexto: {q.context}</p>}
+                      {editing ? (
+                        <div className="ml-6">
+                          <Label className="text-xs text-muted-foreground">Contexto</Label>
+                          <Textarea
+                            value={q.context || ""}
+                            onChange={(e) => updateQuestion(li, qi, "context", e.target.value)}
+                            placeholder="Contexto / cenário da questão (opcional)"
+                            className="text-xs min-h-[60px] mt-1"
+                          />
+                        </div>
+                      ) : (
+                        q.context && <p className="text-xs text-muted-foreground italic ml-6">Contexto: {q.context}</p>
+                      )}
                       {q.options && q.options.length > 0 && (
                         <div className="ml-6 space-y-1">
                           {q.options.map((opt, oi) => (
