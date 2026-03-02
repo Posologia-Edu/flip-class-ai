@@ -22,7 +22,7 @@ async function sendEmailWithFallback({
     return { ok: false, error: "RESEND_API_KEY not configured" };
   }
 
-  const primaryFrom = Deno.env.get("RESEND_FROM_EMAIL") || "FlipClass <noreply@notify.tbl.posologia.app>";
+  const primaryFrom = Deno.env.get("RESEND_FROM_EMAIL") || "FlipClass <noreply@tbl.posologia.app>";
   const fallbackFrom = "FlipClass <onboarding@resend.dev>";
 
   const send = async (from: string) => {
