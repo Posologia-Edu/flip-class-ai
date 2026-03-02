@@ -448,6 +448,76 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "get_rooms_analytics") {
+      // Get all invited teachers' user IDs
+      const { data: invites } = await adminClient
+        .from("admin_invites")
+        .select("email")
+        .eq("invited_by", userId)
+        .eq("status", "active");
+
+      if (!invites || invites.length === 0) {
+        return new Response(JSON.stringify({ rooms: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: authUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+      const teacherIds: string[] = [userId]; // include institutional owner's own rooms too
+
+      for (const invite of invites) {
+        const authUser = authUsers?.users?.find((u: any) => u.email?.toLowerCase() === invite.email.toLowerCase());
+        if (authUser) teacherIds.push(authUser.id);
+      }
+
+      // Get all rooms for these teachers
+      const { data: rooms } = await adminClient
+        .from("rooms")
+        .select("id, title, teacher_id")
+        .in("teacher_id", teacherIds);
+
+      if (!rooms || rooms.length === 0) {
+        return new Response(JSON.stringify({ rooms: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const roomIds = rooms.map((r: any) => r.id);
+      const { data: sessions } = await adminClient
+        .from("student_sessions")
+        .select("id, room_id, completed_at, score")
+        .in("room_id", roomIds);
+
+      // Map teacher_id to email for labeling
+      const teacherEmailMap: Record<string, string> = {};
+      for (const invite of invites) {
+        const authUser = authUsers?.users?.find((u: any) => u.email?.toLowerCase() === invite.email.toLowerCase());
+        if (authUser) teacherEmailMap[authUser.id] = invite.email;
+      }
+
+      const roomAnalytics = rooms.map((room: any) => {
+        const roomSessions = (sessions || []).filter((s: any) => s.room_id === room.id);
+        const completed = roomSessions.filter((s: any) => s.completed_at);
+        const avgScore = completed.length > 0
+          ? Math.round(completed.reduce((sum: number, s: any) => sum + (s.score || 0), 0) / completed.length)
+          : 0;
+
+        return {
+          roomId: room.id,
+          title: room.title,
+          teacherEmail: teacherEmailMap[room.teacher_id] || "Você",
+          studentCount: roomSessions.length,
+          completedCount: completed.length,
+          avgScore,
+          completionRate: roomSessions.length > 0 ? Math.round((completed.length / roomSessions.length) * 100) : 0,
+        };
+      });
+
+      return new Response(JSON.stringify({ rooms: roomAnalytics }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "remove_teacher") {
       const email = (body.email || "").trim().toLowerCase();
       if (!email) {

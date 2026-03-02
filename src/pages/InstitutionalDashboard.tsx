@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2, Sparkles, Bot, RefreshCw } from "lucide-react";
+import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2, Sparkles, Bot, RefreshCw, BarChart3 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import CrossRoomAnalytics from "@/components/CrossRoomAnalytics";
 
 interface Teacher {
   email: string;
@@ -47,6 +48,8 @@ const InstitutionalDashboard = () => {
   const [savingSettings, setSavingSettings] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [aiUsage, setAiUsage] = useState({ generations: 0, corrections: 0 });
+  const [roomsAnalytics, setRoomsAnalytics] = useState<any[]>([]);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   const fetchTeachers = useCallback(async () => {
     if (!user) return;
@@ -81,10 +84,27 @@ const InstitutionalDashboard = () => {
     }
   }, [user]);
 
+  const fetchRoomsAnalytics = useCallback(async () => {
+    if (!user) return;
+    setLoadingAnalytics(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("institutional-dashboard", {
+        body: { action: "get_rooms_analytics" },
+      });
+      if (error) throw error;
+      setRoomsAnalytics(data?.rooms || []);
+    } catch (err: any) {
+      console.error("Error fetching rooms analytics:", err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchTeachers();
     fetchSettings();
-  }, [fetchTeachers, fetchSettings]);
+    fetchRoomsAnalytics();
+  }, [fetchTeachers, fetchSettings, fetchRoomsAnalytics]);
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -207,6 +227,7 @@ const InstitutionalDashboard = () => {
       <Tabs defaultValue="teachers">
         <TabsList className="mb-6">
           <TabsTrigger value="teachers"><Users className="w-4 h-4 mr-1" /> Professores</TabsTrigger>
+          <TabsTrigger value="analytics"><BarChart3 className="w-4 h-4 mr-1" /> Análises</TabsTrigger>
           <TabsTrigger value="whitelabel"><Palette className="w-4 h-4 mr-1" /> Personalização</TabsTrigger>
         </TabsList>
 
@@ -353,6 +374,66 @@ const InstitutionalDashboard = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="analytics">
+          {loadingAnalytics ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando análises...
+            </div>
+          ) : roomsAnalytics.length === 0 ? (
+            <div className="text-center py-12 bg-card border border-border rounded-xl">
+              <BarChart3 className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">Nenhuma sala encontrada para análise.</p>
+              <p className="text-xs text-muted-foreground mt-1">As salas dos professores convidados aparecerão aqui.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Per-teacher breakdown */}
+              {(() => {
+                const byTeacher = roomsAnalytics.reduce((acc: Record<string, any[]>, r: any) => {
+                  const key = r.teacherEmail || "Você";
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(r);
+                  return acc;
+                }, {});
+
+                return Object.entries(byTeacher).map(([email, rooms]) => (
+                  <div key={email} className="bg-card border border-border rounded-xl p-5">
+                    <h3 className="font-display text-sm font-semibold mb-1 text-foreground">{email}</h3>
+                    <p className="text-xs text-muted-foreground mb-3">{(rooms as any[]).length} sala(s)</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="text-left p-2 text-muted-foreground font-medium">Sala</th>
+                            <th className="text-center p-2 text-muted-foreground font-medium">Alunos</th>
+                            <th className="text-center p-2 text-muted-foreground font-medium">Concluídos</th>
+                            <th className="text-center p-2 text-muted-foreground font-medium">Média</th>
+                            <th className="text-center p-2 text-muted-foreground font-medium">Conclusão</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(rooms as any[]).map((room: any) => (
+                            <tr key={room.roomId} className="border-b border-border last:border-0">
+                              <td className="p-2 text-foreground">{room.title}</td>
+                              <td className="text-center p-2 text-foreground">{room.studentCount}</td>
+                              <td className="text-center p-2 text-foreground">{room.completedCount}</td>
+                              <td className="text-center p-2 text-foreground">{room.avgScore}</td>
+                              <td className="text-center p-2 text-foreground">{room.completionRate}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ));
+              })()}
+
+              {/* Cross-room chart */}
+              <CrossRoomAnalytics data={roomsAnalytics} />
             </div>
           )}
         </TabsContent>
