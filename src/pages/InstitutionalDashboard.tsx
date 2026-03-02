@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2, Sparkles, Bot } from "lucide-react";
+import { Building2, Users, Upload, Palette, Save, Loader2, UserPlus, Trash2, Sparkles, Bot, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 
@@ -38,6 +38,7 @@ const InstitutionalDashboard = () => {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [removingEmail, setRemovingEmail] = useState<string | null>(null);
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null);
   const [settings, setSettings] = useState<InstitutionSettings>({
     institution_name: "",
     logo_url: "",
@@ -122,6 +123,26 @@ const InstitutionalDashboard = () => {
       toast({ title: "Erro ao remover", description: err.message, variant: "destructive" });
     } finally {
       setRemovingEmail(null);
+    }
+  };
+
+  const handleResendInvite = async (email: string) => {
+    setResendingEmail(email);
+    try {
+      const { data, error } = await supabase.functions.invoke("institutional-dashboard", {
+        body: { action: "invite_teacher", email },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.warning) {
+        toast({ title: "Convite reenviado", description: data.warning });
+      } else {
+        toast({ title: "Convite reenviado!", description: `Email enviado novamente para ${email}.` });
+      }
+    } catch (err: any) {
+      toast({ title: "Erro ao reenviar", description: err.message, variant: "destructive" });
+    } finally {
+      setResendingEmail(null);
     }
   };
 
@@ -296,19 +317,37 @@ const InstitutionalDashboard = () => {
                       <td className="text-center p-3 text-foreground">{t.studentCount}</td>
                       <td className="text-center p-3 text-foreground">{t.completionRate}%</td>
                       <td className="text-center p-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemove(t.email)}
-                          disabled={removingEmail === t.email}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          {removingEmail === t.email ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
+                        <div className="flex items-center justify-center gap-1">
+                          {t.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleResendInvite(t.email)}
+                              disabled={resendingEmail === t.email}
+                              title="Reenviar convite"
+                              className="text-primary hover:text-primary"
+                            >
+                              {resendingEmail === t.email ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4" />
+                              )}
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemove(t.email)}
+                            disabled={removingEmail === t.email}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            {removingEmail === t.email ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
