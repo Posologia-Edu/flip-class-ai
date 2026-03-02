@@ -7,7 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `Você é um gerador de atividades educacionais baseadas em casos reais para um sistema de Sala de Aula Invertida.
+const CASE_STUDY_PROMPT = `Você é um gerador de atividades educacionais baseadas em casos reais para um sistema de Sala de Aula Invertida.
 
 Dado o CONTEÚDO de um material educacional (pode ser transcrição de vídeo, texto de artigo, conteúdo de PDF, transcrição de podcast ou apresentação), você DEVE gerar atividades baseadas em CASOS REAIS e APLICADOS diretamente relacionados ao conteúdo ESPECÍFICO fornecido.
 
@@ -66,6 +66,45 @@ Regras:
 - Nível 3: 1 caso. Cenário complexo que exige síntese, pensamento crítico e integração de múltiplos conceitos.
 - TODOS os casos devem ser em Português (Brasil).
 - TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo fornecido.
+- Retorne APENAS o JSON, sem markdown, sem explicação.`;
+
+const QUIZ_PROMPT = `Você é um gerador de quizzes educacionais de múltipla escolha para um sistema de Sala de Aula Invertida.
+
+Dado o CONTEÚDO de um material educacional, você DEVE gerar 5 questões de múltipla escolha com 4 alternativas cada uma, diretamente relacionadas ao conteúdo fornecido.
+
+IMPORTANTE:
+- Gere EXATAMENTE 5 questões de múltipla escolha.
+- Cada questão deve ter EXATAMENTE 4 alternativas (A, B, C, D).
+- Apenas UMA alternativa deve ser correta.
+- As questões devem cobrir diferentes aspectos do conteúdo fornecido.
+- As alternativas incorretas devem ser plausíveis mas claramente distinguíveis da correta.
+- Use português (Brasil).
+
+Retorne um JSON com esta estrutura EXATA:
+{
+  "levels": [
+    {
+      "level": 1,
+      "label": "Quiz — Múltipla Escolha",
+      "questions": [
+        {
+          "question": "Pergunta sobre o conteúdo?",
+          "type": "multiple_choice",
+          "options": ["A) Alternativa A", "B) Alternativa B", "C) Alternativa C", "D) Alternativa D"],
+          "correct_answer": "A) Alternativa A"
+        }
+      ]
+    }
+  ]
+}
+
+Regras:
+- EXATAMENTE 5 questões em um único nível chamado "Quiz — Múltipla Escolha".
+- Cada questão DEVE ter o campo "options" com EXATAMENTE 4 strings.
+- O campo "correct_answer" DEVE ser exatamente igual a uma das opções.
+- O campo "type" DEVE ser "multiple_choice".
+- As questões devem progredir em dificuldade (das mais simples às mais complexas).
+- TODAS as questões devem estar DIRETAMENTE relacionadas ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
@@ -232,7 +271,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { contentText, roomId, materialId, materialType, fileUrl } = await req.json();
+    const { contentText, roomId, materialId, materialType, fileUrl, activityType } = await req.json();
 
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -283,7 +322,17 @@ serve(async (req) => {
       : materialType === "presentation" ? "CONTEÚDO DA APRESENTAÇÃO"
       : "CONTEÚDO DO MATERIAL";
 
-    const userPrompt = `Gere atividades baseadas em casos reais e altamente aplicados com base no conteúdo abaixo. Os casos DEVEM usar os conceitos, termos e exemplos mencionados no material.
+    const isQuiz = activityType === "quiz";
+    const systemPrompt = isQuiz ? QUIZ_PROMPT : CASE_STUDY_PROMPT;
+
+    const userPrompt = isQuiz
+      ? `Gere um quiz de múltipla escolha com 5 questões e 4 alternativas cada, com base no conteúdo abaixo.
+
+${typeLabel}:
+${finalContent}
+
+IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar as questões. Não invente informações que não estejam no material.`
+      : `Gere atividades baseadas em casos reais e altamente aplicados com base no conteúdo abaixo. Os casos DEVEM usar os conceitos, termos e exemplos mencionados no material.
 
 ${typeLabel}:
 ${finalContent}
@@ -296,7 +345,7 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
     try {
       const content = await callAiWithFallback({
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
         signal: controller.signal,

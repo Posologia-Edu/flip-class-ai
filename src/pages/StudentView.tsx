@@ -15,8 +15,9 @@ type Material = Tables<"materials">;
 
 interface QuizQuestion {
   question: string;
-  type: "case_study" | "open_ended";
+  type: "case_study" | "open_ended" | "multiple_choice";
   context?: string;
+  options?: string[];
   correct_answer: string;
 }
 
@@ -774,12 +775,37 @@ const StudentView = () => {
                 <h3 className="font-display text-xl font-semibold text-card-foreground mb-6">{currentQ.question}</h3>
 
                 <div className="space-y-4">
-                  <textarea
-                    className="w-full p-4 bg-secondary rounded-lg border-none text-foreground resize-none min-h-[150px] focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="Desenvolva sua resposta com base no caso apresentado..."
-                    value={answers[qKey] || openAnswer}
-                    onChange={(e) => { setOpenAnswer(e.target.value); setAnswers((prev) => ({ ...prev, [qKey]: e.target.value })); }}
-                  />
+                  {currentQ.type === "multiple_choice" && currentQ.options ? (
+                    <div className="space-y-3">
+                      {currentQ.options.map((option, optIdx) => {
+                        const isSelected = answers[qKey] === option;
+                        return (
+                          <button
+                            key={optIdx}
+                            type="button"
+                            onClick={() => {
+                              setOpenAnswer(option);
+                              setAnswers((prev) => ({ ...prev, [qKey]: option }));
+                            }}
+                            className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                              isSelected
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border bg-secondary text-foreground hover:border-primary/50"
+                            }`}
+                          >
+                            <span className="text-sm">{option}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <textarea
+                      className="w-full p-4 bg-secondary rounded-lg border-none text-foreground resize-none min-h-[150px] focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="Desenvolva sua resposta com base no caso apresentado..."
+                      value={answers[qKey] || openAnswer}
+                      onChange={(e) => { setOpenAnswer(e.target.value); setAnswers((prev) => ({ ...prev, [qKey]: e.target.value })); }}
+                    />
+                  )}
                 </div>
 
                 <div className="mt-6 flex justify-end">

@@ -44,6 +44,8 @@ interface QuizQuestion {
   correct_answer: string;
 }
 
+type ActivityGenerationType = "quiz" | "case_study";
+
 interface QuizLevel {
   level: number;
   label: string;
@@ -99,6 +101,9 @@ const RoomManage = () => {
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
   const [manualTranscript, setManualTranscript] = useState("");
   const [selectedMaterialForQuiz, setSelectedMaterialForQuiz] = useState<Material | null>(null);
+  const [activityTypeDialogOpen, setActivityTypeDialogOpen] = useState(false);
+  const [pendingMaterialForType, setPendingMaterialForType] = useState<Material | null>(null);
+  const [selectedActivityType, setSelectedActivityType] = useState<ActivityGenerationType>("case_study");
   const [feedbacks, setFeedbacks] = useState<Record<string, { feedback_text: string; grade: number | null; saved: boolean }>>({});
   const [savingFeedback, setSavingFeedback] = useState<string | null>(null);
   const [bankDialogOpen, setBankDialogOpen] = useState(false);
@@ -320,7 +325,19 @@ const RoomManage = () => {
   };
 
   const openTranscriptDialog = (material: Material) => {
+    // First, show the activity type selection dialog
+    setPendingMaterialForType(material);
+    setSelectedActivityType("case_study");
+    setActivityTypeDialogOpen(true);
+  };
+
+  const proceedWithGeneration = () => {
+    const material = pendingMaterialForType;
+    if (!material) return;
+    setActivityTypeDialogOpen(false);
+    setPendingMaterialForType(null);
     setSelectedMaterialForQuiz(material);
+
     if (isYoutubeLink(material)) {
       const cached = material.content_text_for_ai || "";
       const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
@@ -351,7 +368,7 @@ const RoomManage = () => {
         setTimeout(() => reject(new Error("Tempo limite excedido. O arquivo pode ser muito grande. Tente colar o conteúdo textual manualmente.")), 150000)
       );
       const fetchPromise = supabase.functions.invoke("generate-quiz", {
-        body: { materialId: material.id, contentText: material.content_text_for_ai || "", roomId, materialType: material.type, fileUrl: material.url },
+        body: { materialId: material.id, contentText: material.content_text_for_ai || "", roomId, materialType: material.type, fileUrl: material.url, activityType: selectedActivityType },
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       if (response.error) {
@@ -384,7 +401,7 @@ const RoomManage = () => {
     setGeneratingQuiz(material.id);
     try {
       const response = await supabase.functions.invoke("generate-quiz", {
-        body: { materialId: material.id, contentText: content, roomId, materialType: material.type },
+        body: { materialId: material.id, contentText: content, roomId, materialType: material.type, activityType: selectedActivityType },
       });
       if (response.error) throw response.error;
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
@@ -405,7 +422,7 @@ const RoomManage = () => {
     try {
       await supabase.from("materials").update({ content_text_for_ai: manualTranscript.trim() }).eq("id", selectedMaterialForQuiz.id);
       const response = await supabase.functions.invoke("generate-quiz", {
-        body: { materialId: selectedMaterialForQuiz.id, contentText: manualTranscript.trim(), roomId, materialType: selectedMaterialForQuiz.type },
+        body: { materialId: selectedMaterialForQuiz.id, contentText: manualTranscript.trim(), roomId, materialType: selectedMaterialForQuiz.type, activityType: selectedActivityType },
       });
       if (response.error) throw response.error;
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
@@ -932,6 +949,57 @@ const RoomManage = () => {
                 <p className="text-xs text-muted-foreground">{manualTranscript.length > 0 ? `${manualTranscript.length} caracteres` : ""}</p>
                 <Button onClick={generateQuizFromTranscript} disabled={!manualTranscript.trim() || !!generatingQuiz}>
                   {generatingQuiz ? (<><Loader2 className="w-4 h-4 animate-spin mr-1" /> Gerando...</>) : (<><Sparkles className="w-4 h-4 mr-1" /> Gerar Atividade</>)}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Activity Type Selection Dialog */}
+        <Dialog open={activityTypeDialogOpen} onOpenChange={setActivityTypeDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display flex items-center gap-2">
+                <Sparkles className="w-5 h-5" /> Tipo de Atividade
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">Escolha o tipo de atividade que a IA irá gerar:</p>
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedActivityType("quiz")}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${selectedActivityType === "quiz" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedActivityType === "quiz" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                      <Check className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-card-foreground">Quiz — Múltipla Escolha</p>
+                      <p className="text-xs text-muted-foreground">5 questões com 4 alternativas cada</p>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedActivityType("case_study")}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${selectedActivityType === "case_study" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedActivityType === "case_study" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                      <Lightbulb className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-card-foreground">Casos Clínicos</p>
+                      <p className="text-xs text-muted-foreground">Casos reais com perguntas dissertativas em 3 níveis</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={proceedWithGeneration}>
+                  <Sparkles className="w-4 h-4 mr-1" /> Gerar Atividade
                 </Button>
               </div>
             </div>
