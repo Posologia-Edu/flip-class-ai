@@ -177,7 +177,9 @@ Deno.serve(async (req) => {
       }
 
       if (existingUser) {
-        // User already has an account — add them directly as active
+        const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "https://flip.posologia.app";
+
+        // User already has an account — add them and send notification email via Resend
         // Check for any existing record for this email (any status) to avoid conflicts
         const { data: anyExisting } = await adminClient
           .from("admin_invites")
@@ -187,7 +189,6 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (anyExisting) {
-          // Update existing record instead of inserting
           const { error: updateError } = await adminClient
             .from("admin_invites")
             .update({
@@ -227,6 +228,61 @@ Deno.serve(async (req) => {
           .from("profiles")
           .update({ approval_status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
           .eq("user_id", existingUser.id);
+
+        // Send notification email via Resend
+        const resendApiKey = Deno.env.get("RESEND_API_KEY");
+        if (resendApiKey) {
+          const loginUrl = `${origin}/auth`;
+          const emailHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Roboto,sans-serif;">
+              <div style="max-width:520px;margin:40px auto;padding:32px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+                <div style="text-align:center;margin-bottom:24px;">
+                  <h1 style="font-size:24px;color:#0d9488;margin:0;">FlipClass</h1>
+                </div>
+                <h2 style="font-size:18px;color:#111827;margin-bottom:16px;">Você foi adicionado a uma instituição!</h2>
+                <p style="font-size:15px;color:#374151;line-height:1.6;">
+                  Sua conta na plataforma <strong>FlipClass</strong> foi vinculada ao plano Institucional.
+                  Você já pode acessar todos os recursos disponíveis.
+                </p>
+                <div style="text-align:center;margin:32px 0;">
+                  <a href="${loginUrl}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
+                    Acessar FlipClass
+                  </a>
+                </div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+                <p style="font-size:12px;color:#9ca3af;text-align:center;">
+                  FlipClass — Plataforma de Sala de Aula Invertida
+                </p>
+              </div>
+            </body>
+            </html>
+          `;
+
+          try {
+            const resendRes = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${resendApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: "FlipClass <noreply@notify.tbl.posologia.app>",
+                to: [email],
+                subject: "Você foi adicionado ao FlipClass!",
+                html: emailHtml,
+              }),
+            });
+            if (!resendRes.ok) {
+              const resendErr = await resendRes.text();
+              console.error("Resend error (existing user):", resendRes.status, resendErr);
+            }
+          } catch (emailErr) {
+            console.error("Error sending email to existing user:", emailErr);
+          }
+        }
 
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
