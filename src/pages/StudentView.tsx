@@ -30,6 +30,11 @@ interface QuizData {
   levels: QuizLevel[];
 }
 
+interface ActivityWithTitle {
+  title: string;
+  levels: QuizLevel[];
+}
+
 // --- Progress Dashboard Component ---
 interface ProgressDashboardProps {
   materials: Material[];
@@ -181,6 +186,7 @@ const StudentView = () => {
   const [room, setRoom] = useState<Room | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
+  const [activityTitles, setActivityTitles] = useState<ActivityWithTitle[]>([]);
   const [unlocked, setUnlocked] = useState(false);
   const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
@@ -208,7 +214,6 @@ const StudentView = () => {
           data: { activity_type: activityType, material_id: materialId || null, duration_seconds: durationSeconds || 0 },
         },
       });
-      // Update local state so progress updates in real-time
       setActivityLogs(prev => [...prev, {
         activity_type: activityType,
         material_id: materialId || null,
@@ -247,13 +252,17 @@ const StudentView = () => {
     // Merge all published activities' quiz data into one
     if (actRes.data && actRes.data.length > 0) {
       const allLevels: QuizLevel[] = [];
+      const titles: ActivityWithTitle[] = [];
       for (const act of actRes.data) {
         const qd = act.quiz_data as unknown as QuizData;
         if (qd?.levels) {
+          const actTitle = (act as any).title || "Atividade";
+          titles.push({ title: actTitle, levels: qd.levels });
           allLevels.push(...qd.levels);
         }
       }
       setQuizData({ levels: allLevels });
+      setActivityTitles(titles);
     }
 
     if (sessionId) {
@@ -292,16 +301,9 @@ const StudentView = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Real-time: only listen for teacher_feedback changes, don't poll everything
   useEffect(() => {
     if (!roomId || !sessionId) return;
-
-    let isActive = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const poll = async () => {
-      await fetchData();
-      if (isActive) timeoutId = setTimeout(poll, 5000);
-    };
 
     const channel = supabase
       .channel(`student-view:${roomId}:${sessionId}`)
@@ -326,28 +328,16 @@ const StudentView = () => {
       .on("postgres_changes", {
         event: "*",
         schema: "public",
-        table: "student_sessions",
-        filter: `id=eq.${sessionId}`,
-      }, fetchData)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "student_activity_logs",
-        filter: `session_id=eq.${sessionId}`,
-      }, fetchData)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
         table: "teacher_feedback",
         filter: `session_id=eq.${sessionId}`,
-      }, fetchData)
+      }, () => {
+        // Update feedbacks and show them automatically
+        fetchData();
+        setShowFeedback(true);
+      })
       .subscribe();
 
-    timeoutId = setTimeout(poll, 5000);
-
     return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
       supabase.removeChannel(channel);
     };
   }, [roomId, sessionId, fetchData]);
@@ -381,9 +371,23 @@ const StudentView = () => {
   const currentQ = currentLevelData?.questions?.[currentQuestion];
   const qKey = `${currentLevel}-${currentQuestion}`;
 
-  const checkAnswer = () => { setShowResult(true); };
+  // Determine which activity title should be shown for the current level
+  const getActivityTitleForLevel = (levelIndex: number): string | null => {
+    let accumulated = 0;
+    for (const act of activityTitles) {
+      const start = accumulated;
+      accumulated += act.levels.length;
+      if (levelIndex >= start && levelIndex < accumulated) {
+        // Show title only at the first level of each activity
+        if (levelIndex === start) return act.title;
+        return null;
+      }
+    }
+    return null;
+  };
 
-  const nextQuestion = () => {
+  const handleSubmitAnswer = () => {
+    // Save answer and auto-advance to next question
     setShowResult(false);
     setOpenAnswer("");
     if (currentQuestion < (currentLevelData?.questions?.length || 0) - 1) {
@@ -409,6 +413,11 @@ const StudentView = () => {
     }
   };
 
+  // Track play events for video/audio
+  const handleMediaPlay = (materialId: string) => {
+    handleViewMaterial(materialId);
+  };
+
   const submitQuiz = async () => {
     setSubmitted(true);
     const quizDuration = Math.round((Date.now() - quizStartTime.current) / 1000);
@@ -431,11 +440,24 @@ const StudentView = () => {
 
     if (mat.type === "video" && ytId) {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="aspect-video">
-            <iframe src={`https://www.youtube.com/embed/${ytId}`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+            <iframe
+              src={`https://www.youtube.com/embed/${ytId}?enablejsapi=1`}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              onLoad={() => {
+                // Track when iframe is interacted with (approximation via focus)
+              }}
+            />
           </div>
-          <div className="p-4"><h3 className="font-medium text-card-foreground">{mat.title || "Vídeo"}</h3></div>
+          <div className="p-4 flex items-center justify-between">
+            <h3 className="font-medium text-card-foreground">{mat.title || "Vídeo"}</h3>
+            <Button size="sm" variant="ghost" onClick={() => handleMediaPlay(mat.id)}>
+              <Eye className="w-4 h-4 mr-1" /> Marcar como visto
+            </Button>
+          </div>
         </div>
       );
     }
@@ -448,7 +470,7 @@ const StudentView = () => {
               <div className="aspect-[4/3]"><iframe src={mat.url} className="w-full h-full" title={mat.title} /></div>
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2"><MatIcon className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
-                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}><ExternalLink className="w-4 h-4" /> Abrir</a>
+                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => { e.stopPropagation(); handleViewMaterial(mat.id); }}><ExternalLink className="w-4 h-4" /> Abrir</a>
               </div>
             </>
           ) : (
@@ -483,7 +505,7 @@ const StudentView = () => {
 
     if (mat.type === "podcast") {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <Headphones className="w-5 h-5 text-muted-foreground" />
@@ -491,11 +513,20 @@ const StudentView = () => {
             </div>
             {mat.url && (
               <div className="space-y-3">
-                <audio controls className="w-full" preload="metadata">
+                <audio
+                  controls
+                  className="w-full"
+                  preload="auto"
+                  onPlay={() => handleMediaPlay(mat.id)}
+                  crossOrigin="anonymous"
+                >
+                  <source src={mat.url} type="audio/mpeg" />
+                  <source src={mat.url} type="audio/ogg" />
+                  <source src={mat.url} type="audio/wav" />
                   <source src={mat.url} />
                   Seu navegador não suporta áudio.
                 </audio>
-                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => { e.stopPropagation(); handleViewMaterial(mat.id); }}>
                   <ExternalLink className="w-4 h-4" /> Abrir em nova aba
                 </a>
               </div>
@@ -513,7 +544,7 @@ const StudentView = () => {
           <div>
             <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
             {mat.url && (
-              <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+              <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1" onClick={(e) => { e.stopPropagation(); handleViewMaterial(mat.id); }}>
                 <ExternalLink className="w-4 h-4" /> Abrir
               </a>
             )}
@@ -524,6 +555,8 @@ const StudentView = () => {
   };
 
   if (!room) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Carregando...</div>;
+
+  const activityTitle = getActivityTitleForLevel(currentLevel);
 
   return (
     <div className="min-h-screen bg-background">
@@ -590,17 +623,8 @@ const StudentView = () => {
             <h2 className="font-display text-2xl font-bold mb-2">Atividade Concluída!</h2>
             <p className="text-muted-foreground mb-6">Suas respostas foram enviadas ao professor para avaliação.</p>
             <div className="flex gap-3 justify-center">
-              <Button variant="outline" onClick={async () => {
-                if (!sessionId) return;
-                const { data } = await supabase.from("teacher_feedback" as any).select("*").eq("session_id", sessionId);
-                if (data) {
-                  const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
-                  (data as any[]).forEach((fb: any) => { fbMap[fb.question_key] = { feedback_text: fb.feedback_text || "", grade: fb.grade }; });
-                  setTeacherFeedbacks(fbMap);
-                }
-                setShowFeedback(true);
-              }}>
-                <MessageSquare className="w-4 h-4 mr-2" /> Ver Feedback
+              <Button variant="outline" onClick={() => setShowFeedback(!showFeedback)}>
+                <MessageSquare className="w-4 h-4 mr-2" /> {showFeedback ? "Ocultar Feedback" : "Ver Feedback"}
               </Button>
               <Button onClick={() => navigate("/")}>Voltar para Início</Button>
             </div>
@@ -650,6 +674,13 @@ const StudentView = () => {
         ) : currentQ ? (
           <AnimatePresence mode="wait">
             <motion.div key={qKey} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              {/* Show activity title when starting a new activity */}
+              {activityTitle && (
+                <div className="mb-4 bg-primary/5 border border-primary/20 rounded-xl p-4">
+                  <h2 className="font-display text-lg font-bold text-primary">{activityTitle}</h2>
+                </div>
+              )}
+
               <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-6 ${levelStyles[currentLevel % levelStyles.length]?.bg} ${levelStyles[currentLevel % levelStyles.length]?.text}`}>
                 {levelStyles[currentLevel % levelStyles.length]?.label || currentLevelData?.label}
               </div>
@@ -672,19 +703,14 @@ const StudentView = () => {
                     placeholder="Desenvolva sua resposta com base no caso apresentado..."
                     value={answers[qKey] || openAnswer}
                     onChange={(e) => { setOpenAnswer(e.target.value); setAnswers((prev) => ({ ...prev, [qKey]: e.target.value })); }}
-                    disabled={showResult}
                   />
                 </div>
 
                 <div className="mt-6 flex justify-end">
-                  {!showResult ? (
-                    <Button onClick={checkAnswer} disabled={!answers[qKey]}>Enviar Resposta</Button>
-                  ) : (
-                    <Button onClick={nextQuestion}>
-                      {currentLevel === levels.length - 1 && currentQuestion === currentLevelData.questions.length - 1 ? "Finalizar" : "Próxima"}
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  )}
+                  <Button onClick={handleSubmitAnswer} disabled={!answers[qKey]}>
+                    {currentLevel === levels.length - 1 && currentQuestion === currentLevelData.questions.length - 1 ? "Finalizar" : "Enviar Resposta"}
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
                 </div>
               </div>
             </motion.div>

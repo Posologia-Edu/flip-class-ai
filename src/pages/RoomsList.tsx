@@ -6,7 +6,7 @@ import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock } from "lucide-react";
+import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Tables } from "@/integrations/supabase/types";
@@ -20,11 +20,29 @@ interface RoomStats {
   completedCount: number;
 }
 
+const isRoomExpired = (room: Room): boolean => {
+  const expireAt = (room as any).expire_at;
+  const lastActivity = (room as any).last_student_activity_at;
+  const now = new Date();
+
+  // Check explicit expiration
+  if (expireAt && new Date(expireAt) <= now) return true;
+
+  // Check idle expiration (no students for 1 week)
+  if (lastActivity) {
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    if (new Date(lastActivity) <= oneWeekAgo) return true;
+  }
+
+  return false;
+};
+
 const RoomsList = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomStats, setRoomStats] = useState<Record<string, RoomStats>>({});
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
+  const [newExpireAt, setNewExpireAt] = useState("");
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const navigate = useNavigate();
@@ -82,15 +100,21 @@ const RoomsList = () => {
     }
 
     setCreating(true);
-    const { error } = await supabase.from("rooms").insert({
+    const insertData: any = {
       title: newTitle.trim(),
       pin_code: generatePin(),
       teacher_id: auth.user.id,
-    });
+    };
+    if (newExpireAt) {
+      insertData.expire_at = new Date(newExpireAt).toISOString();
+    }
+    // If no expire_at, the DB default (now + 7 days) applies
+    const { error } = await supabase.from("rooms").insert(insertData);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
       setNewTitle("");
+      setNewExpireAt("");
       setDialogOpen(false);
       fetchRooms();
       toast({ title: "Sala criada!" });
@@ -146,6 +170,15 @@ const RoomsList = () => {
                   onKeyDown={(e) => e.key === "Enter" && createRoom()}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Data de expiração (opcional)</Label>
+                <Input
+                  type="datetime-local"
+                  value={newExpireAt}
+                  onChange={(e) => setNewExpireAt(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Se não definida, a sala expira em 1 semana. Salas ociosas (sem alunos por 1 semana) também expiram automaticamente.</p>
+              </div>
               <Button onClick={createRoom} disabled={creating || !newTitle.trim()} className="w-full font-semibold">
                 {creating ? "Criando..." : "Criar Sala"}
               </Button>
@@ -181,22 +214,36 @@ const RoomsList = () => {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {rooms.map((room) => {
             const stats = roomStats[room.id];
+            const expired = isRoomExpired(room);
             return (
               <div
                 key={room.id}
-                className="bg-card border border-border rounded-xl p-6 hover:shadow-[var(--shadow-soft)] transition-shadow cursor-pointer group"
+                className={`border rounded-xl p-6 hover:shadow-[var(--shadow-soft)] transition-shadow cursor-pointer group ${
+                  expired
+                    ? "bg-destructive/5 border-destructive/30"
+                    : "bg-card border-border"
+                }`}
                 onClick={() => navigate(`/dashboard/room/${room.id}`)}
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-3">
                   <h3 className="font-display font-semibold text-lg text-card-foreground group-hover:text-primary transition-colors">
                     {room.title}
                   </h3>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteRoom(room.id); }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                      expired
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-level-easy/10 text-level-easy"
+                    }`}>
+                      {expired ? "Expirada" : "Ativa"}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteRoom(room.id); }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
                   <div className="flex items-center gap-1.5">
@@ -210,6 +257,12 @@ const RoomsList = () => {
                     </div>
                   )}
                 </div>
+                {(room as any).expire_at && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+                    <CalendarClock className="w-3.5 h-3.5" />
+                    Expira: {new Date((room as any).expire_at).toLocaleDateString("pt-BR")}
+                  </div>
+                )}
                 {stats && (
                   <div className="flex gap-3 text-xs text-muted-foreground border-t border-border pt-3">
                     <span className="flex items-center gap-1">

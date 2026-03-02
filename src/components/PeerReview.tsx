@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -63,35 +63,18 @@ export const PeerReviewTeacher = ({
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
+  // Only use realtime subscription, no polling to avoid refresh loops
   useEffect(() => {
-    let isActive = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const poll = async () => {
-      await fetchAssignments();
-      if (isActive) timeoutId = setTimeout(poll, 5000);
-    };
-
     const channel = supabase
       .channel(`peer-review-teacher:${roomId}:${activityId}`)
       .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "peer_review_assignments",
-        filter: `activity_id=eq.${activityId}`,
-      }, fetchAssignments)
-      .on("postgres_changes", {
-        event: "*",
+        event: "INSERT",
         schema: "public",
         table: "peer_reviews",
       }, fetchAssignments)
       .subscribe();
 
-    timeoutId = setTimeout(poll, 5000);
-
     return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
       supabase.removeChannel(channel);
     };
   }, [roomId, activityId, fetchAssignments]);
@@ -150,7 +133,7 @@ export const PeerReviewTeacher = ({
           .eq("activity_id", activityId);
       }
 
-      // Circular assignment: each student reviews the next student's work
+      // Circular assignment
       const shuffled = [...completedSessions].sort(() => Math.random() - 0.5);
       const newAssignments = shuffled.map((session, i) => ({
         activity_id: activityId,
@@ -171,13 +154,10 @@ export const PeerReviewTeacher = ({
     setDistributing(false);
   };
 
-  const completedCount = assignments.length > 0
-    ? reviews.length
-    : 0;
+  const completedCount = assignments.length > 0 ? reviews.length : 0;
 
   return (
     <div className="space-y-6">
-      {/* Enable/Disable */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-display text-base font-semibold flex items-center gap-2">
@@ -198,38 +178,20 @@ export const PeerReviewTeacher = ({
 
       {enabled && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-6">
-          {/* Criteria Definition */}
           <div className="space-y-3">
             <Label className="text-sm font-semibold">Critérios de Avaliação</Label>
             {criteria.map((c, i) => (
               <div key={c.id} className="bg-secondary rounded-lg p-4 space-y-2">
                 <div className="flex gap-2">
                   <div className="flex-1 space-y-1">
-                    <Input
-                      placeholder="Nome do critério (ex: Clareza)"
-                      value={c.label}
-                      onChange={(e) => updateCriterion(i, "label", e.target.value)}
-                      className="bg-background"
-                    />
+                    <Input placeholder="Nome do critério" value={c.label} onChange={(e) => updateCriterion(i, "label", e.target.value)} className="bg-background" />
                   </div>
                   <div className="w-24 space-y-1">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={c.maxScore}
-                      onChange={(e) => updateCriterion(i, "maxScore", parseInt(e.target.value) || 10)}
-                      className="bg-background"
-                    />
+                    <Input type="number" min={1} max={10} value={c.maxScore} onChange={(e) => updateCriterion(i, "maxScore", parseInt(e.target.value) || 10)} className="bg-background" />
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => removeCriterion(i)} className="text-destructive">×</Button>
                 </div>
-                <Input
-                  placeholder="Descrição do critério..."
-                  value={c.description}
-                  onChange={(e) => updateCriterion(i, "description", e.target.value)}
-                  className="bg-background text-sm"
-                />
+                <Input placeholder="Descrição do critério..." value={c.description} onChange={(e) => updateCriterion(i, "description", e.target.value)} className="bg-background text-sm" />
               </div>
             ))}
             <Button variant="outline" size="sm" onClick={addCriterion}>+ Adicionar Critério</Button>
@@ -246,7 +208,7 @@ export const PeerReviewTeacher = ({
             </Button>
           </div>
 
-          {/* Assignment Status */}
+          {/* Assignment Status with Peer Review Results */}
           {assignments.length > 0 && (
             <div className="bg-card border border-border rounded-xl p-4">
               <h4 className="font-semibold text-sm mb-3">Status das Avaliações</h4>
@@ -260,18 +222,45 @@ export const PeerReviewTeacher = ({
                   <p className="text-xs text-muted-foreground">Concluídas</p>
                 </div>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {assignments.map((a: any) => {
                   const reviewer = sessions.find((s: any) => s.id === a.reviewer_session_id);
                   const reviewee = sessions.find((s: any) => s.id === a.reviewee_session_id);
-                  const hasReview = reviews.some((r: any) => r.assignment_id === a.id);
+                  const review = reviews.find((r: any) => r.assignment_id === a.id);
+                  const reviewScores = review ? (review.criteria_scores as Record<string, number>) || {} : null;
                   return (
-                    <div key={a.id} className="flex items-center justify-between text-sm bg-secondary/50 rounded-lg px-3 py-2">
-                      <span><span className="font-medium">{reviewer?.student_name || "?"}</span> → <span className="font-medium">{reviewee?.student_name || "?"}</span></span>
-                      {hasReview ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-level-easy"><CheckCircle2 className="w-3.5 h-3.5" /> Avaliado</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Pendente</span>
+                    <div key={a.id} className="bg-secondary/50 rounded-lg px-3 py-3 space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span><span className="font-medium">{reviewer?.student_name || "?"}</span> → <span className="font-medium">{reviewee?.student_name || "?"}</span></span>
+                        {review ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-level-easy"><CheckCircle2 className="w-3.5 h-3.5" /> Avaliado</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Pendente</span>
+                        )}
+                      </div>
+                      {/* Show review results for professor */}
+                      {review && reviewScores && (
+                        <div className="bg-background rounded-lg p-3 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            {criteria.map((c) => (
+                              <div key={c.id} className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">{c.label}</span>
+                                <span className="font-bold text-primary">{reviewScores[c.id] ?? "—"}/{c.maxScore}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {review.comment && (
+                            <div className="border-t border-border pt-2 mt-2">
+                              <p className="text-xs text-muted-foreground font-semibold mb-1">Comentário:</p>
+                              <p className="text-xs text-foreground">{review.comment}</p>
+                            </div>
+                          )}
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-primary">
+                              Média: {(Object.values(reviewScores).reduce((s: number, v: any) => s + (Number(v) || 0), 0) / Math.max(Object.keys(reviewScores).length, 1)).toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
                       )}
                     </div>
                   );
@@ -307,9 +296,9 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
   const [loading, setLoading] = useState(true);
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
   const [activeQuizData, setActiveQuizData] = useState<any>(quizData);
+  const hasFetched = useRef(false);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     try {
       const [{ data: reviewerAssignments }, { data: revieweeAssignments }] = await Promise.all([
         supabase
@@ -376,13 +365,18 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
           setComment(rev.comment || "");
         } else {
           setExistingReview(null);
-          setScores({});
-          setComment("");
+          // Don't reset scores/comment if they're mid-edit
+          if (!hasFetched.current) {
+            setScores({});
+            setComment("");
+          }
         }
       } else {
         setAssignment(null);
         setRevieweeAnswers({});
-        setExistingReview(null);
+        if (!hasFetched.current) {
+          setExistingReview(null);
+        }
       }
 
       const validRevieweeAssignments = revieweeRows.filter((a: any) => activityMap.has(a.activity_id));
@@ -402,6 +396,8 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
       } else {
         setReceivedReviews([]);
       }
+
+      hasFetched.current = true;
     } catch (err) {
       console.error("Peer review fetch error:", err);
     }
@@ -412,47 +408,25 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     fetchData();
   }, [fetchData]);
 
+  // Only listen for new assignments via realtime, NO polling
   useEffect(() => {
-    let isActive = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const poll = async () => {
-      await fetchData();
-      if (isActive) timeoutId = setTimeout(poll, 5000);
-    };
-
     const channel = supabase
       .channel(`peer-review-student:${roomId}:${sessionId}`)
       .on("postgres_changes", {
-        event: "*",
+        event: "INSERT",
         schema: "public",
         table: "peer_review_assignments",
         filter: `reviewer_session_id=eq.${sessionId}`,
       }, fetchData)
       .on("postgres_changes", {
-        event: "*",
+        event: "INSERT",
         schema: "public",
         table: "peer_review_assignments",
         filter: `reviewee_session_id=eq.${sessionId}`,
       }, fetchData)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "peer_reviews",
-      }, fetchData)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "activities",
-        filter: `room_id=eq.${roomId}`,
-      }, fetchData)
       .subscribe();
 
-    timeoutId = setTimeout(poll, 5000);
-
     return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
       supabase.removeChannel(channel);
     };
   }, [roomId, sessionId, fetchData]);
@@ -480,7 +454,7 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
           } as any);
       }
       toast({ title: "Avaliação enviada!", description: "Sua avaliação por pares foi salva com sucesso." });
-      fetchData();
+      setExistingReview({ ...existingReview, criteria_scores: scores, comment });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
@@ -522,7 +496,6 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
               </p>
             </div>
 
-            {/* Show reviewee's answers */}
             <div className="space-y-4">
               <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Respostas do Colega</h3>
               {levels.map((level: any, li: number) => (
@@ -549,7 +522,6 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
               ))}
             </div>
 
-            {/* Criteria scoring */}
             <div className="space-y-4">
               <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Sua Avaliação</h3>
               {criteria.map((c) => (

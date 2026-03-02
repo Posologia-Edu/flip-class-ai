@@ -495,7 +495,9 @@ export type Database = {
       rooms: {
         Row: {
           created_at: string
+          expire_at: string | null
           id: string
+          last_student_activity_at: string | null
           pin_code: string
           teacher_id: string
           title: string
@@ -503,7 +505,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          expire_at?: string | null
           id?: string
+          last_student_activity_at?: string | null
           pin_code: string
           teacher_id: string
           title: string
@@ -511,7 +515,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          expire_at?: string | null
           id?: string
+          last_student_activity_at?: string | null
           pin_code?: string
           teacher_id?: string
           title?: string

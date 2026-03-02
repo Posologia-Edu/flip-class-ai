@@ -170,14 +170,6 @@ const RoomManage = () => {
   useEffect(() => {
     if (!roomId) return;
 
-    let isActive = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const poll = async () => {
-      await fetchData();
-      if (isActive) timeoutId = setTimeout(poll, 5000);
-    };
-
     const channel = supabase
       .channel(`room-manage:${roomId}`)
       .on("postgres_changes", {
@@ -199,23 +191,14 @@ const RoomManage = () => {
         filter: `room_id=eq.${roomId}`,
       }, fetchData)
       .on("postgres_changes", {
-        event: "*",
+        event: "INSERT",
         schema: "public",
         table: "student_activity_logs",
         filter: `room_id=eq.${roomId}`,
       }, fetchData)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "teacher_feedback",
-      }, fetchData)
       .subscribe();
 
-    timeoutId = setTimeout(poll, 5000);
-
     return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
       supabase.removeChannel(channel);
     };
   }, [roomId, fetchData]);
@@ -456,10 +439,13 @@ const RoomManage = () => {
 
   const updateFeedbackField = (sessionId: string, questionKey: string, field: "feedback_text" | "grade", value: string | number | null) => {
     const fbKey = `${sessionId}-${questionKey}`;
-    setFeedbacks(prev => ({
-      ...prev,
-      [fbKey]: { feedback_text: prev[fbKey]?.feedback_text || "", grade: prev[fbKey]?.grade ?? null, saved: false, [field]: value },
-    }));
+    setFeedbacks(prev => {
+      const current = prev[fbKey] || { feedback_text: "", grade: null, saved: false };
+      return {
+        ...prev,
+        [fbKey]: { ...current, [field]: value, saved: false },
+      };
+    });
   };
 
   const aiGradeQuestion = async (sessionId: string, questionKey: string, question: string, context: string | undefined, correctAnswer: string, studentAnswer: string) => {
@@ -1256,57 +1242,78 @@ const RoomManage = () => {
                                   <p className="text-xs text-muted-foreground mb-3"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
                                   {/* Feedback do professor */}
                                   <div className="border-t border-border pt-3 mt-3 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
-                                        {feedbacks[`${s.id}-${key}`]?.saved && <Check className="w-3.5 h-3.5 text-level-easy" />}
-                                      </div>
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <span>
-                                              <Button size="sm" variant="ghost" className="text-xs h-7 gap-1"
-                                                disabled={aiGrading === `${s.id}-${key}` || !answer || !canUseAiCorrection()}
-                                                onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
+                                    {(() => {
+                                      const fbKey = `${s.id}-${key}`;
+                                      const fb = feedbacks[fbKey];
+                                      const isSaved = fb?.saved === true;
+                                      return (
+                                        <>
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-xs font-semibold text-primary">Feedback do Professor</p>
+                                              {isSaved && <Check className="w-3.5 h-3.5 text-level-easy" />}
+                                            </div>
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <span>
+                                                    <Button size="sm" variant="ghost" className="text-xs h-7 gap-1"
+                                                      disabled={aiGrading === fbKey || !answer || !canUseAiCorrection()}
+                                                      onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
+                                                    >
+                                                      {aiGrading === fbKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                                                      Corrigir com IA
+                                                    </Button>
+                                                  </span>
+                                                </TooltipTrigger>
+                                                {!canUseAiCorrection() && <TooltipContent>Limite de correções IA atingido.</TooltipContent>}
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          </div>
+                                          {aiResults[fbKey] && (
+                                            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs space-y-1.5">
+                                              <div className="flex items-center gap-2 font-semibold text-primary"><Bot className="w-3.5 h-3.5" /> Sugestão da IA — Nota: {aiResults[fbKey].grade}/10</div>
+                                              {aiResults[fbKey].strengths.length > 0 && <p className="text-foreground/80"><ThumbsUp className="w-3 h-3 inline mr-1 text-primary" />{aiResults[fbKey].strengths.join("; ")}</p>}
+                                              {aiResults[fbKey].weaknesses.length > 0 && <p className="text-foreground/80"><ThumbsDown className="w-3 h-3 inline mr-1 text-destructive" />{aiResults[fbKey].weaknesses.join("; ")}</p>}
+                                              {aiResults[fbKey].suggestion && <p className="text-foreground/80"><Lightbulb className="w-3 h-3 inline mr-1 text-accent" />{aiResults[fbKey].suggestion}</p>}
+                                            </div>
+                                          )}
+                                          <Textarea
+                                            placeholder="Escreva seu feedback para esta resposta..."
+                                            value={fb?.feedback_text || ""}
+                                            onChange={(e) => updateFeedbackField(s.id, key, "feedback_text", e.target.value)}
+                                            rows={3}
+                                            className="resize-y text-sm"
+                                            disabled={isSaved}
+                                          />
+                                          <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                              <Label className="text-xs text-muted-foreground">Nota:</Label>
+                                              <Select
+                                                value={fb?.grade?.toString() ?? ""}
+                                                onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}
+                                                disabled={isSaved}
                                               >
-                                                {aiGrading === `${s.id}-${key}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                                                Corrigir com IA
+                                                <SelectTrigger className="w-20 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                                                <SelectContent>
+                                                  {Array.from({ length: 11 }, (_, i) => (<SelectItem key={i} value={i.toString()}>{i}</SelectItem>))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+                                            {isSaved ? (
+                                              <Button size="sm" variant="outline" onClick={() => setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: false } }))}>
+                                                <FileEdit className="w-3.5 h-3.5 mr-1" /> Editar
                                               </Button>
-                                            </span>
-                                          </TooltipTrigger>
-                                          {!canUseAiCorrection() && <TooltipContent>Limite de correções IA atingido.</TooltipContent>}
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    </div>
-                                    {aiResults[`${s.id}-${key}`] && (
-                                      <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs space-y-1.5">
-                                        <div className="flex items-center gap-2 font-semibold text-primary"><Bot className="w-3.5 h-3.5" /> Sugestão da IA — Nota: {aiResults[`${s.id}-${key}`].grade}/10</div>
-                                        {aiResults[`${s.id}-${key}`].strengths.length > 0 && <p className="text-foreground/80"><ThumbsUp className="w-3 h-3 inline mr-1 text-primary" />{aiResults[`${s.id}-${key}`].strengths.join("; ")}</p>}
-                                        {aiResults[`${s.id}-${key}`].weaknesses.length > 0 && <p className="text-foreground/80"><ThumbsDown className="w-3 h-3 inline mr-1 text-destructive" />{aiResults[`${s.id}-${key}`].weaknesses.join("; ")}</p>}
-                                        {aiResults[`${s.id}-${key}`].suggestion && <p className="text-foreground/80"><Lightbulb className="w-3 h-3 inline mr-1 text-accent" />{aiResults[`${s.id}-${key}`].suggestion}</p>}
-                                      </div>
-                                    )}
-                                    <Textarea
-                                      placeholder="Escreva seu feedback para esta resposta..."
-                                      value={feedbacks[`${s.id}-${key}`]?.feedback_text || ""}
-                                      onChange={(e) => updateFeedbackField(s.id, key, "feedback_text", e.target.value)}
-                                      rows={3} className="resize-y text-sm"
-                                    />
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex items-center gap-2">
-                                        <Label className="text-xs text-muted-foreground">Nota:</Label>
-                                        <Select value={feedbacks[`${s.id}-${key}`]?.grade?.toString() ?? ""} onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}>
-                                          <SelectTrigger className="w-20 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-                                          <SelectContent>
-                                            {Array.from({ length: 11 }, (_, i) => (<SelectItem key={i} value={i.toString()}>{i}</SelectItem>))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <Button size="sm" variant="outline" onClick={() => saveFeedback(s.id, key)} disabled={savingFeedback === `${s.id}-${key}`}>
-                                        {savingFeedback === `${s.id}-${key}` ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
-                                        Salvar
-                                      </Button>
-                                    </div>
+                                            ) : (
+                                              <Button size="sm" variant="outline" onClick={() => saveFeedback(s.id, key)} disabled={savingFeedback === fbKey}>
+                                                {savingFeedback === fbKey ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
+                                                Salvar
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               );
