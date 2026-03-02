@@ -123,6 +123,7 @@ export function useFeatureGate() {
   const getRoomLimit = useCallback(() => limits.max_rooms, [limits.max_rooms]);
 
   const canExportReports = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
+  const canUseCrossRoomAnalytics = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
   const canUseMultiTeacher = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
   const canUseWhiteLabel = useCallback(() => effectivePlan === "institutional", [effectivePlan]);
   const canInviteTeacher = useCallback((currentCount: number) => {
@@ -148,6 +149,7 @@ export function useFeatureGate() {
     getRoomStudentLimit,
     getRoomLimit,
     canExportReports,
+    canUseCrossRoomAnalytics,
     canUseMultiTeacher,
     canUseWhiteLabel,
     canInviteTeacher,

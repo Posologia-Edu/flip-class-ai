@@ -32,7 +32,7 @@ const COLORS = [
 
 const AnalyticsPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const { canUseAdvancedAnalytics, canExportReports } = useFeatureGate();
+  const { canUseAdvancedAnalytics, canExportReports, canUseCrossRoomAnalytics } = useFeatureGate();
   const [analytics, setAnalytics] = useState<RoomAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRoom, setExpandedRoom] = useState<string | null>(null);
@@ -224,7 +224,11 @@ const AnalyticsPage = () => {
         </div>
       )}
 
-      {analytics.length >= 2 && <CrossRoomAnalytics data={analytics} />}
+      {analytics.length >= 2 && (
+        <UpgradeGate allowed={canUseCrossRoomAnalytics()} featureName="Analytics Cruzado entre Salas" planRequired="Institucional">
+          <CrossRoomAnalytics data={analytics} />
+        </UpgradeGate>
+      )}
 
       {analytics.length > 0 ? (
         <div className="space-y-3 mb-8">
