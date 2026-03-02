@@ -212,6 +212,7 @@ const StudentView = () => {
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const viewedMaterials = useRef<Set<string>>(new Set());
+  const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
 
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
@@ -287,6 +288,7 @@ const StudentView = () => {
           .filter((l: any) => l.activity_type === "material_view" && l.material_id)
           .map((l: any) => l.material_id);
         viewedIds.forEach((id: string) => viewedMaterials.current.add(id));
+        setViewedSet(new Set(viewedIds));
 
         if (sessionResult.session) {
           setSessionData(sessionResult.session);
@@ -446,13 +448,10 @@ const StudentView = () => {
   const handleViewMaterial = (materialId: string) => {
     if (!viewedMaterials.current.has(materialId)) {
       viewedMaterials.current.add(materialId);
+      setViewedSet(prev => new Set(prev).add(materialId));
       logActivity("material_view", materialId, 1);
+      toast({ title: "Material marcado como visto!" });
     }
-  };
-
-  // Track play events for video/audio
-  const handleMediaPlay = (materialId: string) => {
-    handleViewMaterial(materialId);
   };
 
   const submitQuiz = async () => {
@@ -474,6 +473,16 @@ const StudentView = () => {
     toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
 
+  const ViewedButton = ({ materialId }: { materialId: string }) => {
+    const isViewed = viewedSet.has(materialId);
+    return (
+      <Button size="sm" variant={isViewed ? "default" : "ghost"} onClick={(e) => { e.stopPropagation(); handleViewMaterial(materialId); }} disabled={isViewed} className={isViewed ? "bg-level-easy text-white hover:bg-level-easy" : ""}>
+        {isViewed ? <CheckCircle2 className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
+        {isViewed ? "Visto" : "Marcar como visto"}
+      </Button>
+    );
+  };
+
   const renderMaterialCard = (mat: Material) => {
     const ytId = mat.url ? extractYoutubeId(mat.url) : null;
     const MatIcon = getMaterialIcon(mat.type);
@@ -487,14 +496,11 @@ const StudentView = () => {
               className="w-full h-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              onLoad={() => handleMediaPlay(mat.id)}
             />
           </div>
           <div className="p-4 flex items-center justify-between">
             <h3 className="font-medium text-card-foreground">{mat.title || "Vídeo"}</h3>
-            <Button size="sm" variant="ghost" onClick={() => handleMediaPlay(mat.id)}>
-              <Eye className="w-4 h-4 mr-1" /> Marcar como visto
-            </Button>
+            <ViewedButton materialId={mat.id} />
           </div>
         </div>
       );
@@ -502,17 +508,23 @@ const StudentView = () => {
 
     if (mat.type === "pdf" || mat.type === "presentation") {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           {mat.url ? (
             <>
               <div className="aspect-[4/3]"><iframe src={mat.url} className="w-full h-full" title={mat.title} /></div>
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2"><MatIcon className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
-                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1" onClick={(e) => { e.stopPropagation(); handleViewMaterial(mat.id); }}><ExternalLink className="w-4 h-4" /> Abrir</a>
+                <div className="flex items-center gap-2">
+                  <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1"><ExternalLink className="w-4 h-4" /> Abrir</a>
+                  <ViewedButton materialId={mat.id} />
+                </div>
               </div>
             </>
           ) : (
-            <div className="p-6 flex items-center gap-3"><MatIcon className="w-8 h-8 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
+            <div className="p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3"><MatIcon className="w-8 h-8 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
+              <ViewedButton materialId={mat.id} />
+            </div>
           )}
         </div>
       );
@@ -523,14 +535,17 @@ const StudentView = () => {
       const content = mat.content_text_for_ai || "";
       const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
+        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center gap-2 mb-3"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
+              <ViewedButton materialId={mat.id} />
+            </div>
             {content && (
               <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
                 {isExpanded ? content : preview}
                 {content.length > 300 && (
-                  <button onClick={(e) => { e.stopPropagation(); setExpandedArticle(isExpanded ? null : mat.id); }} className="text-primary text-sm font-medium ml-1 hover:underline">
+                  <button onClick={() => setExpandedArticle(isExpanded ? null : mat.id)} className="text-primary text-sm font-medium ml-1 hover:underline">
                     {isExpanded ? "Ver menos" : "Ler mais"}
                   </button>
                 )}
@@ -548,9 +563,12 @@ const StudentView = () => {
       return (
         <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Headphones className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-medium text-card-foreground">{mat.title || "Podcast"}</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Headphones className="w-5 h-5 text-muted-foreground" />
+                <h3 className="font-medium text-card-foreground">{mat.title || "Podcast"}</h3>
+              </div>
+              <ViewedButton materialId={mat.id} />
             </div>
             {url && spotify ? (
               <div className="space-y-3">
@@ -561,7 +579,6 @@ const StudentView = () => {
                   frameBorder="0"
                   allow="encrypted-media"
                   className="rounded-lg"
-                  onLoad={() => handleMediaPlay(mat.id)}
                 />
               </div>
             ) : url ? (
@@ -581,7 +598,6 @@ const StudentView = () => {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                    onClick={() => handleMediaPlay(mat.id)}
                   >
                     <ExternalLink className="w-4 h-4" /> Ouvir
                   </a>
@@ -595,17 +611,20 @@ const StudentView = () => {
 
     // Generic fallback
     return (
-      <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden" onClick={() => handleViewMaterial(mat.id)}>
-        <div className="p-6 flex items-center gap-3">
-          <MatIcon className="w-8 h-8 text-muted-foreground" />
-          <div>
-            <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
-            {mat.url && (
-              <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1" onClick={(e) => { e.stopPropagation(); handleViewMaterial(mat.id); }}>
-                <ExternalLink className="w-4 h-4" /> Abrir
-              </a>
-            )}
+      <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <MatIcon className="w-8 h-8 text-muted-foreground" />
+            <div>
+              <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
+              {mat.url && (
+                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1">
+                  <ExternalLink className="w-4 h-4" /> Abrir
+                </a>
+              )}
+            </div>
           </div>
+          <ViewedButton materialId={mat.id} />
         </div>
       </div>
     );
