@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import {
   BookOpen, Users, Sparkles, ArrowLeft, GraduationCap, FileText,
   ClipboardCheck, Brain, Bell, BarChart3, MessageSquare, Star,
-  Calendar, Shield, Settings, LogIn, PlusCircle, Eye, Pencil
+  Calendar, Shield, Settings, LogIn, PlusCircle, Eye, Pencil,
+  CreditCard, Building2, FolderOpen, BookMarked
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,8 +53,11 @@ const navItems = [
   { id: "professor-materiais", label: "Materiais" },
   { id: "professor-atividades", label: "Atividades & Quiz" },
   { id: "professor-correcao", label: "Correção com IA" },
+  { id: "professor-banco", label: "Banco de Atividades" },
   { id: "professor-analytics", label: "Relatórios" },
   { id: "professor-calendario", label: "Calendário" },
+  { id: "planos", label: "Planos & Assinatura" },
+  { id: "institucional", label: "Painel Institucional" },
   { id: "admin", label: "Painel Admin" },
 ];
 
@@ -285,8 +289,42 @@ const Documentation = () => {
                 </ul>
                 <p>Clique em uma data para ver as salas agendadas para aquele dia.</p>
               </Section>
+
+              <Section icon={FolderOpen} title="Banco de Atividades" id="professor-banco">
+                <p>Salve e reutilize atividades entre diferentes salas:</p>
+                <Step n={1}>Ao gerar ou criar uma atividade manualmente, clique em <strong className="text-foreground">"Salvar no Banco"</strong>.</Step>
+                <Step n={2}>Acesse o <strong className="text-foreground">Banco de Atividades</strong> pelo menu lateral.</Step>
+                <Step n={3}>Pesquise por título ou tags para encontrar atividades salvas.</Step>
+                <Step n={4}>Visualize, edite ou <strong className="text-foreground">importe</strong> uma atividade para qualquer sala.</Step>
+                <p className="text-sm bg-secondary/50 rounded-lg p-3 border border-border">
+                  💡 <strong className="text-foreground">Dica:</strong> O Banco de Atividades está disponível nos planos <strong className="text-foreground">Professor</strong> e <strong className="text-foreground">Institucional</strong>.
+                </p>
+              </Section>
             </div>
           </div>
+
+          {/* ===== PLANOS ===== */}
+          <Section icon={CreditCard} title="Planos & Assinatura" id="planos">
+            <p>O FlipClass oferece três planos:</p>
+            <ul className="list-disc list-inside space-y-2 ml-2">
+              <li><strong className="text-foreground">Gratuito</strong> — 1 sala, até 30 alunos, 3 gerações de IA e 5 correções por mês.</li>
+              <li><strong className="text-foreground">Professor (R$ 29,90/mês)</strong> — até 5 salas, 60 alunos por sala, 30 gerações e 100 correções por IA, upload de arquivos, analytics avançado, avaliação por pares e banco de atividades.</li>
+              <li><strong className="text-foreground">Institucional (R$ 149,90/mês)</strong> — salas e alunos ilimitados, IA ilimitada, até 10 professores convidados, painel institucional com análises cruzadas.</li>
+            </ul>
+            <p>Gerencie sua assinatura em <strong className="text-foreground">"Minha Conta"</strong> no menu lateral, ou acesse a página de <strong className="text-foreground">Preços</strong> pelo link na Home.</p>
+          </Section>
+
+          {/* ===== INSTITUCIONAL ===== */}
+          <Section icon={Building2} title="Painel Institucional" id="institucional">
+            <p>Disponível no plano <strong className="text-foreground">Institucional</strong>, permite gerenciar uma equipe de professores:</p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li><strong className="text-foreground">Convidar professores</strong> — envie convites por email. O professor convidado recebe acesso ao plano Professor automaticamente.</li>
+              <li><strong className="text-foreground">Gerenciar equipe</strong> — visualize, ative ou revogue acessos dos professores convidados.</li>
+              <li><strong className="text-foreground">Personalização</strong> — configure nome da instituição, logo e cor primária (white-label).</li>
+              <li><strong className="text-foreground">Análises cruzadas</strong> — veja métricas agregadas de todas as salas de todos os professores convidados.</li>
+            </ul>
+            <p>Acesse pelo menu lateral em <strong className="text-foreground">"Institucional"</strong>.</p>
+          </Section>
 
           {/* ===== SEÇÃO DO ADMIN ===== */}
           <Section icon={Shield} title="Painel do Administrador" id="admin">
@@ -294,7 +332,9 @@ const Documentation = () => {
             <ul className="list-disc list-inside space-y-1 ml-2">
               <li><strong className="text-foreground">Aprovar ou rejeitar</strong> cadastros de novos professores.</li>
               <li><strong className="text-foreground">Visualizar</strong> a lista de todos os professores e seus status.</li>
-              <li><strong className="text-foreground">Gerenciar permissões</strong> do sistema.</li>
+              <li><strong className="text-foreground">Enviar convites</strong> — conceda acesso a um plano específico para qualquer email.</li>
+              <li><strong className="text-foreground">Gerenciar assinantes</strong> — veja quem está pagando e quais planos possuem.</li>
+              <li><strong className="text-foreground">Configurar chaves de IA</strong> — gerencie as API keys dos provedores de IA.</li>
             </ul>
             <p>Ao aprovar um professor, ele recebe acesso imediato ao Dashboard e pode começar a criar salas.</p>
           </Section>
@@ -343,6 +383,24 @@ const Documentation = () => {
                   <AccordionTrigger>O que é o "desbloqueio agendado" de uma sala?</AccordionTrigger>
                   <AccordionContent>
                     O professor pode definir uma data e hora futura para que o conteúdo da sala fique acessível. Antes desse horário, os alunos verão uma mensagem informando quando a sala será liberada.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="q7">
+                  <AccordionTrigger>Qual a diferença entre os planos Professor e Institucional?</AccordionTrigger>
+                  <AccordionContent>
+                    O plano Professor é individual, com até 5 salas e limites de IA. O plano Institucional permite convidar até 10 professores, salas e IA ilimitadas, além de um painel com análises cruzadas de toda a equipe.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="q8">
+                  <AccordionTrigger>O que é o Banco de Atividades?</AccordionTrigger>
+                  <AccordionContent>
+                    É um repositório pessoal onde o professor pode salvar atividades (quizzes, estudos de caso) e reutilizá-las em qualquer sala. Disponível nos planos Professor e Institucional.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="q9">
+                  <AccordionTrigger>Como funciona o convite de professores no plano Institucional?</AccordionTrigger>
+                  <AccordionContent>
+                    No Painel Institucional, digite o email do professor e envie o convite. Ele receberá um email com instruções para criar a conta. Ao se cadastrar, terá acesso automático às funcionalidades do plano Professor.
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
