@@ -260,6 +260,32 @@ serve(async (req) => {
       }
 
       // get_peer_session: validates reviewer has an assignment to access reviewee session
+      // get_signed_urls: generates signed URLs for private storage materials
+      if (action === "get_signed_urls") {
+        if (!sessionId || !token || !(await verifySessionToken(sessionId, token))) {
+          return new Response(JSON.stringify({ error: "Invalid or missing session token" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403,
+          });
+        }
+        const urls: string[] = data?.urls || [];
+        const signedUrls: Record<string, string> = {};
+        const storagePrefix = "/storage/v1/object/public/materials/";
+        for (const url of urls) {
+          const idx = url.indexOf(storagePrefix);
+          if (idx === -1) { signedUrls[url] = url; continue; }
+          const path = url.substring(idx + storagePrefix.length);
+          try {
+            const { data: signedData } = await supabase.storage.from("materials").createSignedUrl(path, 3600);
+            signedUrls[url] = signedData?.signedUrl || url;
+          } catch {
+            signedUrls[url] = url;
+          }
+        }
+        return new Response(JSON.stringify({ signedUrls }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       if (action === "get_peer_session") {
         const revieweeSessionId = data?.reviewee_session_id;
         const reviewerSessionId = sessionId;
