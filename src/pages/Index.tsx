@@ -118,6 +118,10 @@ const Index = () => {
         toast({ title: "Erro", description: result?.error || "Não foi possível entrar na sala.", variant: "destructive" });
         return;
       }
+      // Store session token for authenticated access
+      if (result.token) {
+        sessionStorage.setItem(`session_token_${result.sessionId}`, result.token);
+      }
       navigate(`/room/${roomId}/student/${result.sessionId}`);
     } catch (e) {
       setLoading(false);

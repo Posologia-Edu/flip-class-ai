@@ -379,13 +379,15 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
         setCriteria(actCriteria);
         setActiveQuizData((activity?.quiz_data as any) || quizData);
 
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        const revieweeRes = await fetch(
-          `${supabaseUrl}/functions/v1/student-session?sessionId=${activeReviewerAssignment.reviewee_session_id}`,
-          { headers: { apikey: supabaseKey, "Content-Type": "application/json" } }
-        );
-        const revieweePayload = await revieweeRes.json();
+        const reviewerToken = sessionStorage.getItem(`session_token_${sessionId}`) || "";
+        const { data: revieweePayload } = await supabase.functions.invoke("student-session", {
+          body: {
+            action: "get_peer_session",
+            sessionId,
+            token: reviewerToken,
+            data: { reviewee_session_id: activeReviewerAssignment.reviewee_session_id },
+          },
+        });
         setRevieweeAnswers((revieweePayload?.session?.answers as Record<string, string>) || {});
 
         const { data: existingData } = await supabase
