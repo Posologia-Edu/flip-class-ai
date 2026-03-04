@@ -294,9 +294,28 @@ serve(async (req) => {
 
     let finalContent = contentText || "";
 
-    if (fileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
-      console.log("Extracting content from file:", fileUrl);
-      finalContent = await extractTextFromFileUrl(fileUrl, materialType || "file");
+    // Resolve private storage URLs to signed URLs before fetching
+    let resolvedFileUrl = fileUrl;
+    if (fileUrl) {
+      const storagePrefix = "/storage/v1/object/public/materials/";
+      const idx = fileUrl.indexOf(storagePrefix);
+      if (idx !== -1) {
+        const path = fileUrl.substring(idx + storagePrefix.length);
+        try {
+          const { data: signedData } = await serviceSupabase.storage.from("materials").createSignedUrl(path, 3600);
+          if (signedData?.signedUrl) {
+            resolvedFileUrl = signedData.signedUrl;
+            console.log("Resolved private storage URL to signed URL");
+          }
+        } catch (e) {
+          console.warn("Failed to create signed URL, using original:", e);
+        }
+      }
+    }
+
+    if (resolvedFileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
+      console.log("Extracting content from file:", resolvedFileUrl);
+      finalContent = await extractTextFromFileUrl(resolvedFileUrl, materialType || "file");
       if (materialId) {
         await serviceSupabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
         console.log("Saved extracted text to material");

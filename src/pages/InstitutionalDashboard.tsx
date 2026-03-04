@@ -194,10 +194,10 @@ const InstitutionalDashboard = () => {
     setUploadingLogo(true);
     try {
       const ext = file.name.split(".").pop();
-      const path = `institution-logos/${user.id}/logo.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("materials").upload(path, file, { upsert: true });
+      const path = `${user.id}/logo.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("logos").upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("materials").getPublicUrl(path);
+      const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
       setSettings((s) => ({ ...s, logo_url: urlData.publicUrl }));
       toast({ title: "Logo enviado com sucesso!" });
     } catch (err: any) {

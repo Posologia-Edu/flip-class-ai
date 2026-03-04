@@ -270,6 +270,7 @@ const RoomManage = () => {
         const filePath = `${roomId}/${crypto.randomUUID()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from("materials").upload(filePath, selectedFile);
         if (uploadError) throw uploadError;
+        // Store the public URL format for path detection (bucket is private, signed URLs used at render time)
         const { data: urlData } = supabase.storage.from("materials").getPublicUrl(filePath);
         let contentForAi = "";
         if (selectedFile.type === "text/plain" || selectedFile.name.endsWith(".txt") || selectedFile.name.endsWith(".md")) {

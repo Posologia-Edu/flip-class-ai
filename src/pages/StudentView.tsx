@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
 import NotificationCenter from "@/components/NotificationCenter";
 import { PeerReviewStudent } from "@/components/PeerReview";
+import { isStorageUrl } from "@/lib/storage-utils";
 import type { Tables, Json } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
@@ -210,6 +211,7 @@ const StudentView = () => {
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [sessionData, setSessionData] = useState<Tables<"student_sessions"> | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
+  const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const viewedMaterials = useRef<Set<string>>(new Set());
@@ -322,6 +324,35 @@ const StudentView = () => {
   }, [roomId, sessionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Resolve private storage URLs to signed URLs for student access
+  useEffect(() => {
+    if (!sessionId || materials.length === 0) return;
+    const storageUrls = materials
+      .filter(m => m.url && isStorageUrl(m.url))
+      .map(m => m.url!);
+    if (storageUrls.length === 0) return;
+
+    const resolveUrls = async () => {
+      try {
+        const { data } = await supabase.functions.invoke("student-session", {
+          body: { action: "get_signed_urls", sessionId, token: getSessionToken(), data: { urls: storageUrls } },
+        });
+        if (data?.signedUrls) {
+          setSignedUrlMap(data.signedUrls);
+        }
+      } catch (e) {
+        console.warn("Failed to resolve signed URLs", e);
+      }
+    };
+    resolveUrls();
+  }, [sessionId, materials, getSessionToken]);
+
+  /** Get the resolved URL for a material (signed URL if storage, original otherwise) */
+  const resolveUrl = useCallback((url: string | null): string | null => {
+    if (!url) return null;
+    return signedUrlMap[url] || url;
+  }, [signedUrlMap]);
 
   // Fetch only teacher feedbacks (lightweight)
   const fetchFeedbacks = useCallback(async () => {
@@ -493,6 +524,7 @@ const StudentView = () => {
   const renderMaterialCard = (mat: Material) => {
     const ytId = mat.url ? extractYoutubeId(mat.url) : null;
     const MatIcon = getMaterialIcon(mat.type);
+    const matUrl = resolveUrl(mat.url);
 
     if (mat.type === "video" && ytId) {
       return (
@@ -516,13 +548,13 @@ const StudentView = () => {
     if (mat.type === "pdf" || mat.type === "presentation") {
       return (
         <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
-          {mat.url ? (
+          {matUrl ? (
             <>
-              <div className="aspect-[4/3]"><iframe src={mat.url} className="w-full h-full" title={mat.title} /></div>
+              <div className="aspect-[4/3]"><iframe src={matUrl} className="w-full h-full" title={mat.title} /></div>
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2"><MatIcon className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
                 <div className="flex items-center gap-2">
-                  <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1"><ExternalLink className="w-4 h-4" /> Abrir</a>
+                  <a href={matUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1"><ExternalLink className="w-4 h-4" /> Abrir</a>
                   <ViewedButton materialId={mat.id} />
                 </div>
               </div>
@@ -564,7 +596,7 @@ const StudentView = () => {
     }
 
     if (mat.type === "podcast") {
-      const url = mat.url || "";
+      const url = matUrl || "";
       const spotify = isSpotifyUrl(url);
 
       return (
@@ -624,8 +656,8 @@ const StudentView = () => {
             <MatIcon className="w-8 h-8 text-muted-foreground" />
             <div>
               <h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3>
-              {mat.url && (
-                <a href={mat.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1">
+              {matUrl && (
+                <a href={matUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1 mt-1">
                   <ExternalLink className="w-4 h-4" /> Abrir
                 </a>
               )}
