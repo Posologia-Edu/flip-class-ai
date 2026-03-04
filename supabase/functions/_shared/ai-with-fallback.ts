@@ -1,24 +1,15 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 interface AiCallOptions {
   model?: string;
   messages: Array<{ role: string; content: any }>;
   signal?: AbortSignal;
 }
 
-interface AiProvider {
-  id: string;
-  apiKey: string;
-  baseUrl: string;
-  model?: string;
-}
-
-const PROVIDER_CONFIG: Record<string, { baseUrl: string; defaultModel: string; format: "openai" | "anthropic" }> = {
-  groq: { baseUrl: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "llama-3.3-70b-versatile", format: "openai" },
-  openai: { baseUrl: "https://api.openai.com/v1/chat/completions", defaultModel: "gpt-4o-mini", format: "openai" },
-  openrouter: { baseUrl: "https://openrouter.ai/api/v1/chat/completions", defaultModel: "google/gemini-2.5-flash", format: "openai" },
-  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-2.5-flash", format: "openai" },
-  anthropic: { baseUrl: "https://api.anthropic.com/v1/messages", defaultModel: "claude-sonnet-4-20250514", format: "anthropic" },
+const PROVIDER_CONFIG: Record<string, { baseUrl: string; defaultModel: string; format: "openai" | "anthropic"; envKey: string }> = {
+  groq: { baseUrl: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "llama-3.3-70b-versatile", format: "openai", envKey: "AI_KEY_GROQ" },
+  openai: { baseUrl: "https://api.openai.com/v1/chat/completions", defaultModel: "gpt-4o-mini", format: "openai", envKey: "AI_KEY_OPENAI" },
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1/chat/completions", defaultModel: "google/gemini-2.5-flash", format: "openai", envKey: "AI_KEY_OPENROUTER" },
+  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-2.5-flash", format: "openai", envKey: "AI_KEY_GOOGLE" },
+  anthropic: { baseUrl: "https://api.anthropic.com/v1/messages", defaultModel: "claude-sonnet-4-20250514", format: "anthropic", envKey: "AI_KEY_ANTHROPIC" },
 };
 
 async function callAnthropicApi(apiKey: string, model: string, messages: Array<{ role: string; content: any }>, signal?: AbortSignal): Promise<string> {
@@ -73,16 +64,12 @@ async function callOpenAiCompatibleApi(baseUrl: string, apiKey: string, model: s
 }
 
 export async function callAiWithFallback(options: AiCallOptions): Promise<string> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  // Fetch custom API keys
-  const { data: apiKeys } = await supabase.from("ai_api_keys").select("provider, api_key");
-  const customKeys = (apiKeys || []).reduce((acc: Record<string, string>, k: any) => {
-    acc[k.provider] = k.api_key;
-    return acc;
-  }, {});
+  // Read AI keys from environment variables (Supabase secrets) — no DB query needed
+  const customKeys: Record<string, string> = {};
+  for (const [providerId, config] of Object.entries(PROVIDER_CONFIG)) {
+    const val = Deno.env.get(config.envKey);
+    if (val) customKeys[providerId] = val;
+  }
 
   // Try custom providers first
   const providerOrder = ["groq", "openai", "openrouter", "google", "anthropic"];
@@ -108,7 +95,6 @@ export async function callAiWithFallback(options: AiCallOptions): Promise<string
       }
     } catch (err) {
       console.warn(`Custom provider ${providerId} failed:`, err.message);
-      // Continue to next provider
     }
   }
 

@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// HMAC-based session token generation & verification
+async function generateSessionToken(sessionId: string): Promise<string> {
+  const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(sessionId));
+  return btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/[+/=]/g, (c) =>
+    c === "+" ? "-" : c === "/" ? "_" : ""
+  );
+}
+
+async function verifySessionToken(sessionId: string, token: string): Promise<boolean> {
+  const expected = await generateSessionToken(sessionId);
+  return expected === token;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,10 +39,20 @@ serve(async (req) => {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const sessionId = url.searchParams.get("sessionId");
+      const token = url.searchParams.get("token");
+
       if (!sessionId) {
         return new Response(JSON.stringify({ error: "sessionId is required" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
+        });
+      }
+
+      // Validate session token to prevent enumeration
+      if (!token || !(await verifySessionToken(sessionId, token))) {
+        return new Response(JSON.stringify({ error: "Invalid or missing session token" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403,
         });
       }
 
@@ -52,7 +80,7 @@ serve(async (req) => {
 
     if (req.method === "POST") {
       const body = await req.json();
-      const { action, sessionId, roomId, data } = body;
+      const { action, sessionId, roomId, data, token } = body;
 
       if (action === "create_session") {
         if (!roomId || typeof roomId !== "string") {
@@ -113,8 +141,8 @@ serve(async (req) => {
           .maybeSingle();
 
         if (existingSession) {
-          // Return existing session - preserve all student data
-          return new Response(JSON.stringify({ sessionId: existingSession.id }), {
+          const sessionToken = await generateSessionToken(existingSession.id);
+          return new Response(JSON.stringify({ sessionId: existingSession.id, token: sessionToken }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
@@ -225,7 +253,42 @@ serve(async (req) => {
 
         if (insertErr) throw insertErr;
 
-        return new Response(JSON.stringify({ sessionId: session.id }), {
+        const sessionToken = await generateSessionToken(session.id);
+        return new Response(JSON.stringify({ sessionId: session.id, token: sessionToken }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // get_peer_session: validates reviewer has an assignment to access reviewee session
+      if (action === "get_peer_session") {
+        const revieweeSessionId = data?.reviewee_session_id;
+        const reviewerSessionId = sessionId;
+        if (!revieweeSessionId || !reviewerSessionId) {
+          return new Response(JSON.stringify({ error: "Missing session IDs" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+          });
+        }
+        // Validate the reviewer token
+        if (!token || !(await verifySessionToken(reviewerSessionId, token))) {
+          return new Response(JSON.stringify({ error: "Invalid or missing session token" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403,
+          });
+        }
+        // Check assignment exists
+        const { data: assignment } = await supabase
+          .from("peer_review_assignments")
+          .select("id")
+          .eq("reviewer_session_id", reviewerSessionId)
+          .eq("reviewee_session_id", revieweeSessionId)
+          .maybeSingle();
+        if (!assignment) {
+          return new Response(JSON.stringify({ error: "No valid peer review assignment" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403,
+          });
+        }
+        const { data: revieweeSession } = await supabase
+          .from("student_sessions").select("*").eq("id", revieweeSessionId).single();
+        return new Response(JSON.stringify({ session: revieweeSession }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -234,6 +297,14 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "sessionId is required" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
+        });
+      }
+
+      // Validate token for all POST actions that modify session data
+      if (!token || !(await verifySessionToken(sessionId, token))) {
+        return new Response(JSON.stringify({ error: "Invalid or missing session token" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403,
         });
       }
 

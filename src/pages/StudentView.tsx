@@ -215,12 +215,16 @@ const StudentView = () => {
   const viewedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
 
+  const getSessionToken = useCallback(() => {
+    return sessionId ? sessionStorage.getItem(`session_token_${sessionId}`) || "" : "";
+  }, [sessionId]);
+
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
     try {
       await supabase.functions.invoke("student-session", {
         body: {
-          action: "log_activity", sessionId, roomId,
+          action: "log_activity", sessionId, roomId, token: getSessionToken(),
           data: { activity_type: activityType, material_id: materialId || null, duration_seconds: durationSeconds || 0 },
         },
       });
@@ -278,7 +282,8 @@ const StudentView = () => {
     if (sessionId) {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}`, {
+      const token = getSessionToken();
+      const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}&token=${encodeURIComponent(token)}`, {
         headers: { "apikey": supabaseKey, "Content-Type": "application/json" },
       });
       const sessionResult = await res.json();
@@ -324,7 +329,8 @@ const StudentView = () => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}`, {
+      const token = getSessionToken();
+      const res = await fetch(`${supabaseUrl}/functions/v1/student-session?sessionId=${sessionId}&token=${encodeURIComponent(token)}`, {
         headers: { "apikey": supabaseKey, "Content-Type": "application/json" },
       });
       const result = await res.json();
@@ -466,7 +472,7 @@ const StudentView = () => {
     if (sessionId) {
       await supabase.functions.invoke("student-session", {
         body: {
-          action: "submit", sessionId,
+          action: "submit", sessionId, token: getSessionToken(),
           data: { score: Object.keys(answers).length, answers },
         },
       });
