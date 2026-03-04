@@ -13,7 +13,7 @@ project_id = "qxqvttkcemshgsdobgfe"
     verify_jwt = false
   [functions.send-approval-email]
     verify_jwt = false
-  [functions.send-metrics-to-hub]
+  [functions.hub-metrics]
     verify_jwt = false
   [functions.institutional-dashboard]
     verify_jwt = false
