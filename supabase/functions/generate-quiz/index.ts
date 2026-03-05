@@ -1,5 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallback, callAiWithFallbackDetailed } from "../_shared/ai-with-fallback.ts";
+
+// Estimated cost per 1M tokens (USD) by provider
+const COST_PER_M_TOKENS: Record<string, { input: number; output: number }> = {
+  groq: { input: 0.59, output: 0.79 },
+  openai: { input: 0.15, output: 0.60 },
+  openrouter: { input: 0.15, output: 0.60 },
+  google: { input: 0.15, output: 0.60 },
+  anthropic: { input: 3.0, output: 15.0 },
+  lovable: { input: 0.15, output: 0.60 },
+};
+
+function estimateCost(provider: string, tokensIn: number, tokensOut: number): number {
+  const rates = COST_PER_M_TOKENS[provider] || COST_PER_M_TOKENS.lovable;
+  return (tokensIn * rates.input + tokensOut * rates.output) / 1_000_000;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -362,7 +377,7 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
     const timeout = setTimeout(() => controller.abort(), 120000);
 
     try {
-      const content = await callAiWithFallback({
+      const aiResult = await callAiWithFallbackDetailed({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -373,7 +388,7 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
       clearTimeout(timeout);
 
       let quizJson: any;
-      let cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      let cleaned = aiResult.content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Não foi possível interpretar a resposta da IA");
 
@@ -399,10 +414,16 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
 
       if (insertError) throw new Error("Falha ao salvar atividade");
 
-      // Log successful AI usage
+      // Log successful AI usage with detailed metadata
       await serviceSupabase.from("ai_usage_log").insert({
         user_id: userId,
         usage_type: "generation",
+        provider: aiResult.provider,
+        model: aiResult.model,
+        prompt_type: isQuiz ? "quiz_generation" : "case_study_generation",
+        tokens_input: aiResult.tokens_input,
+        tokens_output: aiResult.tokens_output,
+        estimated_cost_usd: estimateCost(aiResult.provider, aiResult.tokens_input, aiResult.tokens_output),
       });
 
       return new Response(JSON.stringify({ success: true, quiz: quizJson }), {

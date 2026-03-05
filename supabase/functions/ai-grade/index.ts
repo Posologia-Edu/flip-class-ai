@@ -1,5 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallbackDetailed, type AiCallResult } from "../_shared/ai-with-fallback.ts";
+
+// Estimated cost per 1M tokens (USD) by provider
+const COST_PER_M_TOKENS: Record<string, { input: number; output: number }> = {
+  groq: { input: 0.59, output: 0.79 },
+  openai: { input: 0.15, output: 0.60 },
+  openrouter: { input: 0.15, output: 0.60 },
+  google: { input: 0.15, output: 0.60 },
+  anthropic: { input: 3.0, output: 15.0 },
+  lovable: { input: 0.15, output: 0.60 },
+};
+
+function estimateCost(provider: string, tokensIn: number, tokensOut: number): number {
+  const rates = COST_PER_M_TOKENS[provider] || COST_PER_M_TOKENS.lovable;
+  return (tokensIn * rates.input + tokensOut * rates.output) / 1_000_000;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -178,7 +193,7 @@ RESPOSTA DO ALUNO: ${item.studentAnswer}
 Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fortes, pontos a melhorar e sugestão.`;
 
       try {
-        const content = await callAiWithFallback({
+        const aiResult = await callAiWithFallbackDetailed({
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userPrompt },
@@ -186,7 +201,7 @@ Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fo
         });
 
         let gradeResult;
-        const cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+        const cleaned = aiResult.content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error("Formato inválido da IA");
 
@@ -201,6 +216,12 @@ Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fo
         }
 
         gradeResult.grade = Math.max(0, Math.min(10, Math.round(gradeResult.grade)));
+        gradeResult._aiMeta = {
+          provider: aiResult.provider,
+          model: aiResult.model,
+          tokens_input: aiResult.tokens_input,
+          tokens_output: aiResult.tokens_output,
+        };
         results.push(gradeResult);
       } catch (err) {
         if (err.message === "RATE_LIMIT") {
@@ -217,17 +238,29 @@ Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fo
       }
     }
 
-    // Log successful AI corrections
-    const correctionCount = items.filter((item: any) => item.studentAnswer?.trim().length > 0).length;
-    if (correctionCount > 0) {
-      const logs = Array.from({ length: correctionCount }, () => ({
+    // Log successful AI corrections with detailed metadata
+    const correctionResults = results.filter((r: any) => r._aiMeta);
+    if (correctionResults.length > 0) {
+      const logs = correctionResults.map((r: any) => ({
         user_id: userId,
         usage_type: "correction",
+        provider: r._aiMeta.provider,
+        model: r._aiMeta.model,
+        prompt_type: "correction",
+        tokens_input: r._aiMeta.tokens_input,
+        tokens_output: r._aiMeta.tokens_output,
+        estimated_cost_usd: estimateCost(r._aiMeta.provider, r._aiMeta.tokens_input, r._aiMeta.tokens_output),
       }));
       await serviceSupabase.from("ai_usage_log").insert(logs);
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
+    // Remove internal metadata before returning
+    const cleanResults = results.map((r: any) => {
+      const { _aiMeta, ...rest } = r;
+      return rest;
+    });
+
+    return new Response(JSON.stringify({ success: true, results: cleanResults }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

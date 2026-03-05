@@ -4,6 +4,14 @@ interface AiCallOptions {
   signal?: AbortSignal;
 }
 
+export interface AiCallResult {
+  content: string;
+  provider: string;
+  model: string;
+  tokens_input: number;
+  tokens_output: number;
+}
+
 const PROVIDER_CONFIG: Record<string, { baseUrl: string; defaultModel: string; format: "openai" | "anthropic"; envKey: string }> = {
   groq: { baseUrl: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "llama-3.3-70b-versatile", format: "openai", envKey: "AI_KEY_GROQ" },
   openai: { baseUrl: "https://api.openai.com/v1/chat/completions", defaultModel: "gpt-4o-mini", format: "openai", envKey: "AI_KEY_OPENAI" },
@@ -12,7 +20,13 @@ const PROVIDER_CONFIG: Record<string, { baseUrl: string; defaultModel: string; f
   anthropic: { baseUrl: "https://api.anthropic.com/v1/messages", defaultModel: "claude-sonnet-4-20250514", format: "anthropic", envKey: "AI_KEY_ANTHROPIC" },
 };
 
-async function callAnthropicApi(apiKey: string, model: string, messages: Array<{ role: string; content: any }>, signal?: AbortSignal): Promise<string> {
+interface RawApiResult {
+  content: string;
+  tokens_input: number;
+  tokens_output: number;
+}
+
+async function callAnthropicApi(apiKey: string, model: string, messages: Array<{ role: string; content: any }>, signal?: AbortSignal): Promise<RawApiResult> {
   const systemMsg = messages.find((m) => m.role === "system");
   const nonSystemMsgs = messages.filter((m) => m.role !== "system");
 
@@ -40,10 +54,14 @@ async function callAnthropicApi(apiKey: string, model: string, messages: Array<{
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || "";
+  return {
+    content: data.content?.[0]?.text || "",
+    tokens_input: data.usage?.input_tokens ?? 0,
+    tokens_output: data.usage?.output_tokens ?? 0,
+  };
 }
 
-async function callOpenAiCompatibleApi(baseUrl: string, apiKey: string, model: string, messages: Array<{ role: string; content: any }>, signal?: AbortSignal): Promise<string> {
+async function callOpenAiCompatibleApi(baseUrl: string, apiKey: string, model: string, messages: Array<{ role: string; content: any }>, signal?: AbortSignal): Promise<RawApiResult> {
   const response = await fetch(baseUrl, {
     method: "POST",
     headers: {
@@ -60,10 +78,20 @@ async function callOpenAiCompatibleApi(baseUrl: string, apiKey: string, model: s
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  return {
+    content: data.choices?.[0]?.message?.content || "",
+    tokens_input: data.usage?.prompt_tokens ?? 0,
+    tokens_output: data.usage?.completion_tokens ?? 0,
+  };
 }
 
+/** @deprecated Use callAiWithFallbackDetailed for new code */
 export async function callAiWithFallback(options: AiCallOptions): Promise<string> {
+  const result = await callAiWithFallbackDetailed(options);
+  return result.content;
+}
+
+export async function callAiWithFallbackDetailed(options: AiCallOptions): Promise<AiCallResult> {
   // Read AI keys from environment variables (Supabase secrets) — no DB query needed
   const customKeys: Record<string, string> = {};
   for (const [providerId, config] of Object.entries(PROVIDER_CONFIG)) {
@@ -81,17 +109,23 @@ export async function callAiWithFallback(options: AiCallOptions): Promise<string
 
     try {
       console.log(`Trying custom AI provider: ${providerId}`);
-      let result: string;
+      let raw: RawApiResult;
 
       if (config.format === "anthropic") {
-        result = await callAnthropicApi(customKeys[providerId], config.defaultModel, options.messages, options.signal);
+        raw = await callAnthropicApi(customKeys[providerId], config.defaultModel, options.messages, options.signal);
       } else {
-        result = await callOpenAiCompatibleApi(config.baseUrl, customKeys[providerId], config.defaultModel, options.messages, options.signal);
+        raw = await callOpenAiCompatibleApi(config.baseUrl, customKeys[providerId], config.defaultModel, options.messages, options.signal);
       }
 
-      if (result && result.length > 0) {
+      if (raw.content && raw.content.length > 0) {
         console.log(`Success with custom provider: ${providerId}`);
-        return result;
+        return {
+          content: raw.content,
+          provider: providerId,
+          model: config.defaultModel,
+          tokens_input: raw.tokens_input,
+          tokens_output: raw.tokens_output,
+        };
       }
     } catch (err) {
       console.warn(`Custom provider ${providerId} failed:`, err.message);
@@ -103,6 +137,8 @@ export async function callAiWithFallback(options: AiCallOptions): Promise<string
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured and no custom AI keys available");
 
+  const modelName = options.model || "google/gemini-2.5-flash";
+
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -110,7 +146,7 @@ export async function callAiWithFallback(options: AiCallOptions): Promise<string
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: options.model || "google/gemini-2.5-flash",
+      model: modelName,
       messages: options.messages,
     }),
     signal: options.signal,
@@ -127,5 +163,12 @@ export async function callAiWithFallback(options: AiCallOptions): Promise<string
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error("Sem resposta da IA");
-  return content;
+
+  return {
+    content,
+    provider: "lovable",
+    model: modelName,
+    tokens_input: data.usage?.prompt_tokens ?? 0,
+    tokens_output: data.usage?.completion_tokens ?? 0,
+  };
 }
