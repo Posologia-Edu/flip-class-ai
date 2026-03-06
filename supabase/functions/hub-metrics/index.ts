@@ -16,17 +16,22 @@ Deno.serve(async (req) => {
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+
   // Run queries in parallel
   const [usersResult, aiLogsResult] = await Promise.all([
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
-    supabase.from('ai_usage_log').select('tokens_input, tokens_output, estimated_cost_usd'),
+    supabase.from('ai_usage_log')
+      .select('tokens_input, tokens_output, estimated_cost_usd')
+      .gte('created_at', since.toISOString()),
   ]);
 
   const totalUsers = usersResult.count || 0;
   const aiLogs = aiLogsResult.data || [];
   const aiRequests = aiLogs.length;
-  const aiTokensUsed = aiLogs.reduce((sum: number, l: any) => sum + (l.tokens_input || 0) + (l.tokens_output || 0), 0);
-  const aiCostUsd = aiLogs.reduce((sum: number, l: any) => sum + (Number(l.estimated_cost_usd) || 0), 0);
+  const aiTokensUsed = aiLogs.reduce((sum: number, l: any) => sum + (l.tokens_input ?? 0) + (l.tokens_output ?? 0), 0);
+  const aiCostUsd = aiLogs.reduce((sum: number, l: any) => sum + (Number(l.estimated_cost_usd) ?? 0), 0);
 
   return new Response(JSON.stringify({
     total_users: totalUsers,
