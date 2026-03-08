@@ -37,6 +37,7 @@ import PublicDocumentation from "./pages/PublicDocumentation";
 const queryClient = new QueryClient();
 
 function AppContent() {
+  const { isAdmin } = useAuth();
   const { showBanner, preferences, acceptAll, acceptEssentialOnly, updateConsent, hasConsent } = useCookieConsent();
   usePageTracking(hasConsent("analytical"));
 
@@ -82,6 +83,7 @@ function AppContent() {
         onAcceptEssential={acceptEssentialOnly}
         onSaveCustom={updateConsent}
         currentPreferences={preferences}
+        isAdmin={isAdmin}
       />
     </>
   );
