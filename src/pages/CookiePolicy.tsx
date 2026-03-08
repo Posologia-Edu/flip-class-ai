@@ -56,7 +56,17 @@ export default function CookiePolicy() {
         </ul>
 
         <h2>4. Como Gerenciar Cookies</h2>
-        <p>Você pode gerenciar cookies através das configurações do seu navegador:</p>
+        <p>Você pode alterar suas preferências de cookies a qualquer momento clicando no botão abaixo:</p>
+        <button
+          onClick={() => {
+            localStorage.removeItem("flipclass_cookie_consent");
+            window.location.reload();
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity mb-4 no-underline"
+        >
+          🍪 Gerenciar preferências de cookies
+        </button>
+        <p>Você também pode gerenciar cookies através das configurações do seu navegador:</p>
         <ul>
           <li><strong>Chrome:</strong> Configurações → Privacidade e segurança → Cookies</li>
           <li><strong>Firefox:</strong> Configurações → Privacidade e segurança → Cookies e dados de sites</li>
