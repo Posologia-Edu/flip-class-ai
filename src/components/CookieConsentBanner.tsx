@@ -12,9 +12,10 @@ interface Props {
   onAcceptEssential: () => void;
   onSaveCustom: (prefs: Partial<Omit<CookiePreferences, "essential" | "timestamp">>) => void;
   currentPreferences: CookiePreferences | null;
+  isAdmin?: boolean;
 }
 
-export function CookieConsentBanner({ show, onAcceptAll, onAcceptEssential, onSaveCustom, currentPreferences }: Props) {
+export function CookieConsentBanner({ show, onAcceptAll, onAcceptEssential, onSaveCustom, currentPreferences, isAdmin = false }: Props) {
   const [showCustomize, setShowCustomize] = useState(false);
   const [functional, setFunctional] = useState(currentPreferences?.functional ?? false);
   const [analytical, setAnalytical] = useState(currentPreferences?.analytical ?? false);
@@ -104,17 +105,19 @@ export function CookieConsentBanner({ show, onAcceptAll, onAcceptEssential, onSa
                     <Switch checked={functional} onCheckedChange={setFunctional} />
                   </div>
 
-                  {/* Analytical */}
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <BarChart3 className="w-4 h-4 text-destructive" />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Analítica</p>
-                        <p className="text-xs text-muted-foreground">Rastreamento de navegação e métricas de uso</p>
+                  {/* Analytical - only shown to admin */}
+                  {isAdmin && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <BarChart3 className="w-4 h-4 text-destructive" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Analítica</p>
+                          <p className="text-xs text-muted-foreground">Rastreamento de navegação e métricas de uso</p>
+                        </div>
                       </div>
+                      <Switch checked={analytical} onCheckedChange={setAnalytical} />
                     </div>
-                    <Switch checked={analytical} onCheckedChange={setAnalytical} />
-                  </div>
+                  )}
 
                   <Button
                     size="sm"
