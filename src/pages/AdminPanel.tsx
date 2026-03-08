@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key, CreditCard, Calendar } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key, CreditCard, Calendar, Globe } from "lucide-react";
 import AiApiKeysManager from "@/components/AiApiKeysManager";
 import VisitorAnalytics from "@/components/VisitorAnalytics";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
