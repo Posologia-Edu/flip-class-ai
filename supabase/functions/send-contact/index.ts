@@ -13,20 +13,39 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Não autenticado");
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) throw new Error("Usuário não autenticado");
-
-    const { subject, message } = await req.json();
+    const { subject, message, sender_name, sender_email } = await req.json();
     if (!subject || !message) throw new Error("Assunto e mensagem são obrigatórios");
+
+    let fromEmail: string | undefined;
+    let fromName: string | undefined;
+
+    // Try to get authenticated user first
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      try {
+        const supabase = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+          { global: { headers: { Authorization: authHeader } } }
+        );
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          fromEmail = user.email;
+          fromName = user.user_metadata?.full_name || user.email;
+        }
+      } catch {
+        // Not authenticated, continue with sender fields
+      }
+    }
+
+    // If not authenticated, require sender_name and sender_email
+    if (!fromEmail) {
+      if (!sender_email || !sender_name) {
+        throw new Error("Nome e email são obrigatórios para visitantes");
+      }
+      fromEmail = sender_email;
+      fromName = sender_name;
+    }
 
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("Chave de e-mail não configurada");
@@ -41,10 +60,10 @@ serve(async (req) => {
         from: "FlipClass Contato <noreply@tbl.posologia.app>",
         to: ["sergio.araujo@ufrn.br"],
         subject: `[FlipClass Contato] ${subject}`,
-        reply_to: user.email,
+        reply_to: fromEmail,
         html: `
           <h2>Nova mensagem de contato - FlipClass</h2>
-          <p><strong>De:</strong> ${user.email}</p>
+          <p><strong>De:</strong> ${fromName} (${fromEmail})</p>
           <p><strong>Assunto:</strong> ${subject}</p>
           <hr/>
           <p>${message.replace(/\n/g, "<br/>")}</p>

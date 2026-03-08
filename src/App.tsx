@@ -23,6 +23,13 @@ import Pricing from "./pages/Pricing";
 import MyAccount from "./pages/MyAccount";
 import InstitutionalDashboard from "./pages/InstitutionalDashboard";
 import Contact from "./pages/Contact";
+import Features from "./pages/Features";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import CookiePolicy from "./pages/CookiePolicy";
+import PublicContact from "./pages/PublicContact";
+import PublicPricing from "./pages/PublicPricing";
+import PublicDocumentation from "./pages/PublicDocumentation";
 
 const queryClient = new QueryClient();
 
