@@ -47,6 +47,13 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
             <Route path="/pending-approval" element={<PendingApproval />} />
+            <Route path="/funcionalidades" element={<Features />} />
+            <Route path="/planos" element={<PublicPricing />} />
+            <Route path="/documentacao" element={<PublicDocumentation />} />
+            <Route path="/contato" element={<PublicContact />} />
+            <Route path="/termos" element={<TermsOfService />} />
+            <Route path="/privacidade" element={<PrivacyPolicy />} />
+            <Route path="/cookies" element={<CookiePolicy />} />
 
             {/* Authenticated routes - single persistent sidebar */}
             <Route element={<AppLayout />}>

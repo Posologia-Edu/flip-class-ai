@@ -143,7 +143,7 @@ const Index = () => {
       </header>
 
       {/* Hero */}
-      <section className="flex-1 flex items-center justify-center px-6 py-12 md:py-0">
+      <section id="enter-room" className="flex-1 flex items-center justify-center px-6 py-12 md:py-0 scroll-mt-20">
         <div className="max-w-5xl w-full grid md:grid-cols-2 gap-16 items-center">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
             <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-sm font-medium mb-6">
@@ -298,12 +298,7 @@ const Index = () => {
         </div>
       </section>
 
-      <footer className="py-6 px-6 border-t border-border">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>© {new Date().getFullYear()} Todos os direitos reservados.</span>
-          <span>Desenvolvido por <strong className="text-foreground">Sérgio Araújo</strong> e <strong className="text-foreground">Posologia Produções</strong></span>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 };
