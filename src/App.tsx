@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
 import { useCookieConsent } from "@/hooks/useCookieConsent";
@@ -37,6 +37,7 @@ import PublicDocumentation from "./pages/PublicDocumentation";
 const queryClient = new QueryClient();
 
 function AppContent() {
+  const { isAdmin } = useAuth();
   const { showBanner, preferences, acceptAll, acceptEssentialOnly, updateConsent, hasConsent } = useCookieConsent();
   usePageTracking(hasConsent("analytical"));
 
@@ -82,6 +83,7 @@ function AppContent() {
         onAcceptEssential={acceptEssentialOnly}
         onSaveCustom={updateConsent}
         currentPreferences={preferences}
+        isAdmin={isAdmin}
       />
     </>
   );

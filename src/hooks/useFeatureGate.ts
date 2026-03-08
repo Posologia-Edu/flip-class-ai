@@ -4,6 +4,8 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { getPlanLimits, type PlanKey } from "@/lib/subscription";
 
+// Admin always gets institutional-level access
+
 const PLAN_HIERARCHY: Record<PlanKey, number> = {
   free: 0,
   professor: 1,
@@ -16,7 +18,7 @@ function resolveHighestPlan(a: PlanKey, b: PlanKey | null): PlanKey {
 }
 
 export function useFeatureGate() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { planKey: stripePlan, loading: subLoading, subscriptionEnd } = useSubscription(user?.id);
   const [grantedPlan, setGrantedPlan] = useState<PlanKey | null>(null);
   const [grantedLoading, setGrantedLoading] = useState(true);
@@ -95,10 +97,11 @@ export function useFeatureGate() {
     };
   }, [user?.id, fetchAiUsage]);
 
-  const effectivePlan = resolveHighestPlan(stripePlan, grantedPlan);
+  // Admin always gets institutional-level (highest) access
+  const effectivePlan: PlanKey = isAdmin ? "institutional" : resolveHighestPlan(stripePlan, grantedPlan);
   const limits = getPlanLimits(effectivePlan);
   const loading = subLoading || grantedLoading;
-  const isAdminGranted = grantedPlan !== null && PLAN_HIERARCHY[grantedPlan] > PLAN_HIERARCHY[stripePlan];
+  const isAdminGranted = isAdmin || (grantedPlan !== null && PLAN_HIERARCHY[grantedPlan] > PLAN_HIERARCHY[stripePlan]);
 
   const canCreateRoom = useCallback((currentCount: number) => {
     return limits.max_rooms === -1 || currentCount < limits.max_rooms;
