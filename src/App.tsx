@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
+import { CookieConsentBanner } from "@/components/CookieConsentBanner";
+import { useCookieConsent } from "@/hooks/useCookieConsent";
+import { usePageTracking } from "@/hooks/usePageTracking";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -33,6 +36,57 @@ import PublicDocumentation from "./pages/PublicDocumentation";
 
 const queryClient = new QueryClient();
 
+function AppContent() {
+  const { showBanner, preferences, acceptAll, acceptEssentialOnly, updateConsent, hasConsent } = useCookieConsent();
+  usePageTracking(hasConsent("analytical"));
+
+  return (
+    <>
+      <Routes>
+        {/* Public routes - no sidebar */}
+        <Route path="/" element={<Index />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
+        <Route path="/pending-approval" element={<PendingApproval />} />
+        <Route path="/funcionalidades" element={<Features />} />
+        <Route path="/planos" element={<PublicPricing />} />
+        <Route path="/documentacao" element={<PublicDocumentation />} />
+        <Route path="/contato" element={<PublicContact />} />
+        <Route path="/termos" element={<TermsOfService />} />
+        <Route path="/privacidade" element={<PrivacyPolicy />} />
+        <Route path="/cookies" element={<CookiePolicy />} />
+
+        {/* Authenticated routes - single persistent sidebar */}
+        <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/rooms" element={<RoomsList />} />
+          <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
+          <Route path="/dashboard/activity-bank" element={<QuestionBank />} />
+          <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
+          <Route path="/dashboard/calendar" element={<CalendarPage />} />
+          <Route path="/dashboard/pricing" element={<Pricing />} />
+          <Route path="/dashboard/account" element={<MyAccount />} />
+          <Route path="/dashboard/institutional" element={<InstitutionalDashboard />} />
+          <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/docs" element={<Documentation />} />
+          <Route path="/dashboard/contact" element={<Contact />} />
+        </Route>
+
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+
+      <CookieConsentBanner
+        show={showBanner}
+        onAcceptAll={acceptAll}
+        onAcceptEssential={acceptEssentialOnly}
+        onSaveCustom={updateConsent}
+        currentPreferences={preferences}
+      />
+    </>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -40,39 +94,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            {/* Public routes - no sidebar */}
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/room/:roomId/student/:sessionId" element={<StudentView />} />
-            <Route path="/pending-approval" element={<PendingApproval />} />
-            <Route path="/funcionalidades" element={<Features />} />
-            <Route path="/planos" element={<PublicPricing />} />
-            <Route path="/documentacao" element={<PublicDocumentation />} />
-            <Route path="/contato" element={<PublicContact />} />
-            <Route path="/termos" element={<TermsOfService />} />
-            <Route path="/privacidade" element={<PrivacyPolicy />} />
-            <Route path="/cookies" element={<CookiePolicy />} />
-
-            {/* Authenticated routes - single persistent sidebar */}
-            <Route element={<AppLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/rooms" element={<RoomsList />} />
-              <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
-              <Route path="/dashboard/activity-bank" element={<QuestionBank />} />
-              <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
-              <Route path="/dashboard/calendar" element={<CalendarPage />} />
-              <Route path="/dashboard/pricing" element={<Pricing />} />
-              <Route path="/dashboard/account" element={<MyAccount />} />
-              <Route path="/dashboard/institutional" element={<InstitutionalDashboard />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/docs" element={<Documentation />} />
-              <Route path="/dashboard/contact" element={<Contact />} />
-            </Route>
-
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppContent />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

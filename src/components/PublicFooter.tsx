@@ -96,6 +96,18 @@ export function PublicFooter() {
                   Política de Cookies
                 </Link>
               </li>
+              <li>
+                <button
+                  onClick={() => {
+                    const stored = localStorage.getItem("flipclass_cookie_consent");
+                    if (stored) localStorage.removeItem("flipclass_cookie_consent");
+                    window.location.reload();
+                  }}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Gerenciar Cookies
+                </button>
+              </li>
             </ul>
           </div>
         </div>
