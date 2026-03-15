@@ -4,7 +4,8 @@ import {
   BookOpen, Users, Sparkles, ArrowLeft, GraduationCap, FileText,
   ClipboardCheck, Brain, Bell, BarChart3, MessageSquare, Star,
   Calendar, Shield, Settings, LogIn, PlusCircle, Eye, Pencil,
-  CreditCard, Building2, FolderOpen, BookMarked
+  CreditCard, Building2, FolderOpen, BookMarked, Server, Database,
+  Code2, Layers, Key, Workflow, Globe, Lock, Cpu, HardDrive
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
