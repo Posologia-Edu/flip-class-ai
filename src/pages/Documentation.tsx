@@ -60,6 +60,14 @@ const navItems = [
   { id: "planos", label: "Planos & Assinatura" },
   { id: "institucional", label: "Painel Institucional" },
   { id: "admin", label: "Painel Admin" },
+  { id: "tech-stack", label: "Stack Tecnológica" },
+  { id: "tech-db", label: "Banco de Dados" },
+  { id: "tech-auth", label: "Autenticação" },
+  { id: "tech-edge", label: "Backend Functions" },
+  { id: "tech-ai", label: "Integração IA" },
+  { id: "tech-storage", label: "Armazenamento" },
+  { id: "tech-frontend", label: "Frontend" },
+  { id: "tech-deploy", label: "Deploy & Infra" },
 ];
 
 const Documentation = () => {
