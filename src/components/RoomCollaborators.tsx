@@ -71,11 +71,12 @@ export function RoomCollaborators({ roomId, ownerId }: { roomId: string; ownerId
     }
     setSearching(true);
     
-    // Search profiles by name
+    // Search profiles by name or email
+    const term = search.trim();
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("user_id, full_name")
-      .ilike("full_name", `%${search.trim()}%`)
+      .select("user_id, full_name, email")
+      .or(`full_name.ilike.%${term}%,email.ilike.%${term}%`)
       .neq("user_id", ownerId)
       .eq("approval_status", "approved")
       .limit(10);
@@ -83,12 +84,12 @@ export function RoomCollaborators({ roomId, ownerId }: { roomId: string; ownerId
     const results: Array<{ user_id: string; full_name: string | null; email: string }> = [];
     const existingIds = new Set(collaborators.map(c => c.teacher_id));
 
-    for (const profile of (profiles as ProfileResult[] || [])) {
+    for (const profile of (profiles as any[] || [])) {
       if (existingIds.has(profile.user_id)) continue;
       results.push({
         user_id: profile.user_id,
         full_name: profile.full_name,
-        email: "",
+        email: profile.email ?? "",
       });
     }
 
