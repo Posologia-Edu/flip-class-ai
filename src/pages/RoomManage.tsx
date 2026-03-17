@@ -717,7 +717,8 @@ const RoomManage = () => {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-10">
-        {/* Uso de IA no mês */}
+        {/* Uso de IA no mês - only for owner */}
+        {isOwner && (
         <section className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold flex items-center gap-2">
@@ -742,7 +743,9 @@ const RoomManage = () => {
             </div>
           </div>
         </section>
-        {/* Timer Section */}
+        )}
+        {/* Timer Section - only for owner */}
+        {isOwner && (
         <section className="bg-card rounded-xl border border-border p-6">
           <h2 className="font-display text-lg font-semibold flex items-center gap-2 mb-4">
             <Clock className="w-5 h-5 text-primary" /> Timer de Liberação
@@ -758,6 +761,7 @@ const RoomManage = () => {
             <Button onClick={updateUnlockTime} disabled={!unlockAt}>Salvar</Button>
           </div>
         </section>
+        )}
 
         {/* Student Management */}
         {roomId && <RoomStudents roomId={roomId} />}
