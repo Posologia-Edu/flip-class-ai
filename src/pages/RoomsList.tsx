@@ -89,7 +89,8 @@ const RoomsList = () => {
     }
 
     const allSessions = sessionsRes.data || [];
-    const allRoomIds = [...roomsList.map(r => r.id), ...collabRoomIds];
+    const collabIds = collabRooms.map(r => r.id);
+    const allRoomIds = [...roomsList.map(r => r.id), ...collabIds];
     const statsMap: Record<string, RoomStats> = {};
     for (const roomId of allRoomIds) {
       const sessions = allSessions.filter(s => s.room_id === roomId);
