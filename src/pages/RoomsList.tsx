@@ -39,6 +39,7 @@ const isRoomExpired = (room: Room): boolean => {
 
 const RoomsList = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [collabRooms, setCollabRooms] = useState<Room[]>([]);
   const [roomStats, setRoomStats] = useState<Record<string, RoomStats>>({});
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
@@ -57,20 +58,31 @@ const RoomsList = () => {
 
   const fetchRooms = useCallback(async () => {
     if (!auth.user) return;
-    const [roomsRes, sessionsRes] = await Promise.all([
+    const [roomsRes, sessionsRes, collabRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("teacher_id", auth.user.id).order("created_at", { ascending: false }),
       supabase.from("student_sessions").select("room_id, score, completed_at"),
+      supabase.from("room_collaborators" as any).select("room_id").eq("teacher_id", auth.user.id),
     ]);
     const roomsList = roomsRes.data || [];
     setRooms(roomsList);
 
+    // Fetch collaborated rooms
+    const collabRoomIds = ((collabRes.data as any[]) || []).map((c: any) => c.room_id);
+    if (collabRoomIds.length > 0) {
+      const { data: cRooms } = await supabase.from("rooms").select("*").in("id", collabRoomIds);
+      setCollabRooms((cRooms || []) as Room[]);
+    } else {
+      setCollabRooms([]);
+    }
+
     const allSessions = sessionsRes.data || [];
+    const allRoomIds = [...roomsList.map(r => r.id), ...collabRoomIds];
     const statsMap: Record<string, RoomStats> = {};
-    for (const room of roomsList) {
-      const sessions = allSessions.filter(s => s.room_id === room.id);
+    for (const roomId of allRoomIds) {
+      const sessions = allSessions.filter(s => s.room_id === roomId);
       const completed = sessions.filter(s => s.completed_at);
-      statsMap[room.id] = {
-        roomId: room.id,
+      statsMap[roomId] = {
+        roomId: roomId,
         studentCount: sessions.length,
         avgScore: completed.length > 0
           ? Math.round(completed.reduce((s, c) => s + (c.score || 0), 0) / completed.length)
