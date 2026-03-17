@@ -860,6 +860,7 @@ const RoomManage = () => {
                 </div>
               </DialogContent>
             </Dialog>
+            )}
           </div>
 
           {materials.length === 0 ? (
