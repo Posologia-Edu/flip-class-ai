@@ -1061,6 +1061,8 @@ const RoomManage = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {isOwner && (
+                        <>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1077,6 +1079,8 @@ const RoomManage = () => {
                         <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); deleteActivity(act.id); }}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
+                        </>
+                        )}
                         {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>
                     </div>
