@@ -71,12 +71,13 @@ const RoomsList = () => {
     setRooms(roomsList);
 
     // Fetch collaborated rooms separately to avoid breaking main query
+    let collabRoomIds: string[] = [];
     try {
       const { data: collabData } = await supabase
         .from("room_collaborators" as any)
         .select("room_id")
         .eq("teacher_id", auth.user.id);
-      const collabRoomIds = ((collabData as any[]) || []).map((c: any) => c.room_id);
+      collabRoomIds = ((collabData as any[]) || []).map((c: any) => c.room_id);
       if (collabRoomIds.length > 0) {
         const { data: cRooms } = await supabase.from("rooms").select("*").in("id", collabRoomIds);
         setCollabRooms((cRooms || []) as Room[]);
@@ -89,8 +90,7 @@ const RoomsList = () => {
     }
 
     const allSessions = sessionsRes.data || [];
-    const collabIds = collabRooms.map(r => r.id);
-    const allRoomIds = [...roomsList.map(r => r.id), ...collabIds];
+    const allRoomIds = [...roomsList.map(r => r.id), ...collabRoomIds];
     const statsMap: Record<string, RoomStats> = {};
     for (const roomId of allRoomIds) {
       const sessions = allSessions.filter(s => s.room_id === roomId);
