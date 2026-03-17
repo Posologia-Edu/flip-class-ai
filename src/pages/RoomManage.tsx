@@ -771,6 +771,7 @@ const RoomManage = () => {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold">Materiais</h2>
+            {isOwner && (
             <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetMaterialForm(); }}>
               <DialogTrigger asChild>
                 <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Adicionar Material</Button>
