@@ -1075,10 +1075,12 @@ const RoomManage = () => {
                                 <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
                                 {q.type === "multiple_choice" && q.options && q.options.length > 0 && (
                                   <div className="mt-2 mb-2 space-y-1">
-                                    {q.options.map((opt, oi) => (
+                                    {q.options.map((opt, oi) => {
+                                      const cleanOpt = opt.replace(/^[A-Da-d]\)\s*/, "");
+                                      return (
                                       <p key={oi} className={`text-xs px-3 py-1.5 rounded ${opt === q.correct_answer ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
-                                        {String.fromCharCode(65 + oi)}) {opt}
-                                      </p>
+                                        {String.fromCharCode(65 + oi)}) {cleanOpt}
+                                      </p>);
                                     ))}
                                   </div>
                                 )}
