@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Tables, Json } from "@/integrations/supabase/types";
 import { useFeatureGate } from "@/hooks/useFeatureGate";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
