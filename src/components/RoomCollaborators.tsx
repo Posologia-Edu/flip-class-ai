@@ -145,11 +145,11 @@ export function RoomCollaborators({ roomId, ownerId }: { roomId: string; ownerId
               <DialogTitle>Convidar Professor Colaborador</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground mb-3">
-              Busque por nome entre os professores cadastrados na plataforma. O colaborador terá acesso de leitura à sala (alunos, atividades e analytics).
+              Busque por nome ou email entre os professores cadastrados na plataforma. O colaborador terá acesso de leitura à sala (alunos, atividades e analytics).
             </p>
             <div className="flex gap-2">
               <Input
-                placeholder="Nome do professor..."
+                placeholder="Nome ou email do professor..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && searchTeachers()}
@@ -165,6 +165,7 @@ export function RoomCollaborators({ roomId, ownerId }: { roomId: string; ownerId
                   <div key={r.user_id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
                     <div className="text-sm">
                       <span className="font-medium">{r.full_name || "Sem nome"}</span>
+                      {r.email && <span className="text-muted-foreground ml-2 text-xs">{r.email}</span>}
                     </div>
                     <Button
                       size="sm"
