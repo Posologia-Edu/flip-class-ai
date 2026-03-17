@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Tables, Json } from "@/integrations/supabase/types";
 import { useFeatureGate } from "@/hooks/useFeatureGate";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
@@ -86,6 +87,7 @@ const RoomManage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { canUploadFile, canGenerateQuiz, canUseAiCorrection, canUsePeerReview, loading: gateLoading, aiUsage, limits } = useFeatureGate();
+  const { user } = useAuth();
   const [room, setRoom] = useState<Room | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -133,6 +135,8 @@ const RoomManage = () => {
     LEVEL_TEMPLATES.map(t => ({ ...t, questions: [{ question: "", type: "case_study", context: "", correct_answer: "" }] }))
   );
   const [savingManualActivity, setSavingManualActivity] = useState(false);
+
+  const isOwner = useMemo(() => !!(user && room && room.teacher_id === user.id), [user, room]);
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
@@ -713,7 +717,8 @@ const RoomManage = () => {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-10">
-        {/* Uso de IA no mês */}
+        {/* Uso de IA no mês - only for owner */}
+        {isOwner && (
         <section className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold flex items-center gap-2">
@@ -738,7 +743,9 @@ const RoomManage = () => {
             </div>
           </div>
         </section>
-        {/* Timer Section */}
+        )}
+        {/* Timer Section - only for owner */}
+        {isOwner && (
         <section className="bg-card rounded-xl border border-border p-6">
           <h2 className="font-display text-lg font-semibold flex items-center gap-2 mb-4">
             <Clock className="w-5 h-5 text-primary" /> Timer de Liberação
@@ -754,15 +761,17 @@ const RoomManage = () => {
             <Button onClick={updateUnlockTime} disabled={!unlockAt}>Salvar</Button>
           </div>
         </section>
+        )}
 
         {/* Student Management */}
-        {roomId && <RoomStudents roomId={roomId} />}
-        {roomId && room && <RoomCollaborators roomId={roomId} ownerId={room.teacher_id} />}
+        {roomId && isOwner && <RoomStudents roomId={roomId} />}
+        {roomId && room && isOwner && <RoomCollaborators roomId={roomId} ownerId={room.teacher_id} />}
 
         {/* Materials Section */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold">Materiais</h2>
+            {isOwner && (
             <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetMaterialForm(); }}>
               <DialogTrigger asChild>
                 <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Adicionar Material</Button>
@@ -851,6 +860,7 @@ const RoomManage = () => {
                 </div>
               </DialogContent>
             </Dialog>
+            )}
           </div>
 
           {materials.length === 0 ? (
@@ -889,6 +899,7 @@ const RoomManage = () => {
                         )}
                       </div>
                     </div>
+                    {isOwner && (
                     <div className="flex gap-2 flex-shrink-0">
                       <TooltipProvider>
                         <Tooltip>
@@ -930,6 +941,7 @@ const RoomManage = () => {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
+                    )}
                   </div>
                 );
               })}
@@ -1013,6 +1025,7 @@ const RoomManage = () => {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold">Atividades</h2>
+            {isOwner && (
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setManualActivityDialogOpen(true)}>
                 <PenLine className="w-4 h-4 mr-1" /> Criar Manualmente
@@ -1021,6 +1034,7 @@ const RoomManage = () => {
                 <Library className="w-4 h-4 mr-1" /> Banco de Questões
               </Button>
             </div>
+            )}
           </div>
           {activities.length > 0 ? (
             <div className="space-y-3">
@@ -1047,6 +1061,8 @@ const RoomManage = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {isOwner && (
+                        <>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1063,6 +1079,8 @@ const RoomManage = () => {
                         <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); deleteActivity(act.id); }}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
+                        </>
+                        )}
                         {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>
                     </div>
