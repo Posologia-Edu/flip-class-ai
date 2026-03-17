@@ -899,6 +899,7 @@ const RoomManage = () => {
                         )}
                       </div>
                     </div>
+                    {isOwner && (
                     <div className="flex gap-2 flex-shrink-0">
                       <TooltipProvider>
                         <Tooltip>
@@ -940,6 +941,7 @@ const RoomManage = () => {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
+                    )}
                   </div>
                 );
               })}
