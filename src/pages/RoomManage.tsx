@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
+import { RoomCollaborators } from "@/components/RoomCollaborators";
 import DiscussionForum from "@/components/DiscussionForum";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -756,6 +757,7 @@ const RoomManage = () => {
 
         {/* Student Management */}
         {roomId && <RoomStudents roomId={roomId} />}
+        {roomId && room && <RoomCollaborators roomId={roomId} ownerId={room.teacher_id} />}
 
         {/* Materials Section */}
         <section>
@@ -1075,11 +1077,14 @@ const RoomManage = () => {
                                 <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
                                 {q.type === "multiple_choice" && q.options && q.options.length > 0 && (
                                   <div className="mt-2 mb-2 space-y-1">
-                                    {q.options.map((opt, oi) => (
-                                      <p key={oi} className={`text-xs px-3 py-1.5 rounded ${opt === q.correct_answer ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
-                                        {String.fromCharCode(65 + oi)}) {opt}
-                                      </p>
-                                    ))}
+                                    {q.options.map((opt, oi) => {
+                                      const cleanOpt = opt.replace(/^[A-Da-d]\)\s*/, "");
+                                      return (
+                                        <p key={oi} className={`text-xs px-3 py-1.5 rounded ${opt === q.correct_answer ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
+                                          {String.fromCharCode(65 + oi)}) {cleanOpt}
+                                        </p>
+                                      );
+                                    })}
                                   </div>
                                 )}
                                 <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
