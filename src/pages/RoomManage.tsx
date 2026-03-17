@@ -1083,6 +1083,18 @@ const RoomManage = () => {
                                         </p>
                                       );
                                     })}
+                                  </div>
+                                )}
+                                <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-border">
