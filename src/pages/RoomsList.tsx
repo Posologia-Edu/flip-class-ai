@@ -58,20 +58,33 @@ const RoomsList = () => {
 
   const fetchRooms = useCallback(async () => {
     if (!auth.user) return;
-    const [roomsRes, sessionsRes, collabRes] = await Promise.all([
+    const [roomsRes, sessionsRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("teacher_id", auth.user.id).order("created_at", { ascending: false }),
       supabase.from("student_sessions").select("room_id, score, completed_at"),
-      supabase.from("room_collaborators" as any).select("room_id").eq("teacher_id", auth.user.id),
     ]);
+    
+    if (roomsRes.error) {
+      console.error("Error fetching rooms:", roomsRes.error);
+    }
+    
     const roomsList = roomsRes.data || [];
     setRooms(roomsList);
 
-    // Fetch collaborated rooms
-    const collabRoomIds = ((collabRes.data as any[]) || []).map((c: any) => c.room_id);
-    if (collabRoomIds.length > 0) {
-      const { data: cRooms } = await supabase.from("rooms").select("*").in("id", collabRoomIds);
-      setCollabRooms((cRooms || []) as Room[]);
-    } else {
+    // Fetch collaborated rooms separately to avoid breaking main query
+    try {
+      const { data: collabData } = await supabase
+        .from("room_collaborators" as any)
+        .select("room_id")
+        .eq("teacher_id", auth.user.id);
+      const collabRoomIds = ((collabData as any[]) || []).map((c: any) => c.room_id);
+      if (collabRoomIds.length > 0) {
+        const { data: cRooms } = await supabase.from("rooms").select("*").in("id", collabRoomIds);
+        setCollabRooms((cRooms || []) as Room[]);
+      } else {
+        setCollabRooms([]);
+      }
+    } catch (e) {
+      console.error("Error fetching collaborations:", e);
       setCollabRooms([]);
     }
 
