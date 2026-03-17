@@ -136,6 +136,8 @@ const RoomManage = () => {
   );
   const [savingManualActivity, setSavingManualActivity] = useState(false);
 
+  const isOwner = useMemo(() => !!(user && room && room.teacher_id === user.id), [user, room]);
+
   const fetchData = useCallback(async () => {
     if (!roomId) return;
     const [roomRes, matRes, actRes, sessRes, logsRes] = await Promise.all([
