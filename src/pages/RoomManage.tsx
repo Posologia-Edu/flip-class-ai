@@ -757,6 +757,7 @@ const RoomManage = () => {
 
         {/* Student Management */}
         {roomId && <RoomStudents roomId={roomId} />}
+        {roomId && room && <RoomCollaborators roomId={roomId} ownerId={room.teacher_id} />}
 
         {/* Materials Section */}
         <section>
