@@ -1025,6 +1025,7 @@ const RoomManage = () => {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold">Atividades</h2>
+            {isOwner && (
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setManualActivityDialogOpen(true)}>
                 <PenLine className="w-4 h-4 mr-1" /> Criar Manualmente
@@ -1033,6 +1034,7 @@ const RoomManage = () => {
                 <Library className="w-4 h-4 mr-1" /> Banco de Questões
               </Button>
             </div>
+            )}
           </div>
           {activities.length > 0 ? (
             <div className="space-y-3">
