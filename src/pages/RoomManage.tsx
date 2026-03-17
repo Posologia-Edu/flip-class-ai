@@ -1078,22 +1078,11 @@ const RoomManage = () => {
                                     {q.options.map((opt, oi) => {
                                       const cleanOpt = opt.replace(/^[A-Da-d]\)\s*/, "");
                                       return (
-                                      <p key={oi} className={`text-xs px-3 py-1.5 rounded ${opt === q.correct_answer ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
-                                        {String.fromCharCode(65 + oi)}) {cleanOpt}
-                                      </p>);
-                                    ))}
-                                  </div>
-                                )}
-                                <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                                        <p key={oi} className={`text-xs px-3 py-1.5 rounded ${opt === q.correct_answer ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
+                                          {String.fromCharCode(65 + oi)}) {cleanOpt}
+                                        </p>
+                                      );
+                                    })}
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-border">
