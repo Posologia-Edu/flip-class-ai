@@ -87,6 +87,7 @@ const RoomManage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { canUploadFile, canGenerateQuiz, canUseAiCorrection, canUsePeerReview, loading: gateLoading, aiUsage, limits } = useFeatureGate();
+  const { user } = useAuth();
   const [room, setRoom] = useState<Room | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
