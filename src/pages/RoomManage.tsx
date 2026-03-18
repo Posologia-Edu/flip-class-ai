@@ -326,6 +326,22 @@ const RoomManage = () => {
     fetchData();
   };
 
+  const deleteQuestionFromActivity = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData) => {
+    const newLevels = quiz.levels.map((level, li) => {
+      if (li !== levelIndex) return level;
+      return { ...level, questions: level.questions.filter((_, qi) => qi !== questionIndex) };
+    }).filter(level => level.questions.length > 0);
+
+    if (newLevels.length === 0) {
+      await supabase.from("activities").delete().eq("id", activityId);
+      toast({ title: "Atividade removida", description: "Todas as questões foram deletadas." });
+    } else {
+      await supabase.from("activities").update({ quiz_data: { levels: newLevels } as unknown as Json }).eq("id", activityId);
+      toast({ title: "Questão removida!" });
+    }
+    fetchData();
+  };
+
   const isYoutubeLink = (mat: Material) => {
     return mat.type === "video" && mat.url && extractYoutubeId(mat.url);
   };
