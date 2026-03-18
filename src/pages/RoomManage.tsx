@@ -1091,8 +1091,23 @@ const RoomManage = () => {
                             <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
                             {level.questions?.map((q, qi) => (
                               <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
-                                {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
-                                <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
+                                    <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
+                                  </div>
+                                  {isOwner && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive flex-shrink-0"
+                                      onClick={() => deleteQuestionFromActivity(act.id, li, qi, quiz)}
+                                      title="Remover questão"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
                                 {q.type === "multiple_choice" && q.options && q.options.length > 0 && (
                                   <div className="mt-2 mb-2 space-y-1">
                                     {q.options.map((opt, oi) => {
