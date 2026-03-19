@@ -284,7 +284,7 @@ const AnalyticsPage = () => {
                           )}
                         </div>
                       )}
-                      <AnalyticsReport sessions={roomSessions} activityLogs={roomActivityLogs} materials={roomMaterials} showExport={canExportReports()} roomTitle={room.title} />
+                      <AnalyticsReport sessions={roomSessions} activityLogs={roomActivityLogs} materials={roomMaterials} showExport={canExportReports()} roomTitle={room.title} enrolledStudents={roomEnrolled} activitiesLocked={!!(roomData?.unlock_at && new Date(roomData.unlock_at) > new Date())} />
                     </div>
                   )}
                 </div>
