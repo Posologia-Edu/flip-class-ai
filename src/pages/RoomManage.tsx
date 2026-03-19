@@ -663,7 +663,7 @@ const RoomManage = () => {
     ));
   };
 
-  const updateManualQuestion = (levelIndex: number, questionIndex: number, field: keyof QuizQuestion, value: string) => {
+  const updateManualQuestion = (levelIndex: number, questionIndex: number, field: keyof QuizQuestion, value: any) => {
     setManualLevels(prev => prev.map((l, li) =>
       li === levelIndex ? {
         ...l, questions: l.questions.map((q, qi) => qi === questionIndex ? { ...q, [field]: value } : q)
