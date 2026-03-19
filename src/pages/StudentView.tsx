@@ -566,7 +566,7 @@ const StudentView = () => {
 
     if (mat.type === "pdf" || mat.type === "presentation") {
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           {matUrl ? (
             <>
               <div className="aspect-[4/3]"><iframe src={matUrl} className="w-full h-full" title={mat.title} /></div>
