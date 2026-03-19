@@ -255,16 +255,16 @@ const StudentView = () => {
     };
   }, [sessionId, roomId, tab, activeMaterialId, logActivity]);
 
-  // Track material interaction on click/expand — sets activeMaterialId for page_active attribution
+  // Track material interaction explicitly for future page_active attribution
   const handleMaterialInteraction = useCallback((materialId: string) => {
     setActiveMaterialId(materialId);
+
     if (!accessedMaterials.current.has(materialId)) {
       accessedMaterials.current.add(materialId);
       logActivity("material_open", materialId, 0);
     }
   }, [logActivity]);
 
-  // Reset active material when leaving materials tab
   useEffect(() => {
     if (tab !== "materials") {
       setActiveMaterialId(null);

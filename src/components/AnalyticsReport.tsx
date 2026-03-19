@@ -41,22 +41,53 @@ const CHART_COLORS = [
 ];
 
 const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false, roomTitle = "Sala", enrolledStudents = [], activitiesLocked = false }: AnalyticsReportProps) => {
-  // --- Average time per material (only from explicitly attributed logs) ---
+  // --- Average time per material ---
   const timePerMaterial = useMemo(() => {
-    return materials.map((mat) => {
-      let totalSeconds = 0;
-      const sessionIds = new Set<string>();
+    const logsBySession = new Map<string, ActivityLog[]>();
 
-      for (const log of activityLogs) {
-        // Only count logs that are explicitly assigned to this material
-        if (log.material_id !== mat.id) continue;
-        if (!["page_active", "material_open", "material_access"].includes(log.activity_type)) continue;
-        totalSeconds += log.duration_seconds || 0;
-        sessionIds.add(log.session_id);
+    for (const log of activityLogs) {
+      const bucket = logsBySession.get(log.session_id) || [];
+      bucket.push(log);
+      logsBySession.set(log.session_id, bucket);
+    }
+
+    const totalsByMaterial = new Map<string, { totalSeconds: number; sessionIds: Set<string> }>();
+
+    materials.forEach((material) => {
+      totalsByMaterial.set(material.id, { totalSeconds: 0, sessionIds: new Set<string>() });
+    });
+
+    logsBySession.forEach((sessionLogs, sessionId) => {
+      const orderedLogs = [...sessionLogs].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+
+      let lastMaterialId: string | null = null;
+
+      for (const log of orderedLogs) {
+        if (log.material_id) {
+          lastMaterialId = log.material_id;
+        }
+
+        if (log.activity_type !== "page_active") {
+          continue;
+        }
+
+        const attributedMaterialId = log.material_id || lastMaterialId;
+        if (!attributedMaterialId || !totalsByMaterial.has(attributedMaterialId)) {
+          continue;
+        }
+
+        const materialStats = totalsByMaterial.get(attributedMaterialId)!;
+        materialStats.totalSeconds += log.duration_seconds || 0;
+        materialStats.sessionIds.add(sessionId);
       }
+    });
 
-      const uniqueSessions = sessionIds.size;
-      const avgSeconds = uniqueSessions > 0 ? Math.round(totalSeconds / uniqueSessions) : 0;
+    return materials.map((mat) => {
+      const stats = totalsByMaterial.get(mat.id) || { totalSeconds: 0, sessionIds: new Set<string>() };
+      const uniqueSessions = stats.sessionIds.size;
+      const avgSeconds = uniqueSessions > 0 ? Math.round(stats.totalSeconds / uniqueSessions) : 0;
 
       return {
         name: mat.title?.substring(0, 20) || "Sem título",
