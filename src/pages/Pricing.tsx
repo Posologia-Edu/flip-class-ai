@@ -54,9 +54,10 @@ const planIcons: Record<PlanKey, React.ReactNode> = {
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { planKey: currentPlan, subscribed, loading: subLoading } = useSubscription(user?.id);
+  const { user, isAdmin } = useAuth();
+  const { planKey: stripePlan, subscribed, loading: subLoading } = useSubscription(user?.id);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const currentPlan: PlanKey = isAdmin ? "institutional" : stripePlan;
 
   const handleCheckout = async (planKey: PlanKey) => {
     if (!user) { navigate("/auth"); return; }
