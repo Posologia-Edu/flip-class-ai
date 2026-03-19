@@ -44,6 +44,7 @@ interface QuizQuestion {
   context?: string;
   options?: string[];
   correct_answer: string;
+  points?: number;
 }
 
 type ActivityGenerationType = "quiz" | "case_study";
