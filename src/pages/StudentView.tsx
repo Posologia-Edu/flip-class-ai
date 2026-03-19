@@ -593,7 +593,7 @@ const StudentView = () => {
       const content = mat.content_text_for_ai || "";
       const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
