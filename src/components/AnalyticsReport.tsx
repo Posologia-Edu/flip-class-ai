@@ -45,7 +45,7 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
   const timePerMaterial = useMemo(() => {
     return materials.map((mat) => {
       const logs = activityLogs.filter(
-        (l) => l.material_id === mat.id && (l.activity_type === "material_view" || l.activity_type === "page_active")
+        (l) => l.material_id === mat.id && ["material_view", "material_access", "page_active"].includes(l.activity_type)
       );
       const totalSeconds = logs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
       const uniqueSessions = new Set(logs.map((l) => l.session_id)).size;
