@@ -43,13 +43,54 @@ const CHART_COLORS = [
 const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false, roomTitle = "Sala", enrolledStudents = [], activitiesLocked = false }: AnalyticsReportProps) => {
   // --- Average time per material ---
   const timePerMaterial = useMemo(() => {
+    const sessionLogsMap = new Map<string, ActivityLog[]>();
+
+    for (const log of activityLogs) {
+      const existing = sessionLogsMap.get(log.session_id) || [];
+      existing.push(log);
+      sessionLogsMap.set(log.session_id, existing);
+    }
+
     return materials.map((mat) => {
-      const logs = activityLogs.filter(
-        (l) => l.material_id === mat.id && ["material_view", "material_access", "page_active"].includes(l.activity_type)
-      );
-      const totalSeconds = logs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
-      const uniqueSessions = new Set(logs.map((l) => l.session_id)).size;
+      let totalSeconds = 0;
+      const sessionIds = new Set<string>();
+
+      sessionLogsMap.forEach((sessionLogs, sessionId) => {
+        const directLogs = sessionLogs.filter(
+          (log) =>
+            log.material_id === mat.id &&
+            ["material_view", "material_access", "page_active"].includes(log.activity_type)
+        );
+
+        const viewedMaterialIds = new Set(
+          sessionLogs
+            .filter(
+              (log) =>
+                log.material_id &&
+                ["material_view", "material_access", "page_active"].includes(log.activity_type)
+            )
+            .map((log) => log.material_id as string)
+        );
+
+        const unassignedActiveSeconds = sessionLogs
+          .filter((log) => log.activity_type === "page_active" && !log.material_id)
+          .reduce((sum, log) => sum + (log.duration_seconds || 0), 0);
+
+        let attributedSeconds = directLogs.reduce((sum, log) => sum + (log.duration_seconds || 0), 0);
+
+        if (viewedMaterialIds.has(mat.id) && unassignedActiveSeconds > 0) {
+          attributedSeconds += unassignedActiveSeconds / viewedMaterialIds.size;
+        }
+
+        if (attributedSeconds > 0) {
+          totalSeconds += attributedSeconds;
+          sessionIds.add(sessionId);
+        }
+      });
+
+      const uniqueSessions = sessionIds.size;
       const avgSeconds = uniqueSessions > 0 ? Math.round(totalSeconds / uniqueSessions) : 0;
+
       return {
         name: mat.title?.substring(0, 20) || "Sem título",
         fullName: mat.title || "Sem título",
