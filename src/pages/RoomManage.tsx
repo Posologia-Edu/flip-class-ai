@@ -1150,6 +1150,22 @@ const RoomManage = () => {
                                   </div>
                                 )}
                                 <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                                {isOwner && (
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Label className="text-xs text-muted-foreground">Pontos:</Label>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-20 h-7 text-xs"
+                                      value={q.points ?? ""}
+                                      placeholder="—"
+                                      onChange={(e) => updateQuestionPoints(act.id, li, qi, quiz, e.target.value ? Number(e.target.value) : undefined)}
+                                    />
+                                  </div>
+                                )}
+                                {!isOwner && q.points != null && (
+                                  <p className="text-xs text-muted-foreground mt-1"><span className="font-semibold">Pontos:</span> {q.points}</p>
+                                )}
                               </div>
                             ))}
                           </div>
