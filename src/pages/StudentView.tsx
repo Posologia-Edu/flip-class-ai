@@ -619,7 +619,7 @@ const StudentView = () => {
       const spotify = isSpotifyUrl(url);
 
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
