@@ -88,16 +88,20 @@ const AnalyticsPage = () => {
     if (expandedRoom === roomId) { setExpandedRoom(null); return; }
     setExpandedRoom(roomId);
     setLoadingDetail(true);
-    const [sessRes, logsRes, matsRes, actsRes] = await Promise.all([
+    const [sessRes, logsRes, matsRes, actsRes, enrolledRes, roomRes] = await Promise.all([
       supabase.from("student_sessions").select("*").eq("room_id", roomId),
       supabase.from("student_activity_logs").select("*").eq("room_id", roomId),
       supabase.from("materials").select("*").eq("room_id", roomId),
       supabase.from("activities").select("*").eq("room_id", roomId),
+      supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
+      supabase.from("rooms").select("*").eq("id", roomId).single(),
     ]);
     setRoomSessions(sessRes.data || []);
     setRoomActivityLogs(logsRes.data || []);
     setRoomMaterials(matsRes.data || []);
     setRoomActivities(actsRes.data || []);
+    setRoomEnrolled(enrolledRes.data || []);
+    setRoomData(roomRes.data);
     setLoadingDetail(false);
   };
 
