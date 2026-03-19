@@ -1306,7 +1306,7 @@ const RoomManage = () => {
             <button onClick={() => setStatsTab("reports")} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "reports" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}><TrendingUp className="w-3.5 h-3.5 inline mr-1" />Relatórios</button>
           </div>
 
-          {sessions.length === 0 ? (
+          {sessions.length === 0 && enrolledStudents.length === 0 ? (
             <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
               <Users className="w-8 h-8 mx-auto mb-2" />
               <p>Nenhum aluno entrou nesta sala ainda.</p>
@@ -1324,6 +1324,7 @@ const RoomManage = () => {
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Sessions */}
                   {sessions.map((s) => (
                     <tr key={s.id} className="border-t border-border">
                       <td className="px-4 py-3 font-medium">{s.student_name}</td>
@@ -1335,6 +1336,20 @@ const RoomManage = () => {
                       </td>
                     </tr>
                   ))}
+                  {/* Enrolled but never accessed */}
+                  {enrolledStudents
+                    .filter(e => !sessions.some(s => (s as any).student_email?.toLowerCase() === e.student_email.toLowerCase()))
+                    .map((e) => (
+                      <tr key={e.student_email} className="border-t border-border">
+                        <td className="px-4 py-3 font-medium text-muted-foreground">{e.student_name || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{e.student_email}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
+                            Não acessou
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
