@@ -1,48 +1,64 @@
 
+Objetivo: corrigir definitivamente a entrega do convite para novos professores (ex.: `sergiofernandesaraujo@hotmail.com`) com um fluxo mais confiável e com melhor rastreabilidade.
 
-## Problem Diagnosis
+1) Diagnóstico confirmado (com base no código e logs)
+- O convite de novo usuário hoje passa por `inviteUserByEmail` no backend (`institutional-dashboard`) e depende do `auth-email-hook` para envio.
+- Nos logs, o evento de convite é disparado com sucesso e o `auth-email-hook` registra “Email sent successfully” para `sergiofernandesaraujo@hotmail.com`.
+- Mesmo assim, o destinatário não recebe o email (caixa de entrada). Isso indica problema de entregabilidade no caminho atual (aceito pelo backend, mas não chegando ao inbox), não erro de autorização/execução.
+- Convites para usuário já existente usam outro caminho (Resend direto no `institutional-dashboard`) e estão chegando.
 
-The "Tempo Médio por Material" chart shows identical time for all materials because:
+2) Estratégia de correção
+- Manter a criação/reativação de convite no backend institucional, mas mudar o envio para novos convidados para um fluxo “link gerado + envio direto”, no mesmo padrão que já funciona para usuário existente.
+- Em vez de depender apenas do `inviteUserByEmail` para mandar email, gerar o link de convite explicitamente e enviar com `sendEmailWithFallback` (já existente no arquivo), usando remetente validado.
+- Resultado esperado: unificar o canal de envio institucional em um pipeline já comprovado no projeto, reduzindo falhas silenciosas.
 
-1. **`page_active` logs almost never include a `material_id`** — the IntersectionObserver-based detection isn't working reliably (database confirms nearly all `page_active` entries have `material_id = null`)
-2. The current fallback logic distributes unattributed time equally among all viewed materials, making every material appear identical
-3. `material_view` logs (marking as "seen") only record 1 second each — not useful for time tracking
+3) Mudanças planejadas (implementação)
+- Arquivo: `supabase/functions/institutional-dashboard/index.ts`
+  - No branch de “novo usuário / usuário não confirmado”:
+    - Substituir (ou tornar secundário) o envio via `inviteUserByEmail` por:
+      - geração de link de convite (`auth.admin.generateLink` com redirect para `/reset-password`);
+      - envio de email com `sendEmailWithFallback` usando HTML de convite com CTA claro.
+    - Se envio falhar:
+      - retornar erro explícito para UI (em vez de sucesso silencioso);
+      - manter log detalhado do motivo.
+    - Se envio funcionar:
+      - manter `admin_invites` como `pending` (upsert idempotente, como já está);
+      - manter criação/atualização de `profiles` com `approval_status: approved`.
+  - Garantir compatibilidade com reenvio para convite pendente (sem bloquear por early-return).
+- Arquivo: `src/pages/InstitutionalDashboard.tsx`
+  - Melhorar feedback de toast:
+    - sucesso de envio,
+    - aviso quando enviado por remetente alternativo,
+    - erro real quando não houve despacho.
+  - (Opcional no mesmo ciclo) adicionar ação explícita de “Reenviar convite” para linhas pendentes.
 
-## Plan
+4) Observabilidade e depuração (para evitar regressão)
+- Adicionar logs estruturados no `institutional-dashboard` para cada tentativa:
+  - email destino,
+  - tipo de fluxo (novo/existente),
+  - resultado do envio,
+  - remetente usado (`primary` vs `fallback`).
+- Manter logs do `auth-email-hook` para auth padrão, mas o convite institucional passa a ter evidência completa no próprio fluxo institucional.
 
-### 1. Fix per-material time tracking in StudentView
+5) Validação ponta a ponta (critério de aceite)
+- Teste principal:
+  - convidar `sergiofernandesaraujo@hotmail.com`;
+  - confirmar status `pending` no painel;
+  - confirmar recebimento do email (Inbox + Spam).
+- Teste de reenvio:
+  - reenviar para mesmo email pendente e validar nova chegada.
+- Teste de regressão:
+  - convite para usuário já existente continua funcionando.
+- Teste de link:
+  - CTA abre `/reset-password` e permite definir senha corretamente.
 
-Replace the unreliable IntersectionObserver approach with explicit click/expand-based tracking:
+6) Riscos e mitigação
+- Risco: provedores como Hotmail podem atrasar/quarentenar.
+  - Mitigação: envio com canal já funcional no projeto + logs explícitos + reenvio manual.
+- Risco: múltiplos convites para o mesmo email.
+  - Mitigação: manter `upsert` por email e lógica idempotente já existente.
 
-- When a student **clicks on / expands a material card**, record `activeMaterialId` immediately (no intersection threshold needed)
-- Every 30-second `page_active` tick on the materials tab sends the current `activeMaterialId` — this ensures time is attributed to the specific material the student is interacting with
-- Add a `material_open` event when a student clicks to expand/view a material, with `duration_seconds = 0` as a discrete access event
-
-**File:** `src/pages/StudentView.tsx`
-
-### 2. Add a separate "Acessos por Material" (Views per Material) chart
-
-Add a new bar chart to AnalyticsReport showing the **number of unique sessions** that accessed each material — this gives a clear picture of which materials are most popular, independent of time.
-
-**File:** `src/components/AnalyticsReport.tsx`
-
-### 3. Fix the time calculation to stop equal distribution
-
-Update `timePerMaterial` logic:
-- **Remove the equal-distribution fallback** for unattributed `page_active` time — this is what causes identical bars
-- Only count time from `page_active` logs that have an explicit `material_id`
-- Keep `material_view` and `material_access` logs for the access count chart
-
-**File:** `src/components/AnalyticsReport.tsx`
-
-### 4. Add "Marcados como visto" metric
-
-Show how many students marked each material as "viewed" (from `material_view` logs) as a secondary metric in the chart or as a small badge, helping differentiate engagement levels.
-
-### Summary of changes
-
-| File | Change |
-|------|--------|
-| `src/pages/StudentView.tsx` | Track active material on click/expand instead of IntersectionObserver; always send `material_id` in `page_active` logs |
-| `src/components/AnalyticsReport.tsx` | Remove equal-distribution fallback; add "Acessos por Material" chart; show real per-material time only from attributed logs |
-
+7) Resultado esperado após aprovação
+- Convite para novos professores deixa de depender exclusivamente do caminho que está “aceito no backend, mas não entregue”.
+- Admin passa a ter retorno mais confiável no painel (sucesso real vs falha real).
+- Redução imediata de falhas silenciosas em convites institucionais.

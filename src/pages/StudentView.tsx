@@ -255,49 +255,21 @@ const StudentView = () => {
     };
   }, [sessionId, roomId, tab, activeMaterialId, logActivity]);
 
-  useEffect(() => {
-    if (tab !== "materials" || materials.length === 0) {
-      setActiveMaterialId(null);
-      return;
+  // Track material interaction on click/expand — sets activeMaterialId for page_active attribution
+  const handleMaterialInteraction = useCallback((materialId: string) => {
+    setActiveMaterialId(materialId);
+    if (!accessedMaterials.current.has(materialId)) {
+      accessedMaterials.current.add(materialId);
+      logActivity("material_open", materialId, 0);
     }
+  }, [logActivity]);
 
-    const pickActiveMaterial = () => {
-      const elements = Array.from(document.querySelectorAll<HTMLElement>("[data-material-id]"));
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      let bestId: string | null = null;
-      let bestRatio = 0;
-
-      elements.forEach((element) => {
-        const rect = element.getBoundingClientRect();
-        const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
-        const ratio = Math.max(0, visibleHeight) / Math.max(rect.height, 1);
-        const materialId = element.dataset.materialId;
-
-        if (materialId && ratio > bestRatio) {
-          bestRatio = ratio;
-          bestId = materialId;
-        }
-      });
-
-      setActiveMaterialId(bestRatio >= 0.35 ? bestId : null);
-    };
-
-    pickActiveMaterial();
-    window.addEventListener("scroll", pickActiveMaterial, { passive: true });
-    window.addEventListener("resize", pickActiveMaterial);
-
-    return () => {
-      window.removeEventListener("scroll", pickActiveMaterial);
-      window.removeEventListener("resize", pickActiveMaterial);
-    };
-  }, [tab, materials]);
-
+  // Reset active material when leaving materials tab
   useEffect(() => {
-    if (tab !== "materials" || !activeMaterialId || accessedMaterials.current.has(activeMaterialId)) return;
-
-    accessedMaterials.current.add(activeMaterialId);
-    logActivity("material_access", activeMaterialId, 0);
-  }, [tab, activeMaterialId, logActivity]);
+    if (tab !== "materials") {
+      setActiveMaterialId(null);
+    }
+  }, [tab]);
 
   const isValidUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
@@ -575,7 +547,7 @@ const StudentView = () => {
 
     if (mat.type === "video" && ytId) {
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="aspect-video">
             <iframe
               src={`https://www.youtube.com/embed/${ytId}?enablejsapi=1`}
@@ -594,7 +566,7 @@ const StudentView = () => {
 
     if (mat.type === "pdf" || mat.type === "presentation") {
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           {matUrl ? (
             <>
               <div className="aspect-[4/3]"><iframe src={matUrl} className="w-full h-full" title={mat.title} /></div>
@@ -621,7 +593,7 @@ const StudentView = () => {
       const content = mat.content_text_for_ai || "";
       const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
@@ -647,7 +619,7 @@ const StudentView = () => {
       const spotify = isSpotifyUrl(url);
 
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -697,7 +669,7 @@ const StudentView = () => {
 
     // Generic fallback
     return (
-      <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+      <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <MatIcon className="w-8 h-8 text-muted-foreground" />

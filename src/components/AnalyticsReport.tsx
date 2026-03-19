@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText, UserX } from "lucide-react";
+import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText, UserX, Eye } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import type { Tables } from "@/integrations/supabase/types";
@@ -41,52 +41,19 @@ const CHART_COLORS = [
 ];
 
 const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false, roomTitle = "Sala", enrolledStudents = [], activitiesLocked = false }: AnalyticsReportProps) => {
-  // --- Average time per material ---
+  // --- Average time per material (only from explicitly attributed logs) ---
   const timePerMaterial = useMemo(() => {
-    const sessionLogsMap = new Map<string, ActivityLog[]>();
-
-    for (const log of activityLogs) {
-      const existing = sessionLogsMap.get(log.session_id) || [];
-      existing.push(log);
-      sessionLogsMap.set(log.session_id, existing);
-    }
-
     return materials.map((mat) => {
       let totalSeconds = 0;
       const sessionIds = new Set<string>();
 
-      sessionLogsMap.forEach((sessionLogs, sessionId) => {
-        const directLogs = sessionLogs.filter(
-          (log) =>
-            log.material_id === mat.id &&
-            ["material_view", "material_access", "page_active"].includes(log.activity_type)
-        );
-
-        const viewedMaterialIds = new Set(
-          sessionLogs
-            .filter(
-              (log) =>
-                log.material_id &&
-                ["material_view", "material_access", "page_active"].includes(log.activity_type)
-            )
-            .map((log) => log.material_id as string)
-        );
-
-        const unassignedActiveSeconds = sessionLogs
-          .filter((log) => log.activity_type === "page_active" && !log.material_id)
-          .reduce((sum, log) => sum + (log.duration_seconds || 0), 0);
-
-        let attributedSeconds = directLogs.reduce((sum, log) => sum + (log.duration_seconds || 0), 0);
-
-        if (viewedMaterialIds.has(mat.id) && unassignedActiveSeconds > 0) {
-          attributedSeconds += unassignedActiveSeconds / viewedMaterialIds.size;
-        }
-
-        if (attributedSeconds > 0) {
-          totalSeconds += attributedSeconds;
-          sessionIds.add(sessionId);
-        }
-      });
+      for (const log of activityLogs) {
+        // Only count logs that are explicitly assigned to this material
+        if (log.material_id !== mat.id) continue;
+        if (!["page_active", "material_open", "material_access"].includes(log.activity_type)) continue;
+        totalSeconds += log.duration_seconds || 0;
+        sessionIds.add(log.session_id);
+      }
 
       const uniqueSessions = sessionIds.size;
       const avgSeconds = uniqueSessions > 0 ? Math.round(totalSeconds / uniqueSessions) : 0;
@@ -96,6 +63,31 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
         fullName: mat.title || "Sem título",
         avgMinutes: +(avgSeconds / 60).toFixed(1),
         totalViews: uniqueSessions,
+      };
+    });
+  }, [materials, activityLogs]);
+
+  // --- Accesses per material (unique sessions that opened/viewed each material) ---
+  const accessesPerMaterial = useMemo(() => {
+    return materials.map((mat) => {
+      const sessionIds = new Set<string>();
+      let markedViewed = 0;
+
+      for (const log of activityLogs) {
+        if (log.material_id !== mat.id) continue;
+        if (["material_open", "material_access", "material_view", "page_active"].includes(log.activity_type)) {
+          sessionIds.add(log.session_id);
+        }
+        if (log.activity_type === "material_view") {
+          markedViewed++;
+        }
+      }
+
+      return {
+        name: mat.title?.substring(0, 20) || "Sem título",
+        fullName: mat.title || "Sem título",
+        acessos: sessionIds.size,
+        marcadosVisto: markedViewed,
       };
     });
   }, [materials, activityLogs]);
@@ -325,7 +317,37 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
           )}
         </div>
 
-        {/* Completion Rate Pie */}
+        {/* Accesses per Material */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="font-display text-sm font-semibold mb-4 flex items-center gap-2">
+            <Eye className="w-4 h-4 text-primary" /> Acessos por Material
+          </h3>
+          {accessesPerMaterial.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={accessesPerMaterial} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, border: "1px solid hsl(220,13%,91%)", fontSize: 12 }}
+                  formatter={(value: number, name: string) => [
+                    value,
+                    name === "acessos" ? "Alunos que acessaram" : "Marcados como visto",
+                  ]}
+                  labelFormatter={(label) => {
+                    const item = accessesPerMaterial.find((t) => t.name === label);
+                    return item?.fullName || label;
+                  }}
+                />
+                <Bar dataKey="acessos" name="acessos" fill="hsl(220, 70%, 55%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="marcadosVisto" name="marcadosVisto" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">Sem dados</p>
+          )}
+        </div>
+
         <div className="bg-card border border-border rounded-xl p-5">
           <h3 className="font-display text-sm font-semibold mb-4 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-level-easy" /> Taxa de Conclusão
