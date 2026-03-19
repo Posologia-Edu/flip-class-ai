@@ -81,16 +81,11 @@ const AnalyticsPage = () => {
     }
     setAnalytics(result);
     setLoading(false);
-  }, [user?.id]);
+  }, [user]);
 
-  useEffect(() => {
-    if (!authLoading && user) fetchAnalytics();
-  }, [authLoading, user?.id, fetchAnalytics]);
+  const fetchRoomDetail = useCallback(async (roomId: string, showLoader = true) => {
+    if (showLoader) setLoadingDetail(true);
 
-  const toggleRoomDetail = async (roomId: string) => {
-    if (expandedRoom === roomId) { setExpandedRoom(null); return; }
-    setExpandedRoom(roomId);
-    setLoadingDetail(true);
     const [sessRes, logsRes, matsRes, actsRes, enrolledRes, roomRes] = await Promise.all([
       supabase.from("student_sessions").select("*").eq("room_id", roomId),
       supabase.from("student_activity_logs").select("*").eq("room_id", roomId),
@@ -99,13 +94,71 @@ const AnalyticsPage = () => {
       supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
       supabase.from("rooms").select("*").eq("id", roomId).single(),
     ]);
+
     setRoomSessions(sessRes.data || []);
     setRoomActivityLogs(logsRes.data || []);
     setRoomMaterials(matsRes.data || []);
     setRoomActivities(actsRes.data || []);
     setRoomEnrolled(enrolledRes.data || []);
     setRoomData(roomRes.data);
-    setLoadingDetail(false);
+
+    if (showLoader) setLoadingDetail(false);
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && user) fetchAnalytics();
+  }, [authLoading, user, fetchAnalytics]);
+
+  useEffect(() => {
+    if (!expandedRoom) return;
+
+    let isActive = true;
+    let pollDelay = 3000;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const schedulePoll = () => {
+      if (!isActive) return;
+      timeoutId = setTimeout(async () => {
+        await fetchRoomDetail(expandedRoom, false);
+        pollDelay = Math.min(Math.round(pollDelay * 1.5), 30000);
+        schedulePoll();
+      }, pollDelay);
+    };
+
+    const syncNow = async () => {
+      pollDelay = 3000;
+      if (timeoutId) clearTimeout(timeoutId);
+      await fetchRoomDetail(expandedRoom, false);
+      schedulePoll();
+    };
+
+    schedulePoll();
+
+    const channel = supabase
+      .channel(`analytics-room:${expandedRoom}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "student_activity_logs", filter: `room_id=eq.${expandedRoom}` }, syncNow)
+      .on("postgres_changes", { event: "*", schema: "public", table: "student_sessions", filter: `room_id=eq.${expandedRoom}` }, syncNow)
+      .on("postgres_changes", { event: "*", schema: "public", table: "materials", filter: `room_id=eq.${expandedRoom}` }, syncNow)
+      .on("postgres_changes", { event: "*", schema: "public", table: "activities", filter: `room_id=eq.${expandedRoom}` }, syncNow)
+      .on("postgres_changes", { event: "*", schema: "public", table: "room_students", filter: `room_id=eq.${expandedRoom}` }, syncNow)
+      .on("postgres_changes", { event: "*", schema: "public", table: "rooms", filter: `id=eq.${expandedRoom}` }, syncNow)
+      .subscribe();
+
+    return () => {
+      isActive = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, [expandedRoom, fetchRoomDetail]);
+
+  const toggleRoomDetail = async (roomId: string) => {
+    if (expandedRoom === roomId) {
+      setExpandedRoom(null);
+      return;
+    }
+
+    setExpandedRoom(roomId);
+    await fetchRoomDetail(roomId, true);
   };
 
   const totalStudents = analytics.reduce((s, r) => s + r.studentCount, 0);
