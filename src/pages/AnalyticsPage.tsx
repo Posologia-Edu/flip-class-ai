@@ -40,6 +40,8 @@ const AnalyticsPage = () => {
   const [roomActivityLogs, setRoomActivityLogs] = useState<any[]>([]);
   const [roomMaterials, setRoomMaterials] = useState<any[]>([]);
   const [roomActivities, setRoomActivities] = useState<any[]>([]);
+  const [roomEnrolled, setRoomEnrolled] = useState<any[]>([]);
+  const [roomData, setRoomData] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [allSessions, setAllSessions] = useState<any[]>([]);
   const [allActivityLogs, setAllActivityLogs] = useState<any[]>([]);
