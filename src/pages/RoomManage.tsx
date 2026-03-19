@@ -687,9 +687,18 @@ const RoomManage = () => {
     setSavingManualActivity(false);
   };
 
-  // Count unique emails for student count
-  const uniqueEmails = new Set(sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean));
+  // Count unique emails for student count — use enrolled students as base
+  const uniqueEmails = new Set([
+    ...enrolledStudents.map(e => e.student_email.toLowerCase()),
+    ...sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean),
+  ]);
   const totalStudents = uniqueEmails.size || sessions.length;
+
+  // Check if activities are currently locked
+  const activitiesLocked = useMemo(() => {
+    if (!room?.unlock_at) return false;
+    return new Date(room.unlock_at) > new Date();
+  }, [room?.unlock_at]);
 
   const studentStats: StudentStats[] = sessions.map(session => {
     const sessionLogs = activityLogs.filter(l => l.session_id === session.id);
