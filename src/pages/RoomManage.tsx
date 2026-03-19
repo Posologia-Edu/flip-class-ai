@@ -1282,7 +1282,7 @@ const RoomManage = () => {
               <p>Nenhum aluno entrou nesta sala ainda.</p>
             </div>
           ) : statsTab === "reports" ? (
-            <AnalyticsReport sessions={sessions} activityLogs={activityLogs} materials={materials} />
+            <AnalyticsReport sessions={sessions} activityLogs={activityLogs} materials={materials} enrolledStudents={enrolledStudents} activitiesLocked={activitiesLocked} />
           ) : statsTab === "overview" ? (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
