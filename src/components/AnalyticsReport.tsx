@@ -317,7 +317,37 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
           )}
         </div>
 
-        {/* Completion Rate Pie */}
+        {/* Accesses per Material */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="font-display text-sm font-semibold mb-4 flex items-center gap-2">
+            <Eye className="w-4 h-4 text-primary" /> Acessos por Material
+          </h3>
+          {accessesPerMaterial.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={accessesPerMaterial} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, border: "1px solid hsl(220,13%,91%)", fontSize: 12 }}
+                  formatter={(value: number, name: string) => [
+                    value,
+                    name === "acessos" ? "Alunos que acessaram" : "Marcados como visto",
+                  ]}
+                  labelFormatter={(label) => {
+                    const item = accessesPerMaterial.find((t) => t.name === label);
+                    return item?.fullName || label;
+                  }}
+                />
+                <Bar dataKey="acessos" name="acessos" fill="hsl(220, 70%, 55%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="marcadosVisto" name="marcadosVisto" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">Sem dados</p>
+          )}
+        </div>
+
         <div className="bg-card border border-border rounded-xl p-5">
           <h3 className="font-display text-sm font-semibold mb-4 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-level-easy" /> Taxa de Conclusão
