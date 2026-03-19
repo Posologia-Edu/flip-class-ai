@@ -212,9 +212,11 @@ const StudentView = () => {
   const [sessionData, setSessionData] = useState<Tables<"student_sessions"> | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
+  const [activeMaterialId, setActiveMaterialId] = useState<string | null>(null);
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const viewedMaterials = useRef<Set<string>>(new Set());
+  const accessedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
 
   const getSessionToken = useCallback(() => {
@@ -240,17 +242,62 @@ const StudentView = () => {
     } catch (e) {
       console.warn("Activity log failed", e);
     }
-  }, [sessionId, roomId]);
+  }, [sessionId, roomId, getSessionToken]);
 
   useEffect(() => {
     if (!sessionId || !roomId) return;
     activeTimer.current = setInterval(() => {
-      logActivity("page_active", undefined, 30);
+      if (document.visibilityState !== "visible") return;
+      logActivity("page_active", tab === "materials" ? activeMaterialId || undefined : undefined, 30);
     }, 30000);
     return () => {
       if (activeTimer.current) clearInterval(activeTimer.current);
     };
-  }, [sessionId, roomId, logActivity]);
+  }, [sessionId, roomId, tab, activeMaterialId, logActivity]);
+
+  useEffect(() => {
+    if (tab !== "materials" || materials.length === 0) {
+      setActiveMaterialId(null);
+      return;
+    }
+
+    const pickActiveMaterial = () => {
+      const elements = Array.from(document.querySelectorAll<HTMLElement>("[data-material-id]"));
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      let bestId: string | null = null;
+      let bestRatio = 0;
+
+      elements.forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+        const ratio = Math.max(0, visibleHeight) / Math.max(rect.height, 1);
+        const materialId = element.dataset.materialId;
+
+        if (materialId && ratio > bestRatio) {
+          bestRatio = ratio;
+          bestId = materialId;
+        }
+      });
+
+      setActiveMaterialId(bestRatio >= 0.35 ? bestId : null);
+    };
+
+    pickActiveMaterial();
+    window.addEventListener("scroll", pickActiveMaterial, { passive: true });
+    window.addEventListener("resize", pickActiveMaterial);
+
+    return () => {
+      window.removeEventListener("scroll", pickActiveMaterial);
+      window.removeEventListener("resize", pickActiveMaterial);
+    };
+  }, [tab, materials]);
+
+  useEffect(() => {
+    if (tab !== "materials" || !activeMaterialId || accessedMaterials.current.has(activeMaterialId)) return;
+
+    accessedMaterials.current.add(activeMaterialId);
+    logActivity("material_access", activeMaterialId, 0);
+  }, [tab, activeMaterialId, logActivity]);
 
   const isValidUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
@@ -528,7 +575,7 @@ const StudentView = () => {
 
     if (mat.type === "video" && ytId) {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="aspect-video">
             <iframe
               src={`https://www.youtube.com/embed/${ytId}?enablejsapi=1`}
@@ -547,7 +594,7 @@ const StudentView = () => {
 
     if (mat.type === "pdf" || mat.type === "presentation") {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           {matUrl ? (
             <>
               <div className="aspect-[4/3]"><iframe src={matUrl} className="w-full h-full" title={mat.title} /></div>
@@ -574,7 +621,7 @@ const StudentView = () => {
       const content = mat.content_text_for_ai || "";
       const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
@@ -600,7 +647,7 @@ const StudentView = () => {
       const spotify = isSpotifyUrl(url);
 
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -650,7 +697,7 @@ const StudentView = () => {
 
     // Generic fallback
     return (
-      <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+      <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <MatIcon className="w-8 h-8 text-muted-foreground" />
