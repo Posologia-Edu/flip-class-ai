@@ -669,7 +669,7 @@ const StudentView = () => {
 
     // Generic fallback
     return (
-      <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+      <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <MatIcon className="w-8 h-8 text-muted-foreground" />
