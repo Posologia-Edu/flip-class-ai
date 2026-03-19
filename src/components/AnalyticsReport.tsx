@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText, UserX } from "lucide-react";
+import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText, UserX, Eye } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import type { Tables } from "@/integrations/supabase/types";
