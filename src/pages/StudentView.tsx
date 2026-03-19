@@ -575,7 +575,7 @@ const StudentView = () => {
 
     if (mat.type === "video" && ytId) {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="aspect-video">
             <iframe
               src={`https://www.youtube.com/embed/${ytId}?enablejsapi=1`}
@@ -594,7 +594,7 @@ const StudentView = () => {
 
     if (mat.type === "pdf" || mat.type === "presentation") {
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           {matUrl ? (
             <>
               <div className="aspect-[4/3]"><iframe src={matUrl} className="w-full h-full" title={mat.title} /></div>
@@ -621,7 +621,7 @@ const StudentView = () => {
       const content = mat.content_text_for_ai || "";
       const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><File className="w-5 h-5 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Artigo"}</h3></div>
@@ -647,7 +647,7 @@ const StudentView = () => {
       const spotify = isSpotifyUrl(url);
 
       return (
-        <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -697,7 +697,7 @@ const StudentView = () => {
 
     // Generic fallback
     return (
-      <div key={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+      <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <MatIcon className="w-8 h-8 text-muted-foreground" />

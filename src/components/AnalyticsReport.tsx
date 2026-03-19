@@ -124,7 +124,9 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
 
         const sessionLogs = activityLogs.filter((l) => l.session_id === session.id);
         const viewedMaterials = new Set(
-          sessionLogs.filter((l) => l.activity_type === "material_view" && l.material_id).map((l) => l.material_id)
+          sessionLogs
+            .filter((l) => ["material_view", "material_access"].includes(l.activity_type) && l.material_id)
+            .map((l) => l.material_id)
         );
         const totalTime = sessionLogs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
         const materialsViewedCount = viewedMaterials.size;
