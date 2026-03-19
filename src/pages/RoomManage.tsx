@@ -1255,6 +1255,17 @@ const RoomManage = () => {
                           className="resize-y text-sm"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Pontuação da questão (opcional)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Ex: 10"
+                          value={(q as any).points ?? ""}
+                          onChange={(e) => updateManualQuestion(li, qi, "points", e.target.value ? Number(e.target.value) : undefined)}
+                          className="w-32 text-sm"
+                        />
+                      </div>
                     </div>
                   ))}
                   <Button size="sm" variant="outline" onClick={() => addManualQuestion(li)}>
