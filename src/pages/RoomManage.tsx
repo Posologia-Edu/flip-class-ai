@@ -345,8 +345,22 @@ const RoomManage = () => {
     }
     fetchData();
   };
+  const updateQuestionPoints = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData, points: number | undefined) => {
+    const newLevels = quiz.levels.map((level, li) => {
+      if (li !== levelIndex) return level;
+      return {
+        ...level,
+        questions: level.questions.map((q, qi) => {
+          if (qi !== questionIndex) return q;
+          return { ...q, points };
+        }),
+      };
+    });
+    await supabase.from("activities").update({ quiz_data: { levels: newLevels } as unknown as Json }).eq("id", activityId);
+    fetchData();
+  };
 
-  const isYoutubeLink = (mat: Material) => {
+
     return mat.type === "video" && mat.url && extractYoutubeId(mat.url);
   };
 
