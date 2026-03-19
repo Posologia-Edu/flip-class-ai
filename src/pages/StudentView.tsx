@@ -212,9 +212,11 @@ const StudentView = () => {
   const [sessionData, setSessionData] = useState<Tables<"student_sessions"> | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
+  const [activeMaterialId, setActiveMaterialId] = useState<string | null>(null);
   const quizStartTime = useRef<number>(0);
   const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const viewedMaterials = useRef<Set<string>>(new Set());
+  const accessedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
 
   const getSessionToken = useCallback(() => {
@@ -240,17 +242,62 @@ const StudentView = () => {
     } catch (e) {
       console.warn("Activity log failed", e);
     }
-  }, [sessionId, roomId]);
+  }, [sessionId, roomId, getSessionToken]);
 
   useEffect(() => {
     if (!sessionId || !roomId) return;
     activeTimer.current = setInterval(() => {
-      logActivity("page_active", undefined, 30);
+      if (document.visibilityState !== "visible") return;
+      logActivity("page_active", tab === "materials" ? activeMaterialId || undefined : undefined, 30);
     }, 30000);
     return () => {
       if (activeTimer.current) clearInterval(activeTimer.current);
     };
-  }, [sessionId, roomId, logActivity]);
+  }, [sessionId, roomId, tab, activeMaterialId, logActivity]);
+
+  useEffect(() => {
+    if (tab !== "materials" || materials.length === 0) {
+      setActiveMaterialId(null);
+      return;
+    }
+
+    const pickActiveMaterial = () => {
+      const elements = Array.from(document.querySelectorAll<HTMLElement>("[data-material-id]"));
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      let bestId: string | null = null;
+      let bestRatio = 0;
+
+      elements.forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+        const ratio = Math.max(0, visibleHeight) / Math.max(rect.height, 1);
+        const materialId = element.dataset.materialId;
+
+        if (materialId && ratio > bestRatio) {
+          bestRatio = ratio;
+          bestId = materialId;
+        }
+      });
+
+      setActiveMaterialId(bestRatio >= 0.35 ? bestId : null);
+    };
+
+    pickActiveMaterial();
+    window.addEventListener("scroll", pickActiveMaterial, { passive: true });
+    window.addEventListener("resize", pickActiveMaterial);
+
+    return () => {
+      window.removeEventListener("scroll", pickActiveMaterial);
+      window.removeEventListener("resize", pickActiveMaterial);
+    };
+  }, [tab, materials]);
+
+  useEffect(() => {
+    if (tab !== "materials" || !activeMaterialId || accessedMaterials.current.has(activeMaterialId)) return;
+
+    accessedMaterials.current.add(activeMaterialId);
+    logActivity("material_access", activeMaterialId, 0);
+  }, [tab, activeMaterialId, logActivity]);
 
   const isValidUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
