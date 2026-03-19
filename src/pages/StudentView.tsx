@@ -547,7 +547,7 @@ const StudentView = () => {
 
     if (mat.type === "video" && ytId) {
       return (
-        <div key={mat.id} data-material-id={mat.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="aspect-video">
             <iframe
               src={`https://www.youtube.com/embed/${ytId}?enablejsapi=1`}
