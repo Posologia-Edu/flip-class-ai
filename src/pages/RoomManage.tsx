@@ -360,7 +360,7 @@ const RoomManage = () => {
     fetchData();
   };
 
-
+  const isYoutubeLink = (mat: Material) => {
     return mat.type === "video" && mat.url && extractYoutubeId(mat.url);
   };
 
