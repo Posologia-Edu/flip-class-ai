@@ -99,6 +99,7 @@ const RoomManage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [enrolledStudents, setEnrolledStudents] = useState<{ student_email: string; student_name: string | null }[]>([]);
   const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers" | "reports">("overview");
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
