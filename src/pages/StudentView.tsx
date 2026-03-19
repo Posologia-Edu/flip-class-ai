@@ -255,49 +255,21 @@ const StudentView = () => {
     };
   }, [sessionId, roomId, tab, activeMaterialId, logActivity]);
 
-  useEffect(() => {
-    if (tab !== "materials" || materials.length === 0) {
-      setActiveMaterialId(null);
-      return;
+  // Track material interaction on click/expand — sets activeMaterialId for page_active attribution
+  const handleMaterialInteraction = useCallback((materialId: string) => {
+    setActiveMaterialId(materialId);
+    if (!accessedMaterials.current.has(materialId)) {
+      accessedMaterials.current.add(materialId);
+      logActivity("material_open", materialId, 0);
     }
+  }, [logActivity]);
 
-    const pickActiveMaterial = () => {
-      const elements = Array.from(document.querySelectorAll<HTMLElement>("[data-material-id]"));
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      let bestId: string | null = null;
-      let bestRatio = 0;
-
-      elements.forEach((element) => {
-        const rect = element.getBoundingClientRect();
-        const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
-        const ratio = Math.max(0, visibleHeight) / Math.max(rect.height, 1);
-        const materialId = element.dataset.materialId;
-
-        if (materialId && ratio > bestRatio) {
-          bestRatio = ratio;
-          bestId = materialId;
-        }
-      });
-
-      setActiveMaterialId(bestRatio >= 0.35 ? bestId : null);
-    };
-
-    pickActiveMaterial();
-    window.addEventListener("scroll", pickActiveMaterial, { passive: true });
-    window.addEventListener("resize", pickActiveMaterial);
-
-    return () => {
-      window.removeEventListener("scroll", pickActiveMaterial);
-      window.removeEventListener("resize", pickActiveMaterial);
-    };
-  }, [tab, materials]);
-
+  // Reset active material when leaving materials tab
   useEffect(() => {
-    if (tab !== "materials" || !activeMaterialId || accessedMaterials.current.has(activeMaterialId)) return;
-
-    accessedMaterials.current.add(activeMaterialId);
-    logActivity("material_access", activeMaterialId, 0);
-  }, [tab, activeMaterialId, logActivity]);
+    if (tab !== "materials") {
+      setActiveMaterialId(null);
+    }
+  }, [tab]);
 
   const isValidUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
