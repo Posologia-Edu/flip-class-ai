@@ -48,15 +48,17 @@ const AnalyticsPage = () => {
 
   const fetchAnalytics = useCallback(async () => {
     if (!user) return;
-    const [roomsRes, sessionsRes, activityRes] = await Promise.all([
+    const [roomsRes, sessionsRes, activityRes, enrolledRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("teacher_id", user.id).order("created_at", { ascending: false }),
       supabase.from("student_sessions").select("*"),
       supabase.from("student_activity_logs").select("*"),
+      supabase.from("room_students").select("room_id, student_email"),
     ]);
 
     const roomsList = roomsRes.data || [];
     const sessions = sessionsRes.data || [];
     const actLogs = activityRes.data || [];
+    const enrolled = enrolledRes.data || [];
     setAllSessions(sessions);
     setAllActivityLogs(actLogs);
 
@@ -64,7 +66,8 @@ const AnalyticsPage = () => {
     for (const room of roomsList) {
       const roomSess = sessions.filter(s => s.room_id === room.id);
       const completed = roomSess.filter(s => s.completed_at);
-      const studentCount = roomSess.length;
+      const enrolledCount = enrolled.filter(e => e.room_id === room.id).length;
+      const studentCount = Math.max(enrolledCount, roomSess.length);
       result.push({
         roomId: room.id,
         title: room.title,
