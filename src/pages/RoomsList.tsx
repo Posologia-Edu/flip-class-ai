@@ -58,9 +58,10 @@ const RoomsList = () => {
 
   const fetchRooms = useCallback(async () => {
     if (!auth.user) return;
-    const [roomsRes, sessionsRes] = await Promise.all([
+    const [roomsRes, sessionsRes, enrolledRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("teacher_id", auth.user.id).order("created_at", { ascending: false }),
       supabase.from("student_sessions").select("room_id, score, completed_at"),
+      supabase.from("room_students").select("room_id"),
     ]);
     
     if (roomsRes.error) {
@@ -90,14 +91,16 @@ const RoomsList = () => {
     }
 
     const allSessions = sessionsRes.data || [];
+    const allEnrolled = enrolledRes.data || [];
     const allRoomIds = [...roomsList.map(r => r.id), ...collabRoomIds];
     const statsMap: Record<string, RoomStats> = {};
     for (const roomId of allRoomIds) {
       const sessions = allSessions.filter(s => s.room_id === roomId);
       const completed = sessions.filter(s => s.completed_at);
+      const enrolledCount = allEnrolled.filter(e => e.room_id === roomId).length;
       statsMap[roomId] = {
         roomId: roomId,
-        studentCount: sessions.length,
+        studentCount: Math.max(enrolledCount, sessions.length),
         avgScore: completed.length > 0
           ? Math.round(completed.reduce((s, c) => s + (c.score || 0), 0) / completed.length)
           : 0,

@@ -44,6 +44,7 @@ interface QuizQuestion {
   context?: string;
   options?: string[];
   correct_answer: string;
+  points?: number;
 }
 
 type ActivityGenerationType = "quiz" | "case_study";
@@ -98,6 +99,7 @@ const RoomManage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [enrolledStudents, setEnrolledStudents] = useState<{ student_email: string; student_name: string | null }[]>([]);
   const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers" | "reports">("overview");
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
@@ -140,18 +142,20 @@ const RoomManage = () => {
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
-    const [roomRes, matRes, actRes, sessRes, logsRes] = await Promise.all([
+    const [roomRes, matRes, actRes, sessRes, logsRes, enrolledRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("id", roomId).single(),
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("activities").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_sessions").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_activity_logs").select("activity_type, material_id, duration_seconds, session_id, created_at").eq("room_id", roomId),
+      supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
     ]);
     setRoom(roomRes.data);
     setMaterials(matRes.data || []);
     setActivities(actRes.data || []);
     setSessions(sessRes.data || []);
     setActivityLogs((logsRes.data as ActivityLog[]) || []);
+    setEnrolledStudents((enrolledRes.data || []) as { student_email: string; student_name: string | null }[]);
 
     const sessionIds = (sessRes.data || []).map(s => s.id);
     if (sessionIds.length > 0) {
@@ -339,6 +343,20 @@ const RoomManage = () => {
       await supabase.from("activities").update({ quiz_data: { levels: newLevels } as unknown as Json }).eq("id", activityId);
       toast({ title: "Questão removida!" });
     }
+    fetchData();
+  };
+  const updateQuestionPoints = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData, points: number | undefined) => {
+    const newLevels = quiz.levels.map((level, li) => {
+      if (li !== levelIndex) return level;
+      return {
+        ...level,
+        questions: level.questions.map((q, qi) => {
+          if (qi !== questionIndex) return q;
+          return { ...q, points };
+        }),
+      };
+    });
+    await supabase.from("activities").update({ quiz_data: { levels: newLevels } as unknown as Json }).eq("id", activityId);
     fetchData();
   };
 
@@ -645,7 +663,7 @@ const RoomManage = () => {
     ));
   };
 
-  const updateManualQuestion = (levelIndex: number, questionIndex: number, field: keyof QuizQuestion, value: string) => {
+  const updateManualQuestion = (levelIndex: number, questionIndex: number, field: keyof QuizQuestion, value: any) => {
     setManualLevels(prev => prev.map((l, li) =>
       li === levelIndex ? {
         ...l, questions: l.questions.map((q, qi) => qi === questionIndex ? { ...q, [field]: value } : q)
@@ -683,9 +701,18 @@ const RoomManage = () => {
     setSavingManualActivity(false);
   };
 
-  // Count unique emails for student count
-  const uniqueEmails = new Set(sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean));
+  // Count unique emails for student count — use enrolled students as base
+  const uniqueEmails = new Set([
+    ...enrolledStudents.map(e => e.student_email.toLowerCase()),
+    ...sessions.map(s => (s as any).student_email?.toLowerCase()).filter(Boolean),
+  ]);
   const totalStudents = uniqueEmails.size || sessions.length;
+
+  // Check if activities are currently locked
+  const activitiesLocked = useMemo(() => {
+    if (!room?.unlock_at) return false;
+    return new Date(room.unlock_at) > new Date();
+  }, [room?.unlock_at]);
 
   const studentStats: StudentStats[] = sessions.map(session => {
     const sessionLogs = activityLogs.filter(l => l.session_id === session.id);
@@ -1137,6 +1164,22 @@ const RoomManage = () => {
                                   </div>
                                 )}
                                 <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                                {isOwner && (
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Label className="text-xs text-muted-foreground">Pontos:</Label>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-20 h-7 text-xs"
+                                      value={q.points ?? ""}
+                                      placeholder="—"
+                                      onChange={(e) => updateQuestionPoints(act.id, li, qi, quiz, e.target.value ? Number(e.target.value) : undefined)}
+                                    />
+                                  </div>
+                                )}
+                                {!isOwner && q.points != null && (
+                                  <p className="text-xs text-muted-foreground mt-1"><span className="font-semibold">Pontos:</span> {q.points}</p>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1212,6 +1255,17 @@ const RoomManage = () => {
                           className="resize-y text-sm"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Pontuação da questão (opcional)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Ex: 10"
+                          value={(q as any).points ?? ""}
+                          onChange={(e) => updateManualQuestion(li, qi, "points", e.target.value ? Number(e.target.value) : undefined)}
+                          className="w-32 text-sm"
+                        />
+                      </div>
                     </div>
                   ))}
                   <Button size="sm" variant="outline" onClick={() => addManualQuestion(li)}>
@@ -1263,13 +1317,13 @@ const RoomManage = () => {
             <button onClick={() => setStatsTab("reports")} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${statsTab === "reports" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}><TrendingUp className="w-3.5 h-3.5 inline mr-1" />Relatórios</button>
           </div>
 
-          {sessions.length === 0 ? (
+          {sessions.length === 0 && enrolledStudents.length === 0 ? (
             <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
               <Users className="w-8 h-8 mx-auto mb-2" />
               <p>Nenhum aluno entrou nesta sala ainda.</p>
             </div>
           ) : statsTab === "reports" ? (
-            <AnalyticsReport sessions={sessions} activityLogs={activityLogs} materials={materials} />
+            <AnalyticsReport sessions={sessions} activityLogs={activityLogs} materials={materials} enrolledStudents={enrolledStudents} activitiesLocked={activitiesLocked} />
           ) : statsTab === "overview" ? (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
@@ -1281,6 +1335,7 @@ const RoomManage = () => {
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Sessions */}
                   {sessions.map((s) => (
                     <tr key={s.id} className="border-t border-border">
                       <td className="px-4 py-3 font-medium">{s.student_name}</td>
@@ -1292,6 +1347,20 @@ const RoomManage = () => {
                       </td>
                     </tr>
                   ))}
+                  {/* Enrolled but never accessed */}
+                  {enrolledStudents
+                    .filter(e => !sessions.some(s => (s as any).student_email?.toLowerCase() === e.student_email.toLowerCase()))
+                    .map((e) => (
+                      <tr key={e.student_email} className="border-t border-border">
+                        <td className="px-4 py-3 font-medium text-muted-foreground">{e.student_name || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{e.student_email}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
+                            Não acessou
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -1321,6 +1390,22 @@ const RoomManage = () => {
                       </td>
                     </tr>
                   ))}
+                  {/* Enrolled but never accessed */}
+                  {enrolledStudents
+                    .filter(e => !sessions.some(s => (s as any).student_email?.toLowerCase() === e.student_email.toLowerCase()))
+                    .map((e) => (
+                      <tr key={e.student_email} className="border-t border-border">
+                        <td className="px-4 py-3 font-medium text-muted-foreground">{e.student_name || "—"}</td>
+                        <td className="px-4 py-3">—</td>
+                        <td className="px-4 py-3">0 / {materials.length}</td>
+                        <td className="px-4 py-3">—</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
+                            Não acessou
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>

@@ -40,6 +40,8 @@ const AnalyticsPage = () => {
   const [roomActivityLogs, setRoomActivityLogs] = useState<any[]>([]);
   const [roomMaterials, setRoomMaterials] = useState<any[]>([]);
   const [roomActivities, setRoomActivities] = useState<any[]>([]);
+  const [roomEnrolled, setRoomEnrolled] = useState<any[]>([]);
+  const [roomData, setRoomData] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [allSessions, setAllSessions] = useState<any[]>([]);
   const [allActivityLogs, setAllActivityLogs] = useState<any[]>([]);
@@ -86,16 +88,20 @@ const AnalyticsPage = () => {
     if (expandedRoom === roomId) { setExpandedRoom(null); return; }
     setExpandedRoom(roomId);
     setLoadingDetail(true);
-    const [sessRes, logsRes, matsRes, actsRes] = await Promise.all([
+    const [sessRes, logsRes, matsRes, actsRes, enrolledRes, roomRes] = await Promise.all([
       supabase.from("student_sessions").select("*").eq("room_id", roomId),
       supabase.from("student_activity_logs").select("*").eq("room_id", roomId),
       supabase.from("materials").select("*").eq("room_id", roomId),
       supabase.from("activities").select("*").eq("room_id", roomId),
+      supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
+      supabase.from("rooms").select("*").eq("id", roomId).single(),
     ]);
     setRoomSessions(sessRes.data || []);
     setRoomActivityLogs(logsRes.data || []);
     setRoomMaterials(matsRes.data || []);
     setRoomActivities(actsRes.data || []);
+    setRoomEnrolled(enrolledRes.data || []);
+    setRoomData(roomRes.data);
     setLoadingDetail(false);
   };
 
@@ -278,7 +284,7 @@ const AnalyticsPage = () => {
                           )}
                         </div>
                       )}
-                      <AnalyticsReport sessions={roomSessions} activityLogs={roomActivityLogs} materials={roomMaterials} showExport={canExportReports()} roomTitle={room.title} />
+                      <AnalyticsReport sessions={roomSessions} activityLogs={roomActivityLogs} materials={roomMaterials} showExport={canExportReports()} roomTitle={room.title} enrolledStudents={roomEnrolled} activitiesLocked={!!(roomData?.unlock_at && new Date(roomData.unlock_at) > new Date())} />
                     </div>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText } from "lucide-react";
+import { AlertTriangle, Clock, BookOpen, Users, TrendingUp, CheckCircle, Download, FileText, UserX } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import type { Tables } from "@/integrations/supabase/types";
@@ -16,12 +16,19 @@ interface ActivityLog {
 type Material = Tables<"materials">;
 type Session = Tables<"student_sessions">;
 
+interface EnrolledStudent {
+  student_email: string;
+  student_name: string | null;
+}
+
 interface AnalyticsReportProps {
   sessions: Session[];
   activityLogs: ActivityLog[];
   materials: Material[];
   showExport?: boolean;
   roomTitle?: string;
+  enrolledStudents?: EnrolledStudent[];
+  activitiesLocked?: boolean;
 }
 
 const CHART_COLORS = [
@@ -33,7 +40,7 @@ const CHART_COLORS = [
   "hsl(280, 60%, 55%)",
 ];
 
-const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false, roomTitle = "Sala" }: AnalyticsReportProps) => {
+const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false, roomTitle = "Sala", enrolledStudents = [], activitiesLocked = false }: AnalyticsReportProps) => {
   // --- Average time per material ---
   const timePerMaterial = useMemo(() => {
     return materials.map((mat) => {
@@ -52,25 +59,69 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
     });
   }, [materials, activityLogs]);
 
-  // --- Completion rate ---
+  // Build a unified list of all students (enrolled + sessions)
+  const allStudents = useMemo(() => {
+    const map = new Map<string, { email: string; name: string; session: Session | null }>();
+
+    // Add enrolled students first
+    for (const es of enrolledStudents) {
+      const key = es.student_email.toLowerCase();
+      map.set(key, { email: es.student_email, name: es.student_name || es.student_email, session: null });
+    }
+
+    // Overlay with session data
+    for (const s of sessions) {
+      const email = (s.student_email || "").toLowerCase();
+      const key = email || s.id; // fallback to session id if no email
+      const existing = email ? map.get(email) : undefined;
+      map.set(key, {
+        email: s.student_email || "—",
+        name: s.student_name || existing?.name || "—",
+        session: s,
+      });
+    }
+
+    return Array.from(map.values());
+  }, [sessions, enrolledStudents]);
+
+  const totalStudentCount = allStudents.length;
+
+  // --- Completion rate (based on all students) ---
   const completionData = useMemo(() => {
-    const completed = sessions.filter((s) => s.completed_at).length;
-    const inProgress = sessions.length - completed;
+    const completed = allStudents.filter((s) => s.session?.completed_at).length;
+    const inProgress = totalStudentCount - completed;
     return {
       completed,
       inProgress,
-      rate: sessions.length > 0 ? Math.round((completed / sessions.length) * 100) : 0,
+      rate: totalStudentCount > 0 ? Math.round((completed / totalStudentCount) * 100) : 0,
       pieData: [
         { name: "Concluído", value: completed },
-        { name: "Em andamento", value: inProgress },
+        { name: "Em andamento / Não acessou", value: inProgress },
       ],
     };
-  }, [sessions]);
+  }, [allStudents, totalStudentCount]);
 
-  // --- At-risk students (didn't view materials or didn't complete) ---
-  const atRiskStudents = useMemo(() => {
-    return sessions
-      .map((session) => {
+  // --- At-risk students ---
+  const studentAnalysis = useMemo(() => {
+    return allStudents
+      .map((student) => {
+        const session = student.session;
+        const hasAccessed = !!session;
+
+        if (!hasAccessed) {
+          return {
+            id: student.email,
+            name: student.name,
+            email: student.email,
+            materialsPercent: 0,
+            completed: false,
+            totalMinutes: 0,
+            risks: ["Nunca acessou a sala"],
+            isAtRisk: true,
+            hasAccessed: false,
+          };
+        }
+
         const sessionLogs = activityLogs.filter((l) => l.session_id === session.id);
         const viewedMaterials = new Set(
           sessionLogs.filter((l) => l.activity_type === "material_view" && l.material_id).map((l) => l.material_id)
@@ -81,7 +132,8 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
 
         const risks: string[] = [];
         if (materialsPercent < 50) risks.push("Menos de 50% dos materiais vistos");
-        if (!session.completed_at) risks.push("Atividade não concluída");
+        // Only flag incomplete activity if activities are NOT locked
+        if (!session.completed_at && !activitiesLocked) risks.push("Atividade não concluída");
         if (totalTime < 60) risks.push("Menos de 1 min na plataforma");
 
         return {
@@ -93,10 +145,11 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
           totalMinutes: +(totalTime / 60).toFixed(1),
           risks,
           isAtRisk: risks.length > 0,
+          hasAccessed: true,
         };
       })
       .sort((a, b) => b.risks.length - a.risks.length);
-  }, [sessions, activityLogs, materials]);
+  }, [allStudents, activityLogs, materials, activitiesLocked]);
 
   // --- Score distribution ---
   const scoreDistribution = useMemo(() => {
@@ -116,13 +169,15 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
     return ranges;
   }, [sessions]);
 
-  const atRiskCount = atRiskStudents.filter((s) => s.isAtRisk).length;
+  const atRiskStudents = studentAnalysis.filter((s) => s.isAtRisk);
+  const notAtRiskStudents = studentAnalysis.filter((s) => !s.isAtRisk);
+  const atRiskCount = atRiskStudents.length;
 
   const exportCSV = useCallback(() => {
-    const headers = ["Nome", "Email", "Concluído", "Nota", "Tempo (min)", "Materiais Vistos (%)", "Em Risco", "Riscos"];
-    const rows = atRiskStudents.map((s) => [
-      s.name, s.email, s.completed ? "Sim" : "Não", 
-      sessions.find(ss => ss.id === s.id)?.score ?? "—",
+    const headers = ["Nome", "Email", "Acessou", "Concluído", "Nota", "Tempo (min)", "Materiais Vistos (%)", "Em Risco", "Riscos"];
+    const rows = studentAnalysis.map((s) => [
+      s.name, s.email, s.hasAccessed ? "Sim" : "Não", s.completed ? "Sim" : "Não",
+      s.hasAccessed ? (sessions.find(ss => ss.id === s.id)?.score ?? "—") : "—",
       s.totalMinutes, s.materialsPercent, s.isAtRisk ? "Sim" : "Não",
       s.risks.join("; ")
     ]);
@@ -132,13 +187,13 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
     const a = document.createElement("a");
     a.href = url; a.download = `relatorio-${roomTitle.replace(/\s+/g, "-")}.csv`;
     a.click(); URL.revokeObjectURL(url);
-  }, [atRiskStudents, sessions, roomTitle]);
+  }, [studentAnalysis, sessions, roomTitle]);
 
   const exportPDF = useCallback(() => {
     window.print();
   }, []);
 
-  if (sessions.length === 0) {
+  if (totalStudentCount === 0) {
     return (
       <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
         <TrendingUp className="w-8 h-8 mx-auto mb-2" />
@@ -160,8 +215,22 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
           </Button>
         </div>
       )}
+
+      {/* Activities locked notice */}
+      {activitiesLocked && (
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center gap-2 text-sm text-primary">
+          <Clock className="w-4 h-4 flex-shrink-0" />
+          <span>As atividades desta sala ainda estão bloqueadas. O status de conclusão não é considerado como risco.</span>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-card border border-border rounded-xl p-4 text-center">
+          <Users className="w-5 h-5 text-primary mx-auto mb-1" />
+          <p className="font-display text-2xl font-bold text-foreground">{totalStudentCount}</p>
+          <p className="text-xs text-muted-foreground">Alunos Cadastrados</p>
+        </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <CheckCircle className="w-5 h-5 text-level-easy mx-auto mb-1" />
           <p className="font-display text-2xl font-bold text-foreground">{completionData.rate}%</p>
@@ -176,11 +245,6 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
             min
           </p>
           <p className="text-xs text-muted-foreground">Tempo Médio/Material</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <BookOpen className="w-5 h-5 text-accent mx-auto mb-1" />
-          <p className="font-display text-2xl font-bold text-foreground">{materials.length}</p>
-          <p className="text-xs text-muted-foreground">Materiais</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <AlertTriangle className={`w-5 h-5 mx-auto mb-1 ${atRiskCount > 0 ? "text-destructive" : "text-level-easy"}`} />
@@ -248,7 +312,7 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-border" />
-              Em andamento ({completionData.inProgress})
+              Pendente ({completionData.inProgress})
             </span>
           </div>
         </div>
@@ -276,11 +340,38 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
         </div>
       )}
 
+      {/* Students NOT at risk */}
+      {notAtRiskStudents.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="font-display text-sm font-semibold mb-4 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-level-easy" />
+            Alunos sem Risco ({notAtRiskStudents.length})
+          </h3>
+          <div className="space-y-2">
+            {notAtRiskStudents.map((student) => (
+              <div key={student.id} className="bg-secondary rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm text-foreground">{student.name}</p>
+                  <p className="text-xs text-muted-foreground">{student.email}</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>Materiais: {student.materialsPercent}%</span>
+                  <span>{student.totalMinutes} min</span>
+                  <span className="inline-flex px-2 py-0.5 rounded-full font-medium bg-level-easy/10 text-level-easy">
+                    {student.completed ? "Concluído" : "Em andamento"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* At-Risk Students */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h3 className="font-display text-sm font-semibold mb-4 flex items-center gap-2">
           <AlertTriangle className={`w-4 h-4 ${atRiskCount > 0 ? "text-destructive" : "text-level-easy"}`} />
-          Alunos em Risco
+          Alunos em Risco ({atRiskCount})
         </h3>
         {atRiskCount === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
@@ -288,19 +379,24 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
           </p>
         ) : (
           <div className="space-y-3">
-            {atRiskStudents
-              .filter((s) => s.isAtRisk)
-              .map((student) => (
-                <div key={student.id} className="bg-secondary rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="font-medium text-sm text-foreground">{student.name}</p>
-                      <p className="text-xs text-muted-foreground">{student.email}</p>
-                    </div>
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${student.completed ? "bg-level-easy/10 text-level-easy" : "bg-destructive/10 text-destructive"}`}>
-                      {student.completed ? "Concluído" : "Não concluído"}
-                    </span>
+            {atRiskStudents.map((student) => (
+              <div key={student.id} className="bg-secondary rounded-lg p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-medium text-sm text-foreground">{student.name}</p>
+                    <p className="text-xs text-muted-foreground">{student.email}</p>
                   </div>
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                    !student.hasAccessed
+                      ? "bg-muted text-muted-foreground"
+                      : student.completed
+                        ? "bg-level-easy/10 text-level-easy"
+                        : "bg-destructive/10 text-destructive"
+                  }`}>
+                    {!student.hasAccessed ? "Não acessou" : student.completed ? "Concluído" : "Não concluído"}
+                  </span>
+                </div>
+                {student.hasAccessed && (
                   <div className="grid grid-cols-2 gap-3 mb-2">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Materiais vistos</p>
@@ -312,15 +408,16 @@ const AnalyticsReport = ({ sessions, activityLogs, materials, showExport = false
                       <p className="text-sm font-medium text-foreground">{student.totalMinutes} min</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {student.risks.map((risk, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-destructive/10 text-destructive">
-                        <AlertTriangle className="w-3 h-3" /> {risk}
-                      </span>
-                    ))}
-                  </div>
+                )}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {student.risks.map((risk, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-destructive/10 text-destructive">
+                      {!student.hasAccessed ? <UserX className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {risk}
+                    </span>
+                  ))}
                 </div>
-              ))}
+              </div>
+            ))}
           </div>
         )}
       </div>
