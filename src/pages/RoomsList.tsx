@@ -46,6 +46,7 @@ const RoomsList = () => {
   const [newExpireAt, setNewExpireAt] = useState("");
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importFromRoomId, setImportFromRoomId] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
   const auth = useAuth();
@@ -138,15 +139,35 @@ const RoomsList = () => {
       insertData.expire_at = new Date(newExpireAt).toISOString();
     }
     // If no expire_at, the DB default (now + 7 days) applies
-    const { error } = await supabase.from("rooms").insert(insertData);
+    const { data: newRoom, error } = await supabase.from("rooms").insert(insertData).select().single();
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
+      // Import students from selected room if chosen
+      if (importFromRoomId && newRoom) {
+        const { data: students } = await supabase
+          .from("room_students")
+          .select("student_email, student_name")
+          .eq("room_id", importFromRoomId);
+        if (students && students.length > 0) {
+          const toInsert = students.map(s => ({
+            room_id: newRoom.id,
+            student_email: s.student_email,
+            student_name: s.student_name,
+          }));
+          await supabase.from("room_students").insert(toInsert);
+          toast({ title: "Sala criada!", description: `${students.length} aluno(s) importado(s) da sala anterior.` });
+        } else {
+          toast({ title: "Sala criada!", description: "Nenhum aluno encontrado na sala selecionada para importar." });
+        }
+      } else {
+        toast({ title: "Sala criada!" });
+      }
       setNewTitle("");
       setNewExpireAt("");
+      setImportFromRoomId("");
       setDialogOpen(false);
       fetchRooms();
-      toast({ title: "Sala criada!" });
     }
     setCreating(false);
   };
