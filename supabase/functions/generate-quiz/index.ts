@@ -217,6 +217,17 @@ async function resolveServerPlan(serviceSupabase: any, userId: string): Promise<
   const { data: userData } = await serviceSupabase.auth.admin.getUserById(userId);
   const email = userData?.user?.email;
   
+  // Check if user is admin — admins get institutional (unlimited)
+  const { data: roleData } = await serviceSupabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (roleData) {
+    return "institutional";
+  }
+
   let adminPlan = "free";
   let stripePlan = "free";
   
