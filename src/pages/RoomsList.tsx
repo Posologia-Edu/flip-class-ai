@@ -6,8 +6,9 @@ import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock, Users2, Download } from "lucide-react";
+import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock, Users2, Download, FileText, ClipboardList } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Tables } from "@/integrations/supabase/types";
@@ -48,6 +49,9 @@ const RoomsList = () => {
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importFromRoomId, setImportFromRoomId] = useState<string>("");
+  const [importStudents, setImportStudents] = useState(true);
+  const [importMaterials, setImportMaterials] = useState(false);
+  const [importActivities, setImportActivities] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const auth = useAuth();
@@ -144,22 +148,87 @@ const RoomsList = () => {
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      // Import students from selected room if chosen
+      // Import from selected room if chosen
       if (importFromRoomId && importFromRoomId !== "none" && newRoom) {
-        const { data: students } = await supabase
-          .from("room_students")
-          .select("student_email, student_name")
-          .eq("room_id", importFromRoomId);
-        if (students && students.length > 0) {
-          const toInsert = students.map(s => ({
-            room_id: newRoom.id,
-            student_email: s.student_email,
-            student_name: s.student_name,
-          }));
-          await supabase.from("room_students").insert(toInsert);
-          toast({ title: "Sala criada!", description: `${students.length} aluno(s) importado(s) da sala anterior.` });
+        const importResults: string[] = [];
+
+        // Import students
+        if (importStudents) {
+          const { data: students } = await supabase
+            .from("room_students")
+            .select("student_email, student_name")
+            .eq("room_id", importFromRoomId);
+          if (students && students.length > 0) {
+            await supabase.from("room_students").insert(
+              students.map(s => ({ room_id: newRoom.id, student_email: s.student_email, student_name: s.student_name }))
+            );
+            importResults.push(`${students.length} aluno(s)`);
+          }
+        }
+
+        // Import materials
+        if (importMaterials) {
+          const { data: materials } = await supabase
+            .from("materials")
+            .select("title, type, url, thumbnail_url, content_text_for_ai, is_published")
+            .eq("room_id", importFromRoomId);
+          if (materials && materials.length > 0) {
+            await supabase.from("materials").insert(
+              materials.map(m => ({ room_id: newRoom.id, title: m.title, type: m.type, url: m.url, thumbnail_url: m.thumbnail_url, content_text_for_ai: m.content_text_for_ai, is_published: m.is_published }))
+            );
+            importResults.push(`${materials.length} material(is)`);
+          }
+        }
+
+        // Import activities
+        if (importActivities) {
+          const { data: activities } = await supabase
+            .from("activities")
+            .select("quiz_data, is_published, title, peer_review_enabled, peer_review_criteria")
+            .eq("room_id", importFromRoomId);
+          if (activities && activities.length > 0) {
+            // For each activity, find its linked material by title in the new room
+            const { data: newMaterials } = await supabase
+              .from("materials")
+              .select("id, title")
+              .eq("room_id", newRoom.id);
+            const newMatMap = new Map((newMaterials || []).map(m => [m.title, m.id]));
+
+            // Also get original activities with material_id to map
+            const { data: origActivities } = await supabase
+              .from("activities")
+              .select("id, material_id, quiz_data, is_published, title, peer_review_enabled, peer_review_criteria")
+              .eq("room_id", importFromRoomId);
+
+            const { data: origMaterials } = await supabase
+              .from("materials")
+              .select("id, title")
+              .eq("room_id", importFromRoomId);
+            const origMatTitleMap = new Map((origMaterials || []).map(m => [m.id, m.title]));
+
+            await supabase.from("activities").insert(
+              (origActivities || []).map(a => {
+                const origMatTitle = a.material_id ? origMatTitleMap.get(a.material_id) : null;
+                const newMatId = origMatTitle ? newMatMap.get(origMatTitle) || null : null;
+                return {
+                  room_id: newRoom.id,
+                  material_id: newMatId,
+                  quiz_data: a.quiz_data,
+                  is_published: a.is_published,
+                  title: a.title,
+                  peer_review_enabled: a.peer_review_enabled,
+                  peer_review_criteria: a.peer_review_criteria,
+                };
+              })
+            );
+            importResults.push(`${activities.length} atividade(s)`);
+          }
+        }
+
+        if (importResults.length > 0) {
+          toast({ title: "Sala criada!", description: `Importado: ${importResults.join(", ")}.` });
         } else {
-          toast({ title: "Sala criada!", description: "Nenhum aluno encontrado na sala selecionada para importar." });
+          toast({ title: "Sala criada!", description: "Nenhum item encontrado para importar." });
         }
       } else {
         toast({ title: "Sala criada!" });
@@ -167,6 +236,9 @@ const RoomsList = () => {
       setNewTitle("");
       setNewExpireAt("");
       setImportFromRoomId("");
+      setImportStudents(true);
+      setImportMaterials(false);
+      setImportActivities(false);
       setDialogOpen(false);
       fetchRooms();
     }
@@ -231,9 +303,9 @@ const RoomsList = () => {
                 <p className="text-xs text-muted-foreground">Se não definida, a sala expira em 1 semana. Salas ociosas (sem alunos por 1 semana) também expiram automaticamente.</p>
               </div>
               {rooms.length > 0 && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar alunos de outra sala (opcional)</Label>
-                <Select value={importFromRoomId} onValueChange={setImportFromRoomId}>
+              <div className="space-y-3">
+                <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar de outra sala (opcional)</Label>
+                <Select value={importFromRoomId} onValueChange={(v) => { setImportFromRoomId(v); if (v === "none") { setImportStudents(true); setImportMaterials(false); setImportActivities(false); } }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Nenhuma — começar vazia" />
                   </SelectTrigger>
@@ -246,7 +318,29 @@ const RoomsList = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Importa a lista de alunos (email e nome) de uma sala existente.</p>
+                {importFromRoomId && importFromRoomId !== "none" && (
+                  <div className="space-y-2 pl-1 border-l-2 border-primary/20 ml-1 pl-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Selecione o que deseja importar:</p>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="import-students" checked={importStudents} onCheckedChange={(v) => setImportStudents(!!v)} />
+                      <label htmlFor="import-students" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                        <Users className="w-3.5 h-3.5 text-muted-foreground" /> Alunos
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="import-materials" checked={importMaterials} onCheckedChange={(v) => setImportMaterials(!!v)} />
+                      <label htmlFor="import-materials" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground" /> Materiais (PDFs, vídeos, etc.)
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="import-activities" checked={importActivities} onCheckedChange={(v) => setImportActivities(!!v)} />
+                      <label htmlFor="import-activities" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                        <ClipboardList className="w-3.5 h-3.5 text-muted-foreground" /> Atividades (quizzes, casos clínicos)
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
               )}
               <Button onClick={createRoom} disabled={creating || !newTitle.trim()} className="w-full font-semibold">
