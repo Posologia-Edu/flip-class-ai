@@ -85,6 +85,23 @@ const LEVEL_TEMPLATES = [
   { level: 3, label: "Nível 3 — Síntese Complexa" },
 ];
 
+const getFunctionErrorMessage = async (error: any) => {
+  if (error?.context) {
+    try {
+      const payload = await error.context.json();
+      if (payload?.error) return payload.error as string;
+    } catch {
+      try {
+        const text = await error.context.text();
+        if (text) return text;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return error?.message || "Tente novamente.";
+};
+
 const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -445,13 +462,14 @@ const RoomManage = () => {
       toast({ title: "Atividade gerada!", description: "A IA leu o documento e criou a atividade com sucesso." });
       fetchData();
     } catch (err: any) {
-      const isTimeout = err.message?.includes("Tempo limite");
+      const message = await getFunctionErrorMessage(err);
+      const isTimeout = message?.includes("Tempo limite");
       if (isTimeout) {
         setSelectedMaterialForQuiz(material);
         setManualTranscript("");
         setTranscriptDialogOpen(true);
       }
-      toast({ title: isTimeout ? "Tempo limite excedido" : "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+      toast({ title: isTimeout ? "Tempo limite excedido" : "Erro ao gerar", description: message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
   };
@@ -466,7 +484,8 @@ const RoomManage = () => {
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
       fetchData();
     } catch (err: any) {
-      toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+      const message = await getFunctionErrorMessage(err);
+      toast({ title: "Erro ao gerar", description: message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
   };
@@ -487,7 +506,8 @@ const RoomManage = () => {
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
       fetchData();
     } catch (err: any) {
-      toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+      const message = await getFunctionErrorMessage(err);
+      toast({ title: "Erro ao gerar", description: message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
     setSelectedMaterialForQuiz(null);
