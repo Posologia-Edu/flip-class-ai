@@ -85,6 +85,23 @@ const LEVEL_TEMPLATES = [
   { level: 3, label: "Nível 3 — Síntese Complexa" },
 ];
 
+const getFunctionErrorMessage = async (error: any) => {
+  if (error?.context) {
+    try {
+      const payload = await error.context.json();
+      if (payload?.error) return payload.error as string;
+    } catch {
+      try {
+        const text = await error.context.text();
+        if (text) return text;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return error?.message || "Tente novamente.";
+};
+
 const RoomManage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
