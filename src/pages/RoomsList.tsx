@@ -49,6 +49,9 @@ const RoomsList = () => {
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importFromRoomId, setImportFromRoomId] = useState<string>("");
+  const [importStudents, setImportStudents] = useState(true);
+  const [importMaterials, setImportMaterials] = useState(false);
+  const [importActivities, setImportActivities] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const auth = useAuth();
