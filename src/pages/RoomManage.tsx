@@ -1478,12 +1478,37 @@ const RoomManage = () => {
                   return q?.levels || [];
                 });
                 const combinedQuiz: QuizData = { levels: allQuizLevels };
+
+                // Calculate points earned from teacher feedbacks
+                const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.hidden ? 0 : (q.points || 0)), 0) || 0), 0);
+                const earnedPoints = allQuizLevels.reduce((sum, l, li) => {
+                  return sum + (l.questions?.reduce((s2, q, qi) => {
+                    if (q.hidden || !q.points) return s2;
+                    const fbKey = `${s.id}-${li}-${qi}`;
+                    const fb = feedbacks[fbKey];
+                    if (fb?.grade != null) {
+                      return s2 + Math.round((fb.grade / 10) * q.points);
+                    }
+                    // For multiple choice, auto-grade
+                    if (q.type === "multiple_choice") {
+                      const answer = studentAnswers?.[`${li}-${qi}`];
+                      if (answer === q.correct_answer) return s2 + q.points;
+                    }
+                    return s2;
+                  }, 0) || 0);
+                }, 0);
+
                 return (
                   <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
                       <div>
                         <p className="font-medium text-card-foreground">{s.student_name}</p>
-                        <p className="text-xs text-muted-foreground">{(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}
+                          {totalPossiblePoints > 0 && (
+                            <span className="ml-2 font-semibold text-primary">• {earnedPoints}/{totalPossiblePoints} pts</span>
+                          )}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {isExpanded && combinedQuiz.levels.length > 0 && (
