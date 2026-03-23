@@ -284,7 +284,7 @@ const StudentView = () => {
     setRoom(roomRes.data);
     setMaterials(matRes.data || []);
 
-    // Merge all published activities' quiz data into one
+    // Merge all published activities' quiz data into one, filtering hidden questions
     if (actRes.data && actRes.data.length > 0) {
       const allLevels: QuizLevel[] = [];
       const titles: ActivityWithTitle[] = [];
@@ -292,8 +292,15 @@ const StudentView = () => {
         const qd = act.quiz_data as unknown as QuizData;
         if (qd?.levels) {
           const actTitle = (act as any).title || "Atividade";
-          titles.push({ title: actTitle, levels: qd.levels });
-          allLevels.push(...qd.levels);
+          // Filter out hidden questions
+          const filteredLevels = qd.levels.map(l => ({
+            ...l,
+            questions: (l.questions || []).filter((q: any) => !q.hidden),
+          })).filter(l => l.questions.length > 0);
+          if (filteredLevels.length > 0) {
+            titles.push({ title: actTitle, levels: filteredLevels });
+            allLevels.push(...filteredLevels);
+          }
         }
       }
       setQuizData({ levels: allLevels });
