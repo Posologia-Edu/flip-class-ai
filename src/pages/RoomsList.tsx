@@ -148,22 +148,87 @@ const RoomsList = () => {
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      // Import students from selected room if chosen
+      // Import from selected room if chosen
       if (importFromRoomId && importFromRoomId !== "none" && newRoom) {
-        const { data: students } = await supabase
-          .from("room_students")
-          .select("student_email, student_name")
-          .eq("room_id", importFromRoomId);
-        if (students && students.length > 0) {
-          const toInsert = students.map(s => ({
-            room_id: newRoom.id,
-            student_email: s.student_email,
-            student_name: s.student_name,
-          }));
-          await supabase.from("room_students").insert(toInsert);
-          toast({ title: "Sala criada!", description: `${students.length} aluno(s) importado(s) da sala anterior.` });
+        const importResults: string[] = [];
+
+        // Import students
+        if (importStudents) {
+          const { data: students } = await supabase
+            .from("room_students")
+            .select("student_email, student_name")
+            .eq("room_id", importFromRoomId);
+          if (students && students.length > 0) {
+            await supabase.from("room_students").insert(
+              students.map(s => ({ room_id: newRoom.id, student_email: s.student_email, student_name: s.student_name }))
+            );
+            importResults.push(`${students.length} aluno(s)`);
+          }
+        }
+
+        // Import materials
+        if (importMaterials) {
+          const { data: materials } = await supabase
+            .from("materials")
+            .select("title, type, url, thumbnail_url, content_text_for_ai, is_published")
+            .eq("room_id", importFromRoomId);
+          if (materials && materials.length > 0) {
+            await supabase.from("materials").insert(
+              materials.map(m => ({ room_id: newRoom.id, title: m.title, type: m.type, url: m.url, thumbnail_url: m.thumbnail_url, content_text_for_ai: m.content_text_for_ai, is_published: m.is_published }))
+            );
+            importResults.push(`${materials.length} material(is)`);
+          }
+        }
+
+        // Import activities
+        if (importActivities) {
+          const { data: activities } = await supabase
+            .from("activities")
+            .select("quiz_data, is_published, title, peer_review_enabled, peer_review_criteria")
+            .eq("room_id", importFromRoomId);
+          if (activities && activities.length > 0) {
+            // For each activity, find its linked material by title in the new room
+            const { data: newMaterials } = await supabase
+              .from("materials")
+              .select("id, title")
+              .eq("room_id", newRoom.id);
+            const newMatMap = new Map((newMaterials || []).map(m => [m.title, m.id]));
+
+            // Also get original activities with material_id to map
+            const { data: origActivities } = await supabase
+              .from("activities")
+              .select("id, material_id, quiz_data, is_published, title, peer_review_enabled, peer_review_criteria")
+              .eq("room_id", importFromRoomId);
+
+            const { data: origMaterials } = await supabase
+              .from("materials")
+              .select("id, title")
+              .eq("room_id", importFromRoomId);
+            const origMatTitleMap = new Map((origMaterials || []).map(m => [m.id, m.title]));
+
+            await supabase.from("activities").insert(
+              (origActivities || []).map(a => {
+                const origMatTitle = a.material_id ? origMatTitleMap.get(a.material_id) : null;
+                const newMatId = origMatTitle ? newMatMap.get(origMatTitle) || null : null;
+                return {
+                  room_id: newRoom.id,
+                  material_id: newMatId,
+                  quiz_data: a.quiz_data,
+                  is_published: a.is_published,
+                  title: a.title,
+                  peer_review_enabled: a.peer_review_enabled,
+                  peer_review_criteria: a.peer_review_criteria,
+                };
+              })
+            );
+            importResults.push(`${activities.length} atividade(s)`);
+          }
+        }
+
+        if (importResults.length > 0) {
+          toast({ title: "Sala criada!", description: `Importado: ${importResults.join(", ")}.` });
         } else {
-          toast({ title: "Sala criada!", description: "Nenhum aluno encontrado na sala selecionada para importar." });
+          toast({ title: "Sala criada!", description: "Nenhum item encontrado para importar." });
         }
       } else {
         toast({ title: "Sala criada!" });
@@ -171,6 +236,9 @@ const RoomsList = () => {
       setNewTitle("");
       setNewExpireAt("");
       setImportFromRoomId("");
+      setImportStudents(true);
+      setImportMaterials(false);
+      setImportActivities(false);
       setDialogOpen(false);
       fetchRooms();
     }
