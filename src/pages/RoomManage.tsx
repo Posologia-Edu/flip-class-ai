@@ -1246,6 +1246,7 @@ const RoomManage = () => {
                                     <Label className="text-xs text-muted-foreground">Pontos:</Label>
                                     <Input
                                       type="number"
+                                      step="0.1"
                                       min={0}
                                       className="w-20 h-7 text-xs"
                                       value={q.points ?? ""}
