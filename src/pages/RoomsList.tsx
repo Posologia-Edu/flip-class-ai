@@ -303,9 +303,9 @@ const RoomsList = () => {
                 <p className="text-xs text-muted-foreground">Se não definida, a sala expira em 1 semana. Salas ociosas (sem alunos por 1 semana) também expiram automaticamente.</p>
               </div>
               {rooms.length > 0 && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar alunos de outra sala (opcional)</Label>
-                <Select value={importFromRoomId} onValueChange={setImportFromRoomId}>
+              <div className="space-y-3">
+                <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar de outra sala (opcional)</Label>
+                <Select value={importFromRoomId} onValueChange={(v) => { setImportFromRoomId(v); if (v === "none") { setImportStudents(true); setImportMaterials(false); setImportActivities(false); } }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Nenhuma — começar vazia" />
                   </SelectTrigger>
@@ -318,7 +318,29 @@ const RoomsList = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Importa a lista de alunos (email e nome) de uma sala existente.</p>
+                {importFromRoomId && importFromRoomId !== "none" && (
+                  <div className="space-y-2 pl-1 border-l-2 border-primary/20 ml-1 pl-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Selecione o que deseja importar:</p>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="import-students" checked={importStudents} onCheckedChange={(v) => setImportStudents(!!v)} />
+                      <label htmlFor="import-students" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                        <Users className="w-3.5 h-3.5 text-muted-foreground" /> Alunos
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="import-materials" checked={importMaterials} onCheckedChange={(v) => setImportMaterials(!!v)} />
+                      <label htmlFor="import-materials" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground" /> Materiais (PDFs, vídeos, etc.)
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="import-activities" checked={importActivities} onCheckedChange={(v) => setImportActivities(!!v)} />
+                      <label htmlFor="import-activities" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                        <ClipboardList className="w-3.5 h-3.5 text-muted-foreground" /> Atividades (quizzes, casos clínicos)
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
               )}
               <Button onClick={createRoom} disabled={creating || !newTitle.trim()} className="w-full font-semibold">
