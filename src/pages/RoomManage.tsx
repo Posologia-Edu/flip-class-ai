@@ -484,7 +484,8 @@ const RoomManage = () => {
       toast({ title: "Atividade gerada!", description: "A atividade foi criada com sucesso." });
       fetchData();
     } catch (err: any) {
-      toast({ title: "Erro ao gerar", description: err.message || "Tente novamente.", variant: "destructive" });
+      const message = await getFunctionErrorMessage(err);
+      toast({ title: "Erro ao gerar", description: message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
   };
