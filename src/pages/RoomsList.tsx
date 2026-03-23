@@ -145,7 +145,7 @@ const RoomsList = () => {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
       // Import students from selected room if chosen
-      if (importFromRoomId && newRoom) {
+      if (importFromRoomId && importFromRoomId !== "none" && newRoom) {
         const { data: students } = await supabase
           .from("room_students")
           .select("student_email, student_name")
