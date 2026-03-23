@@ -230,6 +230,25 @@ const RoomsList = () => {
                 />
                 <p className="text-xs text-muted-foreground">Se não definida, a sala expira em 1 semana. Salas ociosas (sem alunos por 1 semana) também expiram automaticamente.</p>
               </div>
+              {rooms.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar alunos de outra sala (opcional)</Label>
+                <Select value={importFromRoomId} onValueChange={setImportFromRoomId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nenhuma — começar vazia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhuma — começar vazia</SelectItem>
+                    {rooms.map(r => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.title} ({roomStats[r.id]?.studentCount || 0} alunos)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Importa a lista de alunos (email e nome) de uma sala existente.</p>
+              </div>
+              )}
               <Button onClick={createRoom} disabled={creating || !newTitle.trim()} className="w-full font-semibold">
                 {creating ? "Criando..." : "Criar Sala"}
               </Button>
