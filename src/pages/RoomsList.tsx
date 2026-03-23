@@ -6,9 +6,10 @@ import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock, Users2 } from "lucide-react";
+import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock, Users2, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
