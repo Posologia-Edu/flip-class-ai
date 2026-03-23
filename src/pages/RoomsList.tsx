@@ -6,9 +6,10 @@ import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock, Users2 } from "lucide-react";
+import { Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock, CalendarClock, Users2, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
@@ -46,6 +47,7 @@ const RoomsList = () => {
   const [newExpireAt, setNewExpireAt] = useState("");
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importFromRoomId, setImportFromRoomId] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
   const auth = useAuth();
@@ -138,15 +140,35 @@ const RoomsList = () => {
       insertData.expire_at = new Date(newExpireAt).toISOString();
     }
     // If no expire_at, the DB default (now + 7 days) applies
-    const { error } = await supabase.from("rooms").insert(insertData);
+    const { data: newRoom, error } = await supabase.from("rooms").insert(insertData).select().single();
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
+      // Import students from selected room if chosen
+      if (importFromRoomId && importFromRoomId !== "none" && newRoom) {
+        const { data: students } = await supabase
+          .from("room_students")
+          .select("student_email, student_name")
+          .eq("room_id", importFromRoomId);
+        if (students && students.length > 0) {
+          const toInsert = students.map(s => ({
+            room_id: newRoom.id,
+            student_email: s.student_email,
+            student_name: s.student_name,
+          }));
+          await supabase.from("room_students").insert(toInsert);
+          toast({ title: "Sala criada!", description: `${students.length} aluno(s) importado(s) da sala anterior.` });
+        } else {
+          toast({ title: "Sala criada!", description: "Nenhum aluno encontrado na sala selecionada para importar." });
+        }
+      } else {
+        toast({ title: "Sala criada!" });
+      }
       setNewTitle("");
       setNewExpireAt("");
+      setImportFromRoomId("");
       setDialogOpen(false);
       fetchRooms();
-      toast({ title: "Sala criada!" });
     }
     setCreating(false);
   };
@@ -208,6 +230,25 @@ const RoomsList = () => {
                 />
                 <p className="text-xs text-muted-foreground">Se não definida, a sala expira em 1 semana. Salas ociosas (sem alunos por 1 semana) também expiram automaticamente.</p>
               </div>
+              {rooms.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar alunos de outra sala (opcional)</Label>
+                <Select value={importFromRoomId} onValueChange={setImportFromRoomId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nenhuma — começar vazia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhuma — começar vazia</SelectItem>
+                    {rooms.map(r => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.title} ({roomStats[r.id]?.studentCount || 0} alunos)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Importa a lista de alunos (email e nome) de uma sala existente.</p>
+              </div>
+              )}
               <Button onClick={createRoom} disabled={creating || !newTitle.trim()} className="w-full font-semibold">
                 {creating ? "Criando..." : "Criar Sala"}
               </Button>

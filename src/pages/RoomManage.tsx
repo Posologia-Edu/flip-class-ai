@@ -45,6 +45,8 @@ interface QuizQuestion {
   options?: string[];
   correct_answer: string;
   points?: number;
+  hidden?: boolean;
+  difficulty?: string;
 }
 
 type ActivityGenerationType = "quiz" | "case_study";
@@ -345,6 +347,23 @@ const RoomManage = () => {
     }
     fetchData();
   };
+
+  const toggleQuestionHidden = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData) => {
+    const newLevels = quiz.levels.map((level, li) => {
+      if (li !== levelIndex) return level;
+      return {
+        ...level,
+        questions: level.questions.map((q, qi) => {
+          if (qi !== questionIndex) return q;
+          return { ...q, hidden: !q.hidden };
+        }),
+      };
+    });
+    await supabase.from("activities").update({ quiz_data: { levels: newLevels } as unknown as Json }).eq("id", activityId);
+    toast({ title: newLevels[levelIndex]?.questions[questionIndex]?.hidden ? "Questão ocultada dos alunos" : "Questão visível para alunos" });
+    fetchData();
+  };
+
   const updateQuestionPoints = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData, points: number | undefined) => {
     const newLevels = quiz.levels.map((level, li) => {
       if (li !== levelIndex) return level;
@@ -1095,6 +1114,13 @@ const RoomManage = () => {
                           <p className="text-xs text-muted-foreground">
                             Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")} •{" "}
                             {quiz?.levels?.reduce((sum, l) => sum + (l.questions?.length || 0), 0) || 0} questões
+                            {quiz?.levels?.some(l => l.questions?.some(q => q.hidden)) && (
+                              <span className="text-muted-foreground"> ({quiz.levels.reduce((sum, l) => sum + (l.questions?.filter(q => q.hidden)?.length || 0), 0)} ocultas)</span>
+                            )}
+                            {(() => {
+                              const totalPoints = quiz?.levels?.reduce((sum, l) => sum + (l.questions?.reduce((s, q) => s + (q.hidden ? 0 : (q.points || 0)), 0) || 0), 0) || 0;
+                              return totalPoints > 0 ? <span className="text-primary font-medium"> • {totalPoints} pts</span> : null;
+                            })()}
                           </p>
                           {!isPublished && (
                             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -1133,22 +1159,53 @@ const RoomManage = () => {
                           <div key={li}>
                             <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
                             {level.questions?.map((q, qi) => (
-                              <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
+                              <div key={qi} className={`mb-3 rounded-lg p-4 ${q.hidden ? "bg-muted/50 border border-dashed border-muted-foreground/30" : "bg-secondary"}`}>
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
+                                    {q.hidden && (
+                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                                        <EyeOff className="w-3 h-3" /> Oculta para alunos
+                                      </span>
+                                    )}
+                                    {q.difficulty && (
+                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium mb-2 ml-1 ${
+                                        q.difficulty === "easy" ? "bg-level-easy/10 text-level-easy" :
+                                        q.difficulty === "hard" ? "bg-destructive/10 text-destructive" :
+                                        "bg-level-medium/10 text-level-medium"
+                                      }`}>
+                                        {q.difficulty === "easy" ? "Fácil" : q.difficulty === "hard" ? "Difícil" : "Média"}
+                                      </span>
+                                    )}
                                     {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
                                     <p className="font-medium text-sm text-foreground mb-1">{qi + 1}. {q.question}</p>
                                   </div>
                                   {isOwner && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive flex-shrink-0"
-                                      onClick={() => deleteQuestionFromActivity(act.id, li, qi, quiz)}
-                                      title="Remover questão"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              className={`h-7 w-7 p-0 ${q.hidden ? "text-muted-foreground" : "text-foreground"}`}
+                                              onClick={() => toggleQuestionHidden(act.id, li, qi, quiz)}
+                                            >
+                                              {q.hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>{q.hidden ? "Tornar visível para alunos" : "Ocultar dos alunos"}</TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                        onClick={() => deleteQuestionFromActivity(act.id, li, qi, quiz)}
+                                        title="Remover questão"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
                                   )}
                                 </div>
                                 {q.type === "multiple_choice" && q.options && q.options.length > 0 && (
@@ -1421,12 +1478,37 @@ const RoomManage = () => {
                   return q?.levels || [];
                 });
                 const combinedQuiz: QuizData = { levels: allQuizLevels };
+
+                // Calculate points earned from teacher feedbacks
+                const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.hidden ? 0 : (q.points || 0)), 0) || 0), 0);
+                const earnedPoints = allQuizLevels.reduce((sum, l, li) => {
+                  return sum + (l.questions?.reduce((s2, q, qi) => {
+                    if (q.hidden || !q.points) return s2;
+                    const fbKey = `${s.id}-${li}-${qi}`;
+                    const fb = feedbacks[fbKey];
+                    if (fb?.grade != null) {
+                      return s2 + Math.round((fb.grade / 10) * q.points);
+                    }
+                    // For multiple choice, auto-grade
+                    if (q.type === "multiple_choice") {
+                      const answer = studentAnswers?.[`${li}-${qi}`];
+                      if (answer === q.correct_answer) return s2 + q.points;
+                    }
+                    return s2;
+                  }, 0) || 0);
+                }, 0);
+
                 return (
                   <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
                       <div>
                         <p className="font-medium text-card-foreground">{s.student_name}</p>
-                        <p className="text-xs text-muted-foreground">{(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}
+                          {totalPossiblePoints > 0 && (
+                            <span className="ml-2 font-semibold text-primary">• {earnedPoints}/{totalPossiblePoints} pts</span>
+                          )}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {isExpanded && combinedQuiz.levels.length > 0 && (
