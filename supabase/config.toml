@@ -17,3 +17,5 @@ project_id = "qxqvttkcemshgsdobgfe"
     verify_jwt = false
   [functions.institutional-dashboard]
     verify_jwt = false
+  [functions.youtube-transcript]
+    verify_jwt = false
