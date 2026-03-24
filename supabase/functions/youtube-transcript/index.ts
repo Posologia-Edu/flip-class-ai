@@ -28,7 +28,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[youtube-transcript] Fetching transcript for video: ${videoId}`);
+    console.log(`[yt-tx] Fetching transcript for: ${videoId}`);
 
     const response = await fetch("https://www.youtube-transcript.io/api/transcripts", {
       method: "POST",
@@ -39,45 +39,73 @@ serve(async (req) => {
       body: JSON.stringify({ ids: [videoId] }),
     });
 
+    const rawText = await response.text();
+    console.log(`[yt-tx] Status: ${response.status}, Raw (first 3000):`, rawText.substring(0, 3000));
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[youtube-transcript] API error ${response.status}: ${errorText}`);
-      return new Response(JSON.stringify({ error: `Transcript API error: ${response.status}`, details: errorText }), {
+      return new Response(JSON.stringify({ error: `API error: ${response.status}`, details: rawText }), {
         status: response.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await response.json();
-    console.log(`[youtube-transcript] Raw response structure:`, JSON.stringify(data).substring(0, 2000));
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON from API", raw: rawText.substring(0, 500) }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // Try to extract transcript text from various possible response structures
+    // Log structure for debugging
+    if (Array.isArray(data) && data.length > 0) {
+      const item = data[0];
+      console.log(`[yt-tx] Item type: ${typeof item}, keys: ${typeof item === 'object' ? Object.keys(item).join(',') : 'N/A'}`);
+      // Log first nested array element if any
+      for (const key of Object.keys(item || {})) {
+        const val = item[key];
+        if (Array.isArray(val)) {
+          console.log(`[yt-tx] Key "${key}" is array, length=${val.length}, first element:`, JSON.stringify(val[0]).substring(0, 300));
+        }
+      }
+    }
+
+    // Extract transcript from response - try all known structures
     let fullText = "";
 
     if (Array.isArray(data) && data.length > 0) {
       const item = data[0];
-      // Log the keys to understand the structure
-      console.log(`[youtube-transcript] Item keys:`, Object.keys(item));
       
-      if (item.tracks && Array.isArray(item.tracks) && item.tracks.length > 0) {
-        fullText = item.tracks.map((t: any) => t.text || "").join(" ");
-      } else if (item.transcript && Array.isArray(item.transcript)) {
-        fullText = item.transcript.map((t: any) => t.text || t.value || "").join(" ");
-      } else if (item.captions && Array.isArray(item.captions)) {
-        fullText = item.captions.map((t: any) => t.text || t.value || "").join(" ");
-      } else if (item.text) {
-        fullText = item.text;
-      } else if (item.content) {
-        fullText = item.content;
-      } else if (typeof item === "string") {
-        fullText = item;
-      } else {
-        // Try to find any array property that might contain transcript segments
-        for (const key of Object.keys(item)) {
-          const val = item[key];
-          if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0].text) {
-            fullText = val.map((t: any) => t.text).join(" ");
-            console.log(`[youtube-transcript] Found transcript in key: ${key}`);
+      // Try common structures
+      const arrayKeys = Object.keys(item || {}).filter(k => Array.isArray(item[k]));
+      
+      for (const key of arrayKeys) {
+        const arr = item[key];
+        if (arr.length > 0) {
+          const first = arr[0];
+          if (typeof first === "object" && first !== null) {
+            // Find text field
+            const textKey = Object.keys(first).find(k => typeof first[k] === "string" && first[k].length > 1 && k !== "offset" && k !== "duration" && k !== "start" && k !== "end");
+            if (textKey) {
+              fullText = arr.map((t: any) => t[textKey] || "").join(" ");
+              console.log(`[yt-tx] Extracted from key="${key}", textField="${textKey}", length=${fullText.length}`);
+              break;
+            }
+          } else if (typeof first === "string") {
+            fullText = arr.join(" ");
+            break;
+          }
+        }
+      }
+
+      // Fallback: try direct string properties
+      if (!fullText) {
+        for (const key of Object.keys(item || {})) {
+          if (typeof item[key] === "string" && item[key].length > 50) {
+            fullText = item[key];
+            console.log(`[yt-tx] Used string property "${key}"`);
             break;
           }
         }
@@ -85,23 +113,25 @@ serve(async (req) => {
     }
 
     if (!fullText || fullText.trim().length < 20) {
-      console.log(`[youtube-transcript] No usable transcript found for ${videoId}`);
-      return new Response(JSON.stringify({ error: "no_transcript", message: "Nenhuma transcrição encontrada para este vídeo." }), {
+      console.log(`[yt-tx] No usable transcript found`);
+      return new Response(JSON.stringify({ 
+        error: "no_transcript", 
+        message: "Nenhuma transcrição encontrada para este vídeo.",
+        debug_keys: Array.isArray(data) && data[0] ? Object.keys(data[0]) : "no data"
+      }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Clean up common transcript artifacts
     fullText = fullText.replace(/\s+/g, " ").trim();
-
-    console.log(`[youtube-transcript] Success: ${fullText.length} chars for ${videoId}`);
+    console.log(`[yt-tx] Success: ${fullText.length} chars`);
 
     return new Response(JSON.stringify({ transcript: fullText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("[youtube-transcript] Error:", err);
+    console.error("[yt-tx] Error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
