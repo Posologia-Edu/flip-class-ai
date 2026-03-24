@@ -49,19 +49,38 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log(`[youtube-transcript] Response received, entries: ${Array.isArray(data) ? data.length : 'not array'}`);
+    console.log(`[youtube-transcript] Raw response structure:`, JSON.stringify(data).substring(0, 2000));
 
-    // The API returns an array of transcript objects; each has a "tracks" array with segments
+    // Try to extract transcript text from various possible response structures
     let fullText = "";
 
     if (Array.isArray(data) && data.length > 0) {
       const item = data[0];
+      // Log the keys to understand the structure
+      console.log(`[youtube-transcript] Item keys:`, Object.keys(item));
+      
       if (item.tracks && Array.isArray(item.tracks) && item.tracks.length > 0) {
         fullText = item.tracks.map((t: any) => t.text || "").join(" ");
+      } else if (item.transcript && Array.isArray(item.transcript)) {
+        fullText = item.transcript.map((t: any) => t.text || t.value || "").join(" ");
+      } else if (item.captions && Array.isArray(item.captions)) {
+        fullText = item.captions.map((t: any) => t.text || t.value || "").join(" ");
       } else if (item.text) {
         fullText = item.text;
+      } else if (item.content) {
+        fullText = item.content;
       } else if (typeof item === "string") {
         fullText = item;
+      } else {
+        // Try to find any array property that might contain transcript segments
+        for (const key of Object.keys(item)) {
+          const val = item[key];
+          if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0].text) {
+            fullText = val.map((t: any) => t.text).join(" ");
+            console.log(`[youtube-transcript] Found transcript in key: ${key}`);
+            break;
+          }
+        }
       }
     }
 
