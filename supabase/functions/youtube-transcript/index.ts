@@ -28,7 +28,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[youtube-transcript] Fetching transcript for video: ${videoId}`);
+    console.log(`[yt-tx] Fetching transcript for: ${videoId}`);
 
     const response = await fetch("https://www.youtube-transcript.io/api/transcripts", {
       method: "POST",
@@ -41,48 +41,53 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[youtube-transcript] API error ${response.status}: ${errorText}`);
-      return new Response(JSON.stringify({ error: `Transcript API error: ${response.status}`, details: errorText }), {
+      console.error(`[yt-tx] API error ${response.status}: ${errorText}`);
+      return new Response(JSON.stringify({ error: `API error: ${response.status}`, details: errorText }), {
         status: response.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const data = await response.json();
-    console.log(`[youtube-transcript] Response received, entries: ${Array.isArray(data) ? data.length : 'not array'}`);
 
-    // The API returns an array of transcript objects; each has a "tracks" array with segments
+    // The API returns: [{ text: "full transcript...", id: "...", title: "...", tracks: [...], ... }]
     let fullText = "";
 
     if (Array.isArray(data) && data.length > 0) {
       const item = data[0];
-      if (item.tracks && Array.isArray(item.tracks) && item.tracks.length > 0) {
-        fullText = item.tracks.map((t: any) => t.text || "").join(" ");
-      } else if (item.text) {
+      
+      // Primary: use the "text" field which contains the full concatenated transcript
+      if (item.text && typeof item.text === "string" && item.text.length > 20) {
         fullText = item.text;
-      } else if (typeof item === "string") {
-        fullText = item;
+      }
+      // Fallback: extract from tracks[].transcript[].text
+      else if (item.tracks && Array.isArray(item.tracks) && item.tracks.length > 0) {
+        const track = item.tracks[0];
+        if (track.transcript && Array.isArray(track.transcript)) {
+          fullText = track.transcript.map((t: any) => t.text || "").join(" ");
+        }
       }
     }
 
     if (!fullText || fullText.trim().length < 20) {
-      console.log(`[youtube-transcript] No usable transcript found for ${videoId}`);
-      return new Response(JSON.stringify({ error: "no_transcript", message: "Nenhuma transcrição encontrada para este vídeo." }), {
+      console.log(`[yt-tx] No usable transcript found for ${videoId}`);
+      return new Response(JSON.stringify({ 
+        error: "no_transcript", 
+        message: "Nenhuma transcrição encontrada para este vídeo." 
+      }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Clean up common transcript artifacts
     fullText = fullText.replace(/\s+/g, " ").trim();
-
-    console.log(`[youtube-transcript] Success: ${fullText.length} chars for ${videoId}`);
+    console.log(`[yt-tx] Success: ${fullText.length} chars for ${videoId}`);
 
     return new Response(JSON.stringify({ transcript: fullText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("[youtube-transcript] Error:", err);
+    console.error("[yt-tx] Error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
