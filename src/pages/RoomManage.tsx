@@ -407,7 +407,7 @@ const RoomManage = () => {
     setActivityTypeDialogOpen(true);
   };
 
-  const proceedWithGeneration = () => {
+  const proceedWithGeneration = async () => {
     const material = pendingMaterialForType;
     if (!material) return;
     setActivityTypeDialogOpen(false);
@@ -417,8 +417,39 @@ const RoomManage = () => {
     if (isYoutubeLink(material)) {
       const cached = material.content_text_for_ai || "";
       const isPlaceholder = !cached || cached.length < 100 || cached.startsWith("YouTube video ID:");
-      setManualTranscript(isPlaceholder ? "" : cached);
+
+      if (!isPlaceholder) {
+        // Already have a good transcript cached, generate directly
+        generateQuizDirect(material, cached);
+        return;
+      }
+
+      // Try automatic transcription via YouTube Transcript API
+      const ytId = extractYoutubeId(material.url!);
+      if (ytId) {
+        setGeneratingQuiz(material.id);
+        toast({ title: "Transcrevendo vídeo...", description: "Buscando a transcrição do YouTube automaticamente." });
+        try {
+          const res = await supabase.functions.invoke("youtube-transcript", {
+            body: { videoId: ytId },
+          });
+          if (!res.error && res.data?.transcript && res.data.transcript.length >= 50) {
+            const transcript = res.data.transcript;
+            // Cache the transcript for future use
+            await supabase.from("materials").update({ content_text_for_ai: transcript }).eq("id", material.id);
+            generateQuizDirect(material, transcript);
+            return;
+          }
+        } catch (err) {
+          console.warn("Auto-transcript failed, falling back to manual:", err);
+        }
+        setGeneratingQuiz(null);
+      }
+
+      // Fallback: open manual transcript dialog
+      setManualTranscript("");
       setTranscriptDialogOpen(true);
+      toast({ title: "Transcrição automática indisponível", description: "Cole a transcrição do vídeo manualmente para gerar a atividade." });
     } else if (material.url && material.type !== "article") {
       const content = material.content_text_for_ai || "";
       if (content.length >= 50) {
