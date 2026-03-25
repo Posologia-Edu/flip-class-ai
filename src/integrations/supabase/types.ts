@@ -701,6 +701,45 @@ export type Database = {
           },
         ]
       }
+      system_updates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          implemented_at: string | null
+          priority: string | null
+          status: string
+          title: string
+          type: string
+          version: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          implemented_at?: string | null
+          priority?: string | null
+          status?: string
+          title: string
+          type?: string
+          version?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          implemented_at?: string | null
+          priority?: string | null
+          status?: string
+          title?: string
+          type?: string
+          version?: string | null
+        }
+        Relationships: []
+      }
       teacher_feedback: {
         Row: {
           created_at: string
