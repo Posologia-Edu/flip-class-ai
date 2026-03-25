@@ -5,9 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key, CreditCard, Calendar, Globe } from "lucide-react";
+import { ShieldCheck, UserCheck, UserX, Clock, Users, BookOpen, BarChart3, Send, Mail, Trash2, Key, CreditCard, Calendar, Globe, Rocket } from "lucide-react";
 import AiApiKeysManager from "@/components/AiApiKeysManager";
 import VisitorAnalytics from "@/components/VisitorAnalytics";
+import UpdatesPipeline from "@/components/UpdatesPipeline";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -186,8 +187,9 @@ const AdminPanel = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="invites" className="space-y-6">
+      <Tabs defaultValue="updates" className="space-y-6">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="updates"><Rocket className="w-4 h-4 mr-1" /> Atualizações</TabsTrigger>
           <TabsTrigger value="visitors"><Globe className="w-4 h-4 mr-1" /> Visitantes</TabsTrigger>
           <TabsTrigger value="subscribers"><CreditCard className="w-4 h-4 mr-1" /> Assinantes ({subscribers.length})</TabsTrigger>
           <TabsTrigger value="invites">Convites ({invites.length})</TabsTrigger>
@@ -196,6 +198,10 @@ const AdminPanel = () => {
           <TabsTrigger value="approved">Aprovados ({approved.length})</TabsTrigger>
           <TabsTrigger value="rejected">Rejeitados ({rejected.length})</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="updates">
+          <UpdatesPipeline />
+        </TabsContent>
 
         <TabsContent value="visitors">
           <VisitorAnalytics />

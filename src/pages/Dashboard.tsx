@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Users, Target, BarChart3, Plus, Upload, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import NotificationCenter from "@/components/NotificationCenter";
+import PlanningBanner from "@/components/PlanningBanner";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms">;
@@ -89,6 +90,8 @@ const Dashboard = () => {
         </div>
         <NotificationCenter teacherId={auth.user?.id} />
       </div>
+
+      <PlanningBanner />
 
       {loading ? (
         <div className="text-center text-muted-foreground py-20">Carregando...</div>
