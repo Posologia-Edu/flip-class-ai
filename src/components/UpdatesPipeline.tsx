@@ -6,14 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Rocket, Lightbulb, Clock, CheckCircle2, Trash2, Edit, ArrowUpCircle } from "lucide-react";
+import { Plus, Rocket, Lightbulb, CheckCircle2, Trash2, Sparkles, Loader2 } from "lucide-react";
 
 interface SystemUpdate {
   id: string;
@@ -27,23 +28,16 @@ interface SystemUpdate {
   implemented_at: string | null;
 }
 
-const statusConfig = {
-  done: { label: "Concluído", icon: CheckCircle2, color: "bg-green-500/10 text-green-600" },
-  in_progress: { label: "Em andamento", icon: Clock, color: "bg-amber-500/10 text-amber-600" },
-  planned: { label: "Planejado", icon: Lightbulb, color: "bg-blue-500/10 text-blue-600" },
-};
-
 const priorityConfig = {
   low: { label: "Baixa", color: "bg-muted text-muted-foreground" },
   medium: { label: "Média", color: "bg-amber-500/10 text-amber-600" },
   high: { label: "Alta", color: "bg-red-500/10 text-red-600" },
 };
 
-type FormType = "update" | "idea";
 type FormStatus = "done" | "in_progress" | "planned";
 type FormPriority = "low" | "medium" | "high";
-interface FormState { title: string; description: string; type: FormType; status: FormStatus; priority: FormPriority; version: string; }
-const emptyForm: FormState = { title: "", description: "", type: "update", status: "done", priority: "medium", version: "" };
+interface FormState { title: string; description: string; type: "update" | "idea"; status: FormStatus; priority: FormPriority; version: string; }
+const emptyForm: FormState = { title: "", description: "", type: "idea", status: "planned", priority: "medium", version: "" };
 
 const UpdatesPipeline = () => {
   const [updates, setUpdates] = useState<SystemUpdate[]>([]);
@@ -52,7 +46,7 @@ const UpdatesPipeline = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState<"all" | "update" | "idea">("all");
+  const [generating, setGenerating] = useState(false);
   const { toast } = useToast();
 
   const fetchUpdates = useCallback(async () => {
@@ -66,15 +60,9 @@ const UpdatesPipeline = () => {
 
   useEffect(() => { fetchUpdates(); }, [fetchUpdates]);
 
-  const openNew = (type: "update" | "idea") => {
+  const openNew = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, type, status: type === "idea" ? "planned" : "done" });
-    setDialogOpen(true);
-  };
-
-  const openEdit = (u: SystemUpdate) => {
-    setEditingId(u.id);
-    setForm({ title: u.title, description: u.description, type: u.type, status: u.status, priority: u.priority, version: u.version || "" });
+    setForm(emptyForm);
     setDialogOpen(true);
   };
 
@@ -106,110 +94,159 @@ const UpdatesPipeline = () => {
     fetchUpdates();
   };
 
-  const filtered = updates.filter(u => filter === "all" || u.type === filter);
-  const doneUpdates = filtered.filter(u => u.status === "done");
-  const pipeline = filtered.filter(u => u.status !== "done");
+  const handleConclude = async (u: SystemUpdate) => {
+    const { error } = await supabase.from("system_updates").update({
+      status: "done",
+      type: "update",
+      implemented_at: new Date().toISOString(),
+    }).eq("id", u.id);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); }
+    else { toast({ title: "Atualização concluída e adicionada ao changelog!" }); fetchUpdates(); }
+  };
+
+  const handleGenerateRoadmap = async () => {
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-roadmap");
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Roadmap gerado!", description: `${data?.count || 0} novas sugestões adicionadas.` });
+      fetchUpdates();
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar roadmap", description: err.message, variant: "destructive" });
+    }
+    setGenerating(false);
+  };
+
+  const changelog = updates.filter(u => u.status === "done");
+  const roadmap = updates.filter(u => u.status !== "done");
+
+  // Check if we should show generate button (no roadmap items or last generated > 30 days ago)
+  const lastRoadmapDate = roadmap.length > 0
+    ? new Date(Math.max(...roadmap.map(u => new Date(u.created_at).getTime())))
+    : null;
+  const daysSinceLastRoadmap = lastRoadmapDate
+    ? (Date.now() - lastRoadmapDate.getTime()) / (1000 * 60 * 60 * 24)
+    : 999;
+  const canGenerate = roadmap.length === 0 || daysSinceLastRoadmap >= 30;
 
   if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
+  const borderColor = (priority: string) => {
+    if (priority === "high") return "border-l-red-500";
+    if (priority === "medium") return "border-l-amber-500";
+    return "border-l-muted-foreground/30";
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => openNew("update")} size="sm">
-          <Rocket className="w-4 h-4 mr-1" /> Registrar Atualização
-        </Button>
-        <Button onClick={() => openNew("idea")} size="sm" variant="outline">
-          <Lightbulb className="w-4 h-4 mr-1" /> Nova Ideia
-        </Button>
-        <div className="ml-auto">
-          <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="update">Atualizações</SelectItem>
-              <SelectItem value="idea">Ideias</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="font-display text-xl font-bold flex items-center gap-2">
+            <Rocket className="w-5 h-5 text-primary" /> Pipeline de Atualizações
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">Histórico de funcionalidades e planejamento futuro do sistema.</p>
         </div>
+        <Button onClick={openNew} size="sm">
+          <Plus className="w-4 h-4 mr-1" /> Nova Entrada
+        </Button>
       </div>
 
-      {/* Pipeline / Future Ideas */}
-      {pipeline.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h3 className="font-display font-semibold text-base mb-4 flex items-center gap-2">
-            <ArrowUpCircle className="w-5 h-5 text-primary" /> Pipeline de Desenvolvimento ({pipeline.length})
-          </h3>
-          <div className="space-y-3">
-            {pipeline.map(u => {
-              const sc = statusConfig[u.status];
-              const pc = priorityConfig[u.priority];
-              return (
-                <div key={u.id} className="flex items-start gap-3 bg-secondary/40 rounded-lg px-4 py-3">
-                  <sc.icon className="w-5 h-5 mt-0.5 shrink-0 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-sm">{u.title}</p>
-                      <Badge variant="secondary" className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
-                      <Badge variant="secondary" className={`text-[10px] ${pc.color}`}>{pc.label}</Badge>
-                    </div>
-                    {u.description && <p className="text-xs text-muted-foreground mt-1">{u.description}</p>}
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(u)}><Edit className="w-3.5 h-3.5" /></Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remover item?</AlertDialogTitle>
-                          <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(u.id)} className="bg-destructive text-destructive-foreground">Remover</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Tabs */}
+      <Tabs defaultValue="roadmap">
+        <TabsList>
+          <TabsTrigger value="changelog" className="gap-1.5">
+            <CheckCircle2 className="w-4 h-4" /> Changelog ({changelog.length})
+          </TabsTrigger>
+          <TabsTrigger value="roadmap" className="gap-1.5">
+            <Lightbulb className="w-4 h-4" /> Roadmap ({roadmap.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Done / Changelog */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h3 className="font-display font-semibold text-base mb-4 flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-green-500" /> Histórico de Atualizações ({doneUpdates.length})
-        </h3>
-        {doneUpdates.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">Nenhuma atualização registrada ainda.</p>
-        ) : (
-          <div className="relative border-l-2 border-border ml-3 space-y-4">
-            {doneUpdates.map(u => (
-              <div key={u.id} className="pl-6 relative">
-                <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-sm">{u.title}</p>
-                      {u.version && <Badge variant="outline" className="text-[10px]">v{u.version}</Badge>}
+        {/* Roadmap Tab */}
+        <TabsContent value="roadmap" className="mt-4 space-y-4">
+          {canGenerate && (
+            <div className="flex justify-end">
+              <Button onClick={handleGenerateRoadmap} disabled={generating} variant="outline" size="sm">
+                {generating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                {generating ? "Gerando sugestões..." : "Gerar sugestões com IA"}
+              </Button>
+            </div>
+          )}
+
+          {roadmap.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <Lightbulb className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">Nenhuma ideia no roadmap ainda.</p>
+              <p className="text-xs mt-1">Clique em "Gerar sugestões com IA" para começar.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {roadmap.map(u => {
+                const pc = priorityConfig[u.priority] || priorityConfig.medium;
+                return (
+                  <div key={u.id} className={`bg-card border border-border rounded-xl px-5 py-4 border-l-4 ${borderColor(u.priority)}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                          <p className="font-medium text-sm">{u.title}</p>
+                          <Badge variant="secondary" className={`text-[10px] ${pc.color}`}>{pc.label}</Badge>
+                        </div>
+                        {u.description && <p className="text-xs text-muted-foreground mt-1.5 ml-6">{u.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => handleConclude(u)}>
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Remover item?</AlertDialogTitle>
+                              <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(u.id)} className="bg-destructive text-destructive-foreground">Remover</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
-                    {u.description && <p className="text-xs text-muted-foreground mt-1">{u.description}</p>}
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      {new Date(u.implemented_at || u.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
-                    </p>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(u)}><Edit className="w-3.5 h-3.5" /></Button>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Changelog Tab */}
+        <TabsContent value="changelog" className="mt-4">
+          {changelog.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-10">Nenhuma atualização registrada ainda.</p>
+          ) : (
+            <div className="space-y-3">
+              {changelog.map(u => (
+                <div key={u.id} className="bg-card border border-border rounded-xl px-5 py-4 border-l-4 border-l-green-500">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                        <p className="font-medium text-sm">{u.title}</p>
+                        {u.version && <Badge variant="outline" className="text-[10px]">v{u.version}</Badge>}
+                      </div>
+                      {u.description && <p className="text-xs text-muted-foreground mt-1.5 ml-6">{u.description}</p>}
+                      <p className="text-[10px] text-muted-foreground mt-1.5 ml-6">
+                        {new Date(u.implemented_at || u.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
+                      </p>
+                    </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -224,17 +261,17 @@ const UpdatesPipeline = () => {
                     </AlertDialog>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Editar" : "Novo"} {form.type === "idea" ? "Ideia" : "Atualização"}</DialogTitle>
+            <DialogTitle>{editingId ? "Editar" : "Nova"} Entrada</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -247,13 +284,12 @@ const UpdatesPipeline = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium">Status</label>
-                <Select value={form.status} onValueChange={(v: any) => setForm(f => ({ ...f, status: v }))}>
+                <label className="text-sm font-medium">Tipo</label>
+                <Select value={form.type} onValueChange={(v: any) => setForm(f => ({ ...f, type: v, status: v === "update" ? "done" : "planned" }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="done">Concluído</SelectItem>
-                    <SelectItem value="in_progress">Em andamento</SelectItem>
-                    <SelectItem value="planned">Planejado</SelectItem>
+                    <SelectItem value="update">Atualização (Changelog)</SelectItem>
+                    <SelectItem value="idea">Ideia (Roadmap)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -269,10 +305,12 @@ const UpdatesPipeline = () => {
                 </Select>
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium">Versão (opcional)</label>
-              <Input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} placeholder="Ex: 1.2.0" />
-            </div>
+            {form.type === "update" && (
+              <div>
+                <label className="text-sm font-medium">Versão (opcional)</label>
+                <Input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} placeholder="Ex: 1.2.0" />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
