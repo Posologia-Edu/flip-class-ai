@@ -1,0 +1,1 @@
+ALTER TABLE public.student_sessions ADD COLUMN feedback_email_sent_at timestamp with time zone DEFAULT NULL;
