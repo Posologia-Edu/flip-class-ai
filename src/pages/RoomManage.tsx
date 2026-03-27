@@ -1779,8 +1779,29 @@ const RoomManage = () => {
                               );
                             })}
                           </div>
-                        ))}
-                      </div>
+                          ))}
+                          {/* Send feedback email button */}
+                          {(() => {
+                            const allQKeys = combinedQuiz.levels.flatMap((l, li) =>
+                              (l.questions || []).filter(q => !q.hidden).map((_, qi) => `${s.id}-${li}-${qi}`)
+                            );
+                            const allSaved = allQKeys.length > 0 && allQKeys.every(k => feedbacks[k]?.saved);
+                            const hasEmail = !!(s as any).student_email;
+                            return allSaved ? (
+                              <div className="border-t border-border pt-4 mt-4 flex justify-end">
+                                <Button
+                                  size="sm"
+                                  className="gap-2"
+                                  disabled={sendingFeedbackEmail === s.id || !hasEmail}
+                                  onClick={() => sendFeedbackEmail(s, combinedQuiz.levels, studentAnswers || {})}
+                                >
+                                  {sendingFeedbackEmail === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                                  {hasEmail ? "Enviar feedback por e-mail" : "Aluno sem e-mail cadastrado"}
+                                </Button>
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
                     )}
                   </div>
                 );
