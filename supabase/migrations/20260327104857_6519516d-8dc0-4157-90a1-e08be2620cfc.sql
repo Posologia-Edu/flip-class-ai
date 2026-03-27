@@ -1,0 +1,1 @@
+ALTER TABLE public.teacher_feedback ALTER COLUMN grade TYPE numeric USING grade::numeric;
