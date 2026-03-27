@@ -453,9 +453,17 @@ serve(async (req) => {
       : "CONTEÚDO DO MATERIAL";
 
     const isQuiz = activityType === "quiz";
-    const systemPrompt = isQuiz ? QUIZ_PROMPT : CASE_STUDY_PROMPT;
+    const isInteractive = activityType === "interactive";
+    const systemPrompt = isInteractive ? INTERACTIVE_PROMPT : isQuiz ? QUIZ_PROMPT : CASE_STUDY_PROMPT;
 
-    const userPrompt = isQuiz
+    const userPrompt = isInteractive
+      ? `Gere 5 atividades interativas variadas (arrastar e soltar, preencher lacunas, correspondência e ordenação) com base no conteúdo abaixo.
+
+${typeLabel}:
+${finalContent}
+
+IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar as atividades. Não invente informações que não estejam no material.`
+      : isQuiz
       ? `Gere um quiz de múltipla escolha com 5 questões e 4 alternativas cada, com base no conteúdo abaixo.
 
 ${typeLabel}:
