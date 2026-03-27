@@ -232,7 +232,7 @@ const StudentView = () => {
   // Refs to avoid resetting the heartbeat interval on every tab/material change
   const tabRef = useRef(tab);
   const activeMaterialIdRef = useRef(activeMaterialId);
-  const logActivityRef = useRef(logActivity);
+  const logActivityRef = useRef<((activityType: string, materialId?: string, durationSeconds?: number) => Promise<void>) | null>(null);
   useEffect(() => { tabRef.current = tab; }, [tab]);
   useEffect(() => { activeMaterialIdRef.current = activeMaterialId; }, [activeMaterialId]);
 
