@@ -587,6 +587,53 @@ const RoomManage = () => {
     });
   };
 
+  const sendFeedbackEmail = async (session: Tables<"student_sessions">, quizLevels: QuizLevel[], studentAnswers: Record<string, string>) => {
+    const studentEmail = (session as any).student_email;
+    if (!studentEmail) {
+      toast({ title: "Sem e-mail", description: "Este aluno não possui e-mail cadastrado.", variant: "destructive" });
+      return;
+    }
+    setSendingFeedbackEmail(session.id);
+    try {
+      const questions = quizLevels.flatMap((level, li) =>
+        (level.questions || []).filter(q => !q.hidden).map((q, qi) => {
+          const key = `${li}-${qi}`;
+          const fbKey = `${session.id}-${key}`;
+          const fb = feedbacks[fbKey];
+          return {
+            question: q.question,
+            studentAnswer: studentAnswers?.[key] || "",
+            grade: fb?.grade ?? null,
+            maxPoints: q.points || 10,
+            feedbackText: fb?.feedback_text || "",
+          };
+        })
+      );
+      const totalPossible = questions.reduce((s, q) => s + q.maxPoints, 0);
+      const totalEarned = questions.reduce((s, q) => s + (q.grade ?? 0), 0);
+
+      const { error } = await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "feedback-completed",
+          recipientEmail: studentEmail,
+          idempotencyKey: `feedback-${session.id}-${Date.now()}`,
+          templateData: {
+            studentName: session.student_name,
+            roomTitle: room?.title || "Atividade",
+            totalEarned,
+            totalPossible,
+            questions,
+          },
+        },
+      });
+      if (error) throw error;
+      toast({ title: "E-mail enviado!", description: `Feedback enviado para ${studentEmail}.` });
+    } catch (err: any) {
+      toast({ title: "Erro ao enviar e-mail", description: err.message, variant: "destructive" });
+    }
+    setSendingFeedbackEmail(null);
+  };
+
   const aiGradeQuestion = async (sessionId: string, questionKey: string, question: string, context: string | undefined, correctAnswer: string, studentAnswer: string) => {
     const fbKey = `${sessionId}-${questionKey}`;
     setAiGrading(fbKey);
