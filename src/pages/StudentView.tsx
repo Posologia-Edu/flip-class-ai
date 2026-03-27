@@ -3,23 +3,33 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
 import NotificationCenter from "@/components/NotificationCenter";
 import { PeerReviewStudent } from "@/components/PeerReview";
 import { isStorageUrl } from "@/lib/storage-utils";
 import type { Tables, Json } from "@/integrations/supabase/types";
+import QuestionRenderer, { isInteractiveType, gradeInteractiveQuestion } from "@/components/interactive-questions/QuestionRenderer";
+import type { InteractiveQuestion } from "@/components/interactive-questions/types";
+import StudyAssistant from "@/components/StudyAssistant";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
 
 interface QuizQuestion {
   question: string;
-  type: "case_study" | "open_ended" | "multiple_choice";
+  type: string;
   context?: string;
   options?: string[];
-  correct_answer: string;
+  correct_answer?: string;
+  items?: string[];
+  categories?: string[];
+  correct_mapping?: Record<string, string>;
+  blanks?: string[];
+  correct_answers?: string[];
+  pairs?: Array<{ left: string; right: string }>;
+  correct_order?: number[];
 }
 
 interface QuizLevel {
