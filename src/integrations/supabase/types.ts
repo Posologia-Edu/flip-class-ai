@@ -752,6 +752,7 @@ export type Database = {
           answers: Json | null
           completed_at: string | null
           created_at: string
+          feedback_email_sent_at: string | null
           id: string
           room_id: string
           score: number | null
@@ -762,6 +763,7 @@ export type Database = {
           answers?: Json | null
           completed_at?: string | null
           created_at?: string
+          feedback_email_sent_at?: string | null
           id?: string
           room_id: string
           score?: number | null
@@ -772,6 +774,7 @@ export type Database = {
           answers?: Json | null
           completed_at?: string | null
           created_at?: string
+          feedback_email_sent_at?: string | null
           id?: string
           room_id?: string
           score?: number | null
