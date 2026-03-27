@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine, Mail } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
 import { RoomCollaborators } from "@/components/RoomCollaborators";
@@ -140,6 +140,7 @@ const RoomManage = () => {
   const [aiGrading, setAiGrading] = useState<string | null>(null);
   const [aiGradingAll, setAiGradingAll] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string }>>({});
+  const [sendingFeedbackEmail, setSendingFeedbackEmail] = useState<string | null>(null);
 
   // New material form state
   const [newMaterialType, setNewMaterialType] = useState("video");
@@ -584,6 +585,53 @@ const RoomManage = () => {
         [fbKey]: { ...current, [field]: value, saved: false },
       };
     });
+  };
+
+  const sendFeedbackEmail = async (session: Tables<"student_sessions">, quizLevels: QuizLevel[], studentAnswers: Record<string, string>) => {
+    const studentEmail = (session as any).student_email;
+    if (!studentEmail) {
+      toast({ title: "Sem e-mail", description: "Este aluno não possui e-mail cadastrado.", variant: "destructive" });
+      return;
+    }
+    setSendingFeedbackEmail(session.id);
+    try {
+      const questions = quizLevels.flatMap((level, li) =>
+        (level.questions || []).filter(q => !q.hidden).map((q, qi) => {
+          const key = `${li}-${qi}`;
+          const fbKey = `${session.id}-${key}`;
+          const fb = feedbacks[fbKey];
+          return {
+            question: q.question,
+            studentAnswer: studentAnswers?.[key] || "",
+            grade: fb?.grade ?? null,
+            maxPoints: q.points || 10,
+            feedbackText: fb?.feedback_text || "",
+          };
+        })
+      );
+      const totalPossible = questions.reduce((s, q) => s + q.maxPoints, 0);
+      const totalEarned = questions.reduce((s, q) => s + (q.grade ?? 0), 0);
+
+      const { error } = await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "feedback-completed",
+          recipientEmail: studentEmail,
+          idempotencyKey: `feedback-${session.id}-${Date.now()}`,
+          templateData: {
+            studentName: session.student_name,
+            roomTitle: room?.title || "Atividade",
+            totalEarned,
+            totalPossible,
+            questions,
+          },
+        },
+      });
+      if (error) throw error;
+      toast({ title: "E-mail enviado!", description: `Feedback enviado para ${studentEmail}.` });
+    } catch (err: any) {
+      toast({ title: "Erro ao enviar e-mail", description: err.message, variant: "destructive" });
+    }
+    setSendingFeedbackEmail(null);
   };
 
   const aiGradeQuestion = async (sessionId: string, questionKey: string, question: string, context: string | undefined, correctAnswer: string, studentAnswer: string) => {
@@ -1554,7 +1602,8 @@ const RoomManage = () => {
                     const fbKey = `${s.id}-${li}-${qi}`;
                     const fb = feedbacks[fbKey];
                     if (fb?.grade != null) {
-                      return s2 + Math.round((fb.grade / 10) * q.points);
+                      // Grade is now the actual points earned (not a 0-10 scale)
+                      return s2 + fb.grade;
                     }
                     // For multiple choice, auto-grade
                     if (q.type === "multiple_choice") {
@@ -1666,16 +1715,50 @@ const RoomManage = () => {
                                           <div className="flex items-center gap-3">
                                             <div className="flex items-center gap-2">
                                               <Label className="text-xs text-muted-foreground">Nota:</Label>
-                                              <Select
-                                                value={fb?.grade?.toString() ?? ""}
-                                                onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}
-                                                disabled={isSaved}
-                                              >
-                                                <SelectTrigger className="w-20 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-                                                <SelectContent>
-                                                  {Array.from({ length: 11 }, (_, i) => (<SelectItem key={i} value={i.toString()}>{i}</SelectItem>))}
-                                                </SelectContent>
-                                              </Select>
+                                              {(() => {
+                                                const maxPts = q.points || 10;
+                                                const qType = q.type || "open_ended";
+                                                let gradeOptions: number[];
+                                                if (qType === "multiple_choice" || qType === "drag_and_drop" || qType === "ordering") {
+                                                  // Binary: 0 or full points
+                                                  gradeOptions = [0, maxPts];
+                                                } else if (qType === "fill_in_the_blank" || qType === "matching") {
+                                                  // Partial credit in integer steps or half-steps for small values
+                                                  if (maxPts <= 2) {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts * 2) + 1 }, (_, i) => Math.round(i * 0.5 * 100) / 100);
+                                                  } else {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts) + 1 }, (_, i) => i);
+                                                    if (!gradeOptions.includes(maxPts)) gradeOptions.push(maxPts);
+                                                  }
+                                                } else {
+                                                  // case_study, open_ended: granular steps
+                                                  if (maxPts <= 2) {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts * 4) + 1 }, (_, i) => Math.round(i * 0.25 * 100) / 100);
+                                                  } else if (maxPts <= 5) {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts * 2) + 1 }, (_, i) => Math.round(i * 0.5 * 100) / 100);
+                                                  } else {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts) + 1 }, (_, i) => i);
+                                                  }
+                                                  if (!gradeOptions.includes(maxPts)) gradeOptions.push(maxPts);
+                                                }
+                                                return (
+                                                  <Select
+                                                    value={fb?.grade?.toString() ?? ""}
+                                                    onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseFloat(v))}
+                                                    disabled={isSaved}
+                                                  >
+                                                    <SelectTrigger className="w-24 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                                                    <SelectContent>
+                                                      {gradeOptions.map((val) => (
+                                                        <SelectItem key={val} value={val.toString()}>
+                                                          {val % 1 === 0 ? val : val.toFixed(val % 0.5 === 0 ? 1 : 2)}
+                                                        </SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                );
+                                              })()}
+                                              <span className="text-xs text-muted-foreground">/ {q.points || 10}</span>
                                             </div>
                                             {isSaved ? (
                                               <Button size="sm" variant="outline" onClick={() => setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: false } }))}>
@@ -1696,8 +1779,29 @@ const RoomManage = () => {
                               );
                             })}
                           </div>
-                        ))}
-                      </div>
+                          ))}
+                          {/* Send feedback email button */}
+                          {(() => {
+                            const allQKeys = combinedQuiz.levels.flatMap((l, li) =>
+                              (l.questions || []).filter(q => !q.hidden).map((_, qi) => `${s.id}-${li}-${qi}`)
+                            );
+                            const allSaved = allQKeys.length > 0 && allQKeys.every(k => feedbacks[k]?.saved);
+                            const hasEmail = !!(s as any).student_email;
+                            return allSaved ? (
+                              <div className="border-t border-border pt-4 mt-4 flex justify-end">
+                                <Button
+                                  size="sm"
+                                  className="gap-2"
+                                  disabled={sendingFeedbackEmail === s.id || !hasEmail}
+                                  onClick={() => sendFeedbackEmail(s, combinedQuiz.levels, studentAnswers || {})}
+                                >
+                                  {sendingFeedbackEmail === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                                  {hasEmail ? "Enviar feedback por e-mail" : "Aluno sem e-mail cadastrado"}
+                                </Button>
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
                     )}
                   </div>
                 );

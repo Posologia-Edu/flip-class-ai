@@ -33,6 +33,7 @@ import CookiePolicy from "./pages/CookiePolicy";
 import PublicContact from "./pages/PublicContact";
 import PublicPricing from "./pages/PublicPricing";
 import PublicDocumentation from "./pages/PublicDocumentation";
+import Unsubscribe from "./pages/Unsubscribe";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ function AppContent() {
         <Route path="/termos" element={<TermsOfService />} />
         <Route path="/privacidade" element={<PrivacyPolicy />} />
         <Route path="/cookies" element={<CookiePolicy />} />
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
 
         {/* Authenticated routes - single persistent sidebar */}
         <Route element={<AppLayout />}>
