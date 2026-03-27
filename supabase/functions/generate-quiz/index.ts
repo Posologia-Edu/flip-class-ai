@@ -524,7 +524,7 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
         usage_type: "generation",
         provider: aiResult.provider,
         model: aiResult.model,
-        prompt_type: isQuiz ? "quiz_generation" : "case_study_generation",
+        prompt_type: isInteractive ? "interactive_generation" : isQuiz ? "quiz_generation" : "case_study_generation",
         tokens_input: aiResult.tokens_input,
         tokens_output: aiResult.tokens_output,
         estimated_cost_usd: estimateCost(aiResult.provider, aiResult.tokens_input, aiResult.tokens_output),
