@@ -23,3 +23,5 @@ project_id = "qxqvttkcemshgsdobgfe"
     verify_jwt = false
   [functions.study-assistant]
     verify_jwt = false
+  [functions.process-email-queue]
+    verify_jwt = true
