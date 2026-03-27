@@ -176,9 +176,9 @@ serve(async (req) => {
       }
     }
 
-    const { question, context, correctAnswer, studentAnswer, batchItems } = await req.json();
+    const { question, context, correctAnswer, studentAnswer, maxScore, batchItems } = await req.json();
 
-    const items = batchItems || [{ question, context, correctAnswer, studentAnswer }];
+    const items = batchItems || [{ question, context, correctAnswer, studentAnswer, maxScore }];
     const results = [];
 
     for (const item of items) {
