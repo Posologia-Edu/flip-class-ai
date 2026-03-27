@@ -193,6 +193,7 @@ serve(async (req) => {
         continue;
       }
 
+      const itemMaxScore = item.maxScore || 10;
       const userPrompt = `Corrija a resposta do aluno abaixo:
 
 PERGUNTA: ${item.question}
@@ -202,12 +203,12 @@ RESPOSTA ESPERADA (GABARITO): ${item.correctAnswer}
 
 RESPOSTA DO ALUNO: ${item.studentAnswer}
 
-Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fortes, pontos a melhorar e sugestão.`;
+Avalie a resposta do aluno e retorne o JSON com nota (0-${itemMaxScore}), feedback, pontos fortes, pontos a melhorar e sugestão.`;
 
       try {
         const aiResult = await callAiWithFallbackDetailed({
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: buildSystemPrompt(itemMaxScore) },
             { role: "user", content: userPrompt },
           ],
         });
@@ -227,7 +228,7 @@ Avalie a resposta do aluno e retorne o JSON com nota (0-10), feedback, pontos fo
           gradeResult = JSON.parse(fixed);
         }
 
-        gradeResult.grade = Math.max(0, Math.min(10, Math.round(gradeResult.grade)));
+        gradeResult.grade = Math.max(0, Math.min(itemMaxScore, Number((gradeResult.grade).toFixed(1))));
         gradeResult._aiMeta = {
           provider: aiResult.provider,
           model: aiResult.model,
