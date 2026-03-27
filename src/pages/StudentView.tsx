@@ -3,23 +3,33 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
 import NotificationCenter from "@/components/NotificationCenter";
 import { PeerReviewStudent } from "@/components/PeerReview";
 import { isStorageUrl } from "@/lib/storage-utils";
 import type { Tables, Json } from "@/integrations/supabase/types";
+import QuestionRenderer, { isInteractiveType, gradeInteractiveQuestion } from "@/components/interactive-questions/QuestionRenderer";
+import type { InteractiveQuestion } from "@/components/interactive-questions/types";
+import StudyAssistant from "@/components/StudyAssistant";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
 
 interface QuizQuestion {
   question: string;
-  type: "case_study" | "open_ended" | "multiple_choice";
+  type: string;
   context?: string;
   options?: string[];
-  correct_answer: string;
+  correct_answer?: string;
+  items?: string[];
+  categories?: string[];
+  correct_mapping?: Record<string, string>;
+  blanks?: string[];
+  correct_answers?: string[];
+  pairs?: Array<{ left: string; right: string }>;
+  correct_order?: number[];
 }
 
 interface QuizLevel {
@@ -198,10 +208,10 @@ const StudentView = () => {
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [activityTitles, setActivityTitles] = useState<ActivityWithTitle[]>([]);
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review">("materials");
+  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review" | "assistant">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, any>>({});
   const [showResult, setShowResult] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [openAnswer, setOpenAnswer] = useState("");
@@ -734,6 +744,9 @@ const StudentView = () => {
           <button onClick={() => setTab("peer-review")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "peer-review" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Users className="w-4 h-4" /> Avaliação por Pares
           </button>
+          <button onClick={() => setTab("assistant")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "assistant" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Bot className="w-4 h-4" /> Assistente IA
+          </button>
         </div>
       </div>
 
@@ -758,6 +771,8 @@ const StudentView = () => {
           <DiscussionForum roomId={roomId!} studentName={sessionData?.student_name} studentEmail={sessionData?.student_email || undefined} />
         ) : tab === "peer-review" ? (
           <PeerReviewStudent sessionId={sessionId!} roomId={roomId!} quizData={quizData} studentName={sessionData?.student_name || "Aluno"} />
+        ) : tab === "assistant" ? (
+          <StudyAssistant roomId={roomId!} sessionId={sessionId!} />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
@@ -783,7 +798,7 @@ const StudentView = () => {
                           <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
                           <div className="bg-secondary rounded-lg p-3 mb-2">
                             <p className="text-xs font-semibold text-muted-foreground mb-1">Sua resposta:</p>
-                            <p className="text-sm text-foreground">{answers[key] || <span className="italic text-muted-foreground">Não respondida</span>}</p>
+                            <p className="text-sm text-foreground">{typeof answers[key] === 'object' ? JSON.stringify(answers[key]) : answers[key] || <span className="italic text-muted-foreground">Não respondida</span>}</p>
                           </div>
                           {fb ? (
                             <div className="border-t border-border pt-3 mt-3 space-y-2">
@@ -839,7 +854,13 @@ const StudentView = () => {
                 <h3 className="font-display text-xl font-semibold text-card-foreground mb-6">{currentQ.question}</h3>
 
                 <div className="space-y-4">
-                  {currentQ.type === "multiple_choice" && currentQ.options ? (
+                  {isInteractiveType(currentQ.type) ? (
+                    <QuestionRenderer
+                      question={currentQ as InteractiveQuestion}
+                      value={answers[qKey]}
+                      onChange={(val) => setAnswers((prev) => ({ ...prev, [qKey]: val }))}
+                    />
+                  ) : currentQ.type === "multiple_choice" && currentQ.options ? (
                     <div className="space-y-3">
                       {currentQ.options.map((option, optIdx) => {
                         const isSelected = answers[qKey] === option;

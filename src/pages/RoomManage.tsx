@@ -49,7 +49,7 @@ interface QuizQuestion {
   difficulty?: string;
 }
 
-type ActivityGenerationType = "quiz" | "case_study";
+type ActivityGenerationType = "quiz" | "case_study" | "interactive";
 
 interface QuizLevel {
   level: number;
@@ -1121,6 +1121,21 @@ const RoomManage = () => {
                     <div>
                       <p className="font-semibold text-card-foreground">Casos Clínicos</p>
                       <p className="text-xs text-muted-foreground">Casos reais com perguntas dissertativas em 3 níveis</p>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedActivityType("interactive")}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${selectedActivityType === "interactive" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedActivityType === "interactive" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-card-foreground">Atividades Interativas</p>
+                      <p className="text-xs text-muted-foreground">Arrastar e soltar, preencher lacunas, correspondência e ordenação</p>
                     </div>
                   </div>
                 </button>
