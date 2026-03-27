@@ -1667,16 +1667,50 @@ const RoomManage = () => {
                                           <div className="flex items-center gap-3">
                                             <div className="flex items-center gap-2">
                                               <Label className="text-xs text-muted-foreground">Nota:</Label>
-                                              <Select
-                                                value={fb?.grade?.toString() ?? ""}
-                                                onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseInt(v))}
-                                                disabled={isSaved}
-                                              >
-                                                <SelectTrigger className="w-20 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
-                                                <SelectContent>
-                                                  {Array.from({ length: 11 }, (_, i) => (<SelectItem key={i} value={i.toString()}>{i}</SelectItem>))}
-                                                </SelectContent>
-                                              </Select>
+                                              {(() => {
+                                                const maxPts = q.points || 10;
+                                                const qType = q.type || "open_ended";
+                                                let gradeOptions: number[];
+                                                if (qType === "multiple_choice" || qType === "drag_and_drop" || qType === "ordering") {
+                                                  // Binary: 0 or full points
+                                                  gradeOptions = [0, maxPts];
+                                                } else if (qType === "fill_in_the_blank" || qType === "matching") {
+                                                  // Partial credit in integer steps or half-steps for small values
+                                                  if (maxPts <= 2) {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts * 2) + 1 }, (_, i) => Math.round(i * 0.5 * 100) / 100);
+                                                  } else {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts) + 1 }, (_, i) => i);
+                                                    if (!gradeOptions.includes(maxPts)) gradeOptions.push(maxPts);
+                                                  }
+                                                } else {
+                                                  // case_study, open_ended: granular steps
+                                                  if (maxPts <= 2) {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts * 4) + 1 }, (_, i) => Math.round(i * 0.25 * 100) / 100);
+                                                  } else if (maxPts <= 5) {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts * 2) + 1 }, (_, i) => Math.round(i * 0.5 * 100) / 100);
+                                                  } else {
+                                                    gradeOptions = Array.from({ length: Math.floor(maxPts) + 1 }, (_, i) => i);
+                                                  }
+                                                  if (!gradeOptions.includes(maxPts)) gradeOptions.push(maxPts);
+                                                }
+                                                return (
+                                                  <Select
+                                                    value={fb?.grade?.toString() ?? ""}
+                                                    onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseFloat(v))}
+                                                    disabled={isSaved}
+                                                  >
+                                                    <SelectTrigger className="w-24 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                                                    <SelectContent>
+                                                      {gradeOptions.map((val) => (
+                                                        <SelectItem key={val} value={val.toString()}>
+                                                          {val % 1 === 0 ? val : val.toFixed(val % 0.5 === 0 ? 1 : 2)}
+                                                        </SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                );
+                                              })()}
+                                              <span className="text-xs text-muted-foreground">/ {q.points || 10}</span>
                                             </div>
                                             {isSaved ? (
                                               <Button size="sm" variant="outline" onClick={() => setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: false } }))}>
