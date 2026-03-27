@@ -1597,25 +1597,29 @@ const RoomManage = () => {
               {sessions.filter(s => s.completed_at && s.answers).map((s) => {
                 const studentAnswers = s.answers as Record<string, string>;
                 const isExpanded = expandedStudent === s.id;
-                // Use all activities for answers display
+                // Use all activities for answers display, filtering hidden questions
+                // to match the student view indices
                 const allQuizLevels = activities.flatMap(act => {
                   const q = act.quiz_data as unknown as QuizData;
-                  return q?.levels || [];
+                  if (!q?.levels) return [];
+                  return q.levels.map(l => ({
+                    ...l,
+                    questions: (l.questions || []).filter((qq: any) => !qq.hidden),
+                  })).filter(l => l.questions.length > 0);
                 });
                 const combinedQuiz: QuizData = { levels: allQuizLevels };
 
-                // Calculate points earned from teacher feedbacks
-                const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.hidden ? 0 : (q.points || 0)), 0) || 0), 0);
+                // Calculate points earned from teacher feedbacks + auto-graded objectives
+                const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.points || 0), 0) || 0), 0);
                 const earnedPoints = allQuizLevels.reduce((sum, l, li) => {
                   return sum + (l.questions?.reduce((s2, q, qi) => {
-                    if (q.hidden || !q.points) return s2;
+                    if (!q.points) return s2;
                     const fbKey = `${s.id}-${li}-${qi}`;
                     const fb = feedbacks[fbKey];
                     if (fb?.grade != null) {
-                      // Grade is now the actual points earned (not a 0-10 scale)
                       return s2 + fb.grade;
                     }
-                    // For multiple choice, auto-grade
+                    // For auto-gradeable types, count if correct
                     if (q.type === "multiple_choice") {
                       const answer = studentAnswers?.[`${li}-${qi}`];
                       if (answer === q.correct_answer) return s2 + q.points;
