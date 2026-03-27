@@ -1865,16 +1865,24 @@ const RoomManage = () => {
                               return feedbacks[fbKey]?.saved;
                             });
                             const hasEmail = !!(s as any).student_email;
+                            const alreadySent = !!(s as any).feedback_email_sent_at;
                             return allDone ? (
-                              <div className="border-t border-border pt-4 mt-4 flex justify-end">
+                              <div className="border-t border-border pt-4 mt-4 flex items-center justify-end gap-3">
+                                {alreadySent && (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <MailCheck className="w-3.5 h-3.5 text-green-600" />
+                                    Enviado em {new Date((s as any).feedback_email_sent_at).toLocaleDateString("pt-BR")}
+                                  </span>
+                                )}
                                 <Button
                                   size="sm"
                                   className="gap-2"
+                                  variant={alreadySent ? "outline" : "default"}
                                   disabled={sendingFeedbackEmail === s.id || !hasEmail}
                                   onClick={() => sendFeedbackEmail(s, combinedQuiz.levels, studentAnswers || {})}
                                 >
                                   {sendingFeedbackEmail === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                                  {hasEmail ? "Enviar feedback por e-mail" : "Aluno sem e-mail cadastrado"}
+                                  {!hasEmail ? "Aluno sem e-mail cadastrado" : alreadySent ? "Reenviar feedback" : "Enviar feedback por e-mail"}
                                 </Button>
                               </div>
                             ) : null;
