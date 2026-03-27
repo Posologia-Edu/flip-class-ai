@@ -255,6 +255,41 @@ const RoomManage = () => {
     };
   }, [roomId, fetchData]);
 
+  // Auto-populate feedback grades for objective questions (multiple choice)
+  useEffect(() => {
+    if (sessions.length === 0 || activities.length === 0) return;
+    const newFeedbacks: Record<string, { feedback_text: string; grade: number | null; saved: boolean }> = {};
+    
+    for (const s of sessions) {
+      if (!s.completed_at || !s.answers) continue;
+      const studentAnswers = s.answers as Record<string, string>;
+      
+      const filteredLevels = activities.flatMap(act => {
+        const q = act.quiz_data as unknown as QuizData;
+        if (!q?.levels) return [];
+        return q.levels.map(l => ({
+          ...l,
+          questions: (l.questions || []).filter((qq: any) => !qq.hidden),
+        })).filter(l => l.questions.length > 0);
+      });
+      
+      filteredLevels.forEach((level, li) => {
+        level.questions?.forEach((q, qi) => {
+          if (q.type !== "multiple_choice" || !q.points) return;
+          const fbKey = `${s.id}-${li}-${qi}`;
+          if (feedbacks[fbKey]) return;
+          const answer = studentAnswers[`${li}-${qi}`];
+          const grade = answer === q.correct_answer ? q.points : 0;
+          newFeedbacks[fbKey] = { feedback_text: "", grade, saved: false };
+        });
+      });
+    }
+    
+    if (Object.keys(newFeedbacks).length > 0) {
+      setFeedbacks(prev => ({ ...newFeedbacks, ...prev }));
+    }
+  }, [sessions, activities]);
+
   const extractYoutubeId = (url: string) => {
     const match = url.match(/(?:youtu\.be\/|v=|\/embed\/|\/v\/|\/watch\?v=)([^&?\s]+)/);
     return match?.[1] || null;
