@@ -854,7 +854,13 @@ const StudentView = () => {
                 <h3 className="font-display text-xl font-semibold text-card-foreground mb-6">{currentQ.question}</h3>
 
                 <div className="space-y-4">
-                  {currentQ.type === "multiple_choice" && currentQ.options ? (
+                  {isInteractiveType(currentQ.type) ? (
+                    <QuestionRenderer
+                      question={currentQ as InteractiveQuestion}
+                      value={answers[qKey]}
+                      onChange={(val) => setAnswers((prev) => ({ ...prev, [qKey]: val }))}
+                    />
+                  ) : currentQ.type === "multiple_choice" && currentQ.options ? (
                     <div className="space-y-3">
                       {currentQ.options.map((option, optIdx) => {
                         const isSelected = answers[qKey] === option;
