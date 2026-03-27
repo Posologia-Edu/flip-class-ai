@@ -140,7 +140,7 @@ const RoomManage = () => {
   const [activityToSave, setActivityToSave] = useState<Activity | null>(null);
   const [aiGrading, setAiGrading] = useState<string | null>(null);
   const [aiGradingAll, setAiGradingAll] = useState<string | null>(null);
-  const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string }>>({});
+  const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string; _maxScore?: number }>>({});
   const [sendingFeedbackEmail, setSendingFeedbackEmail] = useState<string | null>(null);
 
   // New material form state
