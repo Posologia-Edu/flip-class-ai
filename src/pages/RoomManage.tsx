@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine, Mail } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine, Mail, MailCheck } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
 import { RoomCollaborators } from "@/components/RoomCollaborators";
@@ -678,6 +679,9 @@ const RoomManage = () => {
         console.error("Send feedback email error:", error, data);
         throw error;
       }
+      // Mark session as feedback email sent
+      await supabase.from("student_sessions").update({ feedback_email_sent_at: new Date().toISOString() } as any).eq("id", session.id);
+      setSessions(prev => prev.map(ss => ss.id === session.id ? { ...ss, feedback_email_sent_at: new Date().toISOString() } as any : ss));
       toast({ title: "E-mail enviado!", description: `Feedback enviado para ${studentEmail}.` });
     } catch (err: any) {
       toast({ title: "Erro ao enviar e-mail", description: err.message, variant: "destructive" });
@@ -1680,7 +1684,15 @@ const RoomManage = () => {
                   <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
                       <div>
-                        <p className="font-medium text-card-foreground">{s.student_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-card-foreground">{s.student_name}</p>
+                          {(s as any).feedback_email_sent_at && (
+                            <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0">
+                              <MailCheck className="w-3 h-3" />
+                              Feedback enviado
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           {(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}
                           {totalPossiblePoints > 0 && (
