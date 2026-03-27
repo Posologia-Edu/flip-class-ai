@@ -1853,7 +1853,7 @@ const RoomManage = () => {
                               return feedbacks[fbKey]?.saved;
                             });
                             const hasEmail = !!(s as any).student_email;
-                            return allSaved ? (
+                            return allDone ? (
                               <div className="border-t border-border pt-4 mt-4 flex justify-end">
                                 <Button
                                   size="sm"
