@@ -677,13 +677,20 @@ const RoomManage = () => {
     try {
       const batchItems: any[] = [];
       const keys: string[] = [];
+      // Only grade non-hidden, non-objective questions
       quizData.levels?.forEach((level, li) => {
         level.questions?.forEach((q, qi) => {
+          if (q.type === "multiple_choice") return; // already auto-graded
           const key = `${li}-${qi}`;
           keys.push(key);
           batchItems.push({ question: q.question, context: q.context || "", correctAnswer: q.correct_answer, studentAnswer: studentAnswers[key] || "" });
         });
       });
+      if (batchItems.length === 0) {
+        toast({ title: "Nenhuma questão para corrigir", description: "Todas as questões são objetivas e já foram corrigidas automaticamente." });
+        setAiGradingAll(null);
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("ai-grade", { body: { batchItems } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
