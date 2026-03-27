@@ -140,7 +140,7 @@ const RoomManage = () => {
   const [activityToSave, setActivityToSave] = useState<Activity | null>(null);
   const [aiGrading, setAiGrading] = useState<string | null>(null);
   const [aiGradingAll, setAiGradingAll] = useState<string | null>(null);
-  const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string }>>({});
+  const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string; _maxScore?: number }>>({});
   const [sendingFeedbackEmail, setSendingFeedbackEmail] = useState<string | null>(null);
 
   // New material form state
@@ -689,22 +689,24 @@ const RoomManage = () => {
     setSendingFeedbackEmail(null);
   };
 
-  const aiGradeQuestion = async (sessionId: string, questionKey: string, question: string, context: string | undefined, correctAnswer: string, studentAnswer: string) => {
+  const aiGradeQuestion = async (sessionId: string, questionKey: string, question: string, context: string | undefined, correctAnswer: string, studentAnswer: string, maxScore?: number) => {
     const fbKey = `${sessionId}-${questionKey}`;
+    const effectiveMax = maxScore || 10;
     setAiGrading(fbKey);
     try {
       const { data, error } = await supabase.functions.invoke("ai-grade", {
-        body: { question, context: context || "", correctAnswer, studentAnswer },
+        body: { question, context: context || "", correctAnswer, studentAnswer, maxScore: effectiveMax },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const result = data.results?.[0];
       if (!result) throw new Error("Sem resultado da IA");
+      result._maxScore = effectiveMax;
       setAiResults(prev => ({ ...prev, [fbKey]: result }));
       const feedbackText = `${result.feedback}\n\n✅ Pontos fortes: ${result.strengths.join("; ")}\n⚠️ A melhorar: ${result.weaknesses.join("; ")}\n💡 Sugestão: ${result.suggestion}`;
       updateFeedbackField(sessionId, questionKey, "feedback_text", feedbackText);
       updateFeedbackField(sessionId, questionKey, "grade", result.grade);
-      toast({ title: "Correção por IA concluída!", description: `Nota sugerida: ${result.grade}/10. Revise e salve.` });
+      toast({ title: "Correção por IA concluída!", description: `Nota sugerida: ${result.grade}/${effectiveMax}. Revise e salve.` });
     } catch (err: any) {
       toast({ title: "Erro na correção por IA", description: err.message, variant: "destructive" });
     }
@@ -716,13 +718,16 @@ const RoomManage = () => {
     try {
       const batchItems: any[] = [];
       const keys: string[] = [];
+      const maxScores: number[] = [];
       // Only grade non-hidden, non-objective questions
       quizData.levels?.forEach((level, li) => {
         level.questions?.forEach((q, qi) => {
           if (q.type === "multiple_choice") return; // already auto-graded
           const key = `${li}-${qi}`;
+          const effectiveMax = q.points || 10;
           keys.push(key);
-          batchItems.push({ question: q.question, context: q.context || "", correctAnswer: q.correct_answer, studentAnswer: studentAnswers[key] || "" });
+          maxScores.push(effectiveMax);
+          batchItems.push({ question: q.question, context: q.context || "", correctAnswer: q.correct_answer, studentAnswer: studentAnswers[key] || "", maxScore: effectiveMax });
         });
       });
       if (batchItems.length === 0) {
@@ -737,6 +742,7 @@ const RoomManage = () => {
       results.forEach((result: any, i: number) => {
         const key = keys[i];
         const fbKey = `${sessionId}-${key}`;
+        result._maxScore = maxScores[i];
         setAiResults(prev => ({ ...prev, [fbKey]: result }));
         const feedbackText = `${result.feedback}\n\n✅ Pontos fortes: ${result.strengths.join("; ")}\n⚠️ A melhorar: ${result.weaknesses.join("; ")}\n💡 Sugestão: ${result.suggestion}`;
         updateFeedbackField(sessionId, key, "feedback_text", feedbackText);
@@ -1759,7 +1765,7 @@ const RoomManage = () => {
                                                   <span>
                                                     <Button size="sm" variant="ghost" className="text-xs h-7 gap-1"
                                                       disabled={aiGrading === fbKey || !answer || !canUseAiCorrection()}
-                                                      onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "")}
+                                                      onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "", q.points)}
                                                     >
                                                       {aiGrading === fbKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                                                       Corrigir com IA
@@ -1772,7 +1778,7 @@ const RoomManage = () => {
                                           </div>
                                           {aiResults[fbKey] && (
                                             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs space-y-1.5">
-                                              <div className="flex items-center gap-2 font-semibold text-primary"><Bot className="w-3.5 h-3.5" /> Sugestão da IA — Nota: {aiResults[fbKey].grade}/10</div>
+                                              <div className="flex items-center gap-2 font-semibold text-primary"><Bot className="w-3.5 h-3.5" /> Sugestão da IA — Nota: {aiResults[fbKey].grade}/{aiResults[fbKey]._maxScore || 10}</div>
                                               {aiResults[fbKey].strengths.length > 0 && <p className="text-foreground/80"><ThumbsUp className="w-3 h-3 inline mr-1 text-primary" />{aiResults[fbKey].strengths.join("; ")}</p>}
                                               {aiResults[fbKey].weaknesses.length > 0 && <p className="text-foreground/80"><ThumbsDown className="w-3 h-3 inline mr-1 text-destructive" />{aiResults[fbKey].weaknesses.join("; ")}</p>}
                                               {aiResults[fbKey].suggestion && <p className="text-foreground/80"><Lightbulb className="w-3 h-3 inline mr-1 text-accent" />{aiResults[fbKey].suggestion}</p>}
