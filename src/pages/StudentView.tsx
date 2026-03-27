@@ -798,7 +798,7 @@ const StudentView = () => {
                           <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
                           <div className="bg-secondary rounded-lg p-3 mb-2">
                             <p className="text-xs font-semibold text-muted-foreground mb-1">Sua resposta:</p>
-                            <p className="text-sm text-foreground">{answers[key] || <span className="italic text-muted-foreground">Não respondida</span>}</p>
+                            <p className="text-sm text-foreground">{typeof answers[key] === 'object' ? JSON.stringify(answers[key]) : answers[key] || <span className="italic text-muted-foreground">Não respondida</span>}</p>
                           </div>
                           {fb ? (
                             <div className="border-t border-border pt-3 mt-3 space-y-2">
