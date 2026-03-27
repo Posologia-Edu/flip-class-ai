@@ -1554,7 +1554,8 @@ const RoomManage = () => {
                     const fbKey = `${s.id}-${li}-${qi}`;
                     const fb = feedbacks[fbKey];
                     if (fb?.grade != null) {
-                      return s2 + Math.round((fb.grade / 10) * q.points);
+                      // Grade is now the actual points earned (not a 0-10 scale)
+                      return s2 + fb.grade;
                     }
                     // For multiple choice, auto-grade
                     if (q.type === "multiple_choice") {
