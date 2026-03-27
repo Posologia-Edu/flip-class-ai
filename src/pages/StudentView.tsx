@@ -744,6 +744,9 @@ const StudentView = () => {
           <button onClick={() => setTab("peer-review")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "peer-review" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Users className="w-4 h-4" /> Avaliação por Pares
           </button>
+          <button onClick={() => setTab("assistant")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "assistant" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Bot className="w-4 h-4" /> Assistente IA
+          </button>
         </div>
       </div>
 
