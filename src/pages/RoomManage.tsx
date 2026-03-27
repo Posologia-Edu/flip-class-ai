@@ -255,6 +255,41 @@ const RoomManage = () => {
     };
   }, [roomId, fetchData]);
 
+  // Auto-populate feedback grades for objective questions (multiple choice)
+  useEffect(() => {
+    if (sessions.length === 0 || activities.length === 0) return;
+    const newFeedbacks: Record<string, { feedback_text: string; grade: number | null; saved: boolean }> = {};
+    
+    for (const s of sessions) {
+      if (!s.completed_at || !s.answers) continue;
+      const studentAnswers = s.answers as Record<string, string>;
+      
+      const filteredLevels = activities.flatMap(act => {
+        const q = act.quiz_data as unknown as QuizData;
+        if (!q?.levels) return [];
+        return q.levels.map(l => ({
+          ...l,
+          questions: (l.questions || []).filter((qq: any) => !qq.hidden),
+        })).filter(l => l.questions.length > 0);
+      });
+      
+      filteredLevels.forEach((level, li) => {
+        level.questions?.forEach((q, qi) => {
+          if (q.type !== "multiple_choice" || !q.points) return;
+          const fbKey = `${s.id}-${li}-${qi}`;
+          if (feedbacks[fbKey]) return;
+          const answer = studentAnswers[`${li}-${qi}`];
+          const grade = answer === q.correct_answer ? q.points : 0;
+          newFeedbacks[fbKey] = { feedback_text: "", grade, saved: false };
+        });
+      });
+    }
+    
+    if (Object.keys(newFeedbacks).length > 0) {
+      setFeedbacks(prev => ({ ...newFeedbacks, ...prev }));
+    }
+  }, [sessions, activities]);
+
   const extractYoutubeId = (url: string) => {
     const match = url.match(/(?:youtu\.be\/|v=|\/embed\/|\/v\/|\/watch\?v=)([^&?\s]+)/);
     return match?.[1] || null;
@@ -602,15 +637,21 @@ const RoomManage = () => {
     }
     setSendingFeedbackEmail(session.id);
     try {
-      const questions = quizLevels.flatMap((level, li) =>
-        (level.questions || []).filter(q => !q.hidden).map((q, qi) => {
+      // Filter hidden questions to match student answer indices
+      const filteredLevels = quizLevels.map(l => ({
+        ...l,
+        questions: (l.questions || []).filter(q => !q.hidden),
+      })).filter(l => l.questions.length > 0);
+
+      const questions = filteredLevels.flatMap((level, li) =>
+        level.questions.map((q, qi) => {
           const key = `${li}-${qi}`;
           const fbKey = `${session.id}-${key}`;
           const fb = feedbacks[fbKey];
           return {
             question: q.question,
             studentAnswer: studentAnswers?.[key] || "",
-            grade: fb?.grade ?? null,
+            grade: fb?.grade ?? (q.type === "multiple_choice" && studentAnswers?.[key] === q.correct_answer ? (q.points || 0) : null),
             maxPoints: q.points || 10,
             feedbackText: fb?.feedback_text || "",
           };
@@ -671,13 +712,20 @@ const RoomManage = () => {
     try {
       const batchItems: any[] = [];
       const keys: string[] = [];
+      // Only grade non-hidden, non-objective questions
       quizData.levels?.forEach((level, li) => {
         level.questions?.forEach((q, qi) => {
+          if (q.type === "multiple_choice") return; // already auto-graded
           const key = `${li}-${qi}`;
           keys.push(key);
           batchItems.push({ question: q.question, context: q.context || "", correctAnswer: q.correct_answer, studentAnswer: studentAnswers[key] || "" });
         });
       });
+      if (batchItems.length === 0) {
+        toast({ title: "Nenhuma questão para corrigir", description: "Todas as questões são objetivas e já foram corrigidas automaticamente." });
+        setAiGradingAll(null);
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("ai-grade", { body: { batchItems } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -1597,25 +1645,29 @@ const RoomManage = () => {
               {sessions.filter(s => s.completed_at && s.answers).map((s) => {
                 const studentAnswers = s.answers as Record<string, string>;
                 const isExpanded = expandedStudent === s.id;
-                // Use all activities for answers display
+                // Use all activities for answers display, filtering hidden questions
+                // to match the student view indices
                 const allQuizLevels = activities.flatMap(act => {
                   const q = act.quiz_data as unknown as QuizData;
-                  return q?.levels || [];
+                  if (!q?.levels) return [];
+                  return q.levels.map(l => ({
+                    ...l,
+                    questions: (l.questions || []).filter((qq: any) => !qq.hidden),
+                  })).filter(l => l.questions.length > 0);
                 });
                 const combinedQuiz: QuizData = { levels: allQuizLevels };
 
-                // Calculate points earned from teacher feedbacks
-                const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.hidden ? 0 : (q.points || 0)), 0) || 0), 0);
+                // Calculate points earned from teacher feedbacks + auto-graded objectives
+                const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.points || 0), 0) || 0), 0);
                 const earnedPoints = allQuizLevels.reduce((sum, l, li) => {
                   return sum + (l.questions?.reduce((s2, q, qi) => {
-                    if (q.hidden || !q.points) return s2;
+                    if (!q.points) return s2;
                     const fbKey = `${s.id}-${li}-${qi}`;
                     const fb = feedbacks[fbKey];
                     if (fb?.grade != null) {
-                      // Grade is now the actual points earned (not a 0-10 scale)
                       return s2 + fb.grade;
                     }
-                    // For multiple choice, auto-grade
+                    // For auto-gradeable types, count if correct
                     if (q.type === "multiple_choice") {
                       const answer = studentAnswers?.[`${li}-${qi}`];
                       if (answer === q.correct_answer) return s2 + q.points;
@@ -1793,11 +1845,15 @@ const RoomManage = () => {
                           {/* Send feedback email button */}
                           {(() => {
                             const allQKeys = combinedQuiz.levels.flatMap((l, li) =>
-                              (l.questions || []).filter(q => !q.hidden).map((_, qi) => `${s.id}-${li}-${qi}`)
+                              (l.questions || []).map((q, qi) => ({ fbKey: `${s.id}-${li}-${qi}`, type: q.type, correct: q.correct_answer, answer: studentAnswers?.[`${li}-${qi}`], points: q.points }))
                             );
-                            const allSaved = allQKeys.length > 0 && allQKeys.every(k => feedbacks[k]?.saved);
+                            // Objective questions count as "done" even without explicit save
+                            const allDone = allQKeys.length > 0 && allQKeys.every(({ fbKey, type }) => {
+                              if (type === "multiple_choice") return true; // auto-graded
+                              return feedbacks[fbKey]?.saved;
+                            });
                             const hasEmail = !!(s as any).student_email;
-                            return allSaved ? (
+                            return allDone ? (
                               <div className="border-t border-border pt-4 mt-4 flex justify-end">
                                 <Button
                                   size="sm"
