@@ -49,7 +49,7 @@ interface QuizQuestion {
   difficulty?: string;
 }
 
-type ActivityGenerationType = "quiz" | "case_study";
+type ActivityGenerationType = "quiz" | "case_study" | "interactive";
 
 interface QuizLevel {
   level: number;
