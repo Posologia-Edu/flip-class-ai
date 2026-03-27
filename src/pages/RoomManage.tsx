@@ -612,7 +612,7 @@ const RoomManage = () => {
       const totalPossible = questions.reduce((s, q) => s + q.maxPoints, 0);
       const totalEarned = questions.reduce((s, q) => s + (q.grade ?? 0), 0);
 
-      const { error } = await supabase.functions.invoke("send-transactional-email", {
+      const { data, error } = await supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "feedback-completed",
           recipientEmail: studentEmail,
@@ -626,7 +626,10 @@ const RoomManage = () => {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        console.error("Send feedback email error:", error, data);
+        throw error;
+      }
       toast({ title: "E-mail enviado!", description: `Feedback enviado para ${studentEmail}.` });
     } catch (err: any) {
       toast({ title: "Erro ao enviar e-mail", description: err.message, variant: "destructive" });
