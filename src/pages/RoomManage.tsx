@@ -602,15 +602,21 @@ const RoomManage = () => {
     }
     setSendingFeedbackEmail(session.id);
     try {
-      const questions = quizLevels.flatMap((level, li) =>
-        (level.questions || []).filter(q => !q.hidden).map((q, qi) => {
+      // Filter hidden questions to match student answer indices
+      const filteredLevels = quizLevels.map(l => ({
+        ...l,
+        questions: (l.questions || []).filter(q => !q.hidden),
+      })).filter(l => l.questions.length > 0);
+
+      const questions = filteredLevels.flatMap((level, li) =>
+        level.questions.map((q, qi) => {
           const key = `${li}-${qi}`;
           const fbKey = `${session.id}-${key}`;
           const fb = feedbacks[fbKey];
           return {
             question: q.question,
             studentAnswer: studentAnswers?.[key] || "",
-            grade: fb?.grade ?? null,
+            grade: fb?.grade ?? (q.type === "multiple_choice" && studentAnswers?.[key] === q.correct_answer ? (q.points || 0) : null),
             maxPoints: q.points || 10,
             feedbackText: fb?.feedback_text || "",
           };
