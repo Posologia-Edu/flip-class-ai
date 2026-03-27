@@ -229,6 +229,13 @@ const StudentView = () => {
   const accessedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
 
+  // Refs to avoid resetting the heartbeat interval on every tab/material change
+  const tabRef = useRef(tab);
+  const activeMaterialIdRef = useRef(activeMaterialId);
+  const logActivityRef = useRef<((activityType: string, materialId?: string, durationSeconds?: number) => Promise<void>) | null>(null);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
+  useEffect(() => { activeMaterialIdRef.current = activeMaterialId; }, [activeMaterialId]);
+
   const getSessionToken = useCallback(() => {
     return sessionId ? sessionStorage.getItem(`session_token_${sessionId}`) || "" : "";
   }, [sessionId]);
@@ -254,16 +261,27 @@ const StudentView = () => {
     }
   }, [sessionId, roomId, getSessionToken]);
 
+  useEffect(() => { logActivityRef.current = logActivity; }, [logActivity]);
+
+  // Stable heartbeat: interval only depends on sessionId/roomId, reads tab/material from refs
   useEffect(() => {
     if (!sessionId || !roomId) return;
-    activeTimer.current = setInterval(() => {
+    let elapsed = 0;
+    const TICK = 5000; // check every 5s
+    const HEARTBEAT = 30; // report every 30s of active time
+
+    const tickTimer = setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      logActivity("page_active", tab === "materials" ? activeMaterialId || undefined : undefined, 30);
-    }, 30000);
-    return () => {
-      if (activeTimer.current) clearInterval(activeTimer.current);
-    };
-  }, [sessionId, roomId, tab, activeMaterialId, logActivity]);
+      elapsed += TICK / 1000;
+      if (elapsed >= HEARTBEAT) {
+        const materialId = tabRef.current === "materials" ? activeMaterialIdRef.current || undefined : undefined;
+        logActivityRef.current("page_active", materialId, HEARTBEAT);
+        elapsed = 0;
+      }
+    }, TICK);
+
+    return () => clearInterval(tickTimer);
+  }, [sessionId, roomId]);
 
   // Track material interaction explicitly for future page_active attribution
   const handleMaterialInteraction = useCallback((materialId: string) => {
