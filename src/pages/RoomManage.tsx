@@ -189,7 +189,14 @@ const RoomManage = () => {
           const key = `${fb.session_id}-${fb.question_key}`;
           fbMap[key] = { feedback_text: fb.feedback_text || "", grade: fb.grade, saved: true };
         });
-        setFeedbacks(fbMap);
+        setFeedbacks((prev) => {
+          const next = { ...prev };
+          Object.entries(fbMap).forEach(([key, serverFeedback]) => {
+            if (prev[key]?.saved === false) return;
+            next[key] = serverFeedback;
+          });
+          return next;
+        });
       }
     }
     if (roomRes.data?.unlock_at) {
