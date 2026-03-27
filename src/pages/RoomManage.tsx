@@ -1845,9 +1845,13 @@ const RoomManage = () => {
                           {/* Send feedback email button */}
                           {(() => {
                             const allQKeys = combinedQuiz.levels.flatMap((l, li) =>
-                              (l.questions || []).filter(q => !q.hidden).map((_, qi) => `${s.id}-${li}-${qi}`)
+                              (l.questions || []).map((q, qi) => ({ fbKey: `${s.id}-${li}-${qi}`, type: q.type, correct: q.correct_answer, answer: studentAnswers?.[`${li}-${qi}`], points: q.points }))
                             );
-                            const allSaved = allQKeys.length > 0 && allQKeys.every(k => feedbacks[k]?.saved);
+                            // Objective questions count as "done" even without explicit save
+                            const allDone = allQKeys.length > 0 && allQKeys.every(({ fbKey, type }) => {
+                              if (type === "multiple_choice") return true; // auto-graded
+                              return feedbacks[fbKey]?.saved;
+                            });
                             const hasEmail = !!(s as any).student_email;
                             return allSaved ? (
                               <div className="border-t border-border pt-4 mt-4 flex justify-end">
