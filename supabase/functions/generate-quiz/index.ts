@@ -83,7 +83,68 @@ Regras:
 - TODOS os casos devem estar DIRETAMENTE relacionados ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
-const QUIZ_PROMPT = `Você é um gerador de quizzes educacionais de múltipla escolha para um sistema de Sala de Aula Invertida.
+
+const INTERACTIVE_PROMPT = `Você é um gerador de atividades educacionais INTERATIVAS para um sistema de Sala de Aula Invertida.
+
+Dado o CONTEÚDO de um material educacional, gere atividades interativas variadas usando os seguintes tipos:
+
+1. **drag_and_drop** — O aluno arrasta itens para categorias corretas.
+2. **fill_in_the_blank** — O aluno preenche lacunas em um texto com as palavras corretas.
+3. **matching** — O aluno conecta pares de termos e definições.
+4. **ordering** — O aluno ordena itens na sequência correta.
+
+Retorne um JSON com esta estrutura EXATA:
+{
+  "levels": [
+    {
+      "level": 1,
+      "label": "Atividades Interativas",
+      "questions": [
+        {
+          "question": "Arraste cada conceito para a categoria correta:",
+          "type": "drag_and_drop",
+          "items": ["Item A", "Item B", "Item C", "Item D"],
+          "categories": ["Categoria 1", "Categoria 2"],
+          "correct_mapping": {"Item A": "Categoria 1", "Item B": "Categoria 2", "Item C": "Categoria 1", "Item D": "Categoria 2"}
+        },
+        {
+          "question": "O ___ é o processo pelo qual ___ ocorre na célula.",
+          "type": "fill_in_the_blank",
+          "blanks": ["metabolismo", "energia"],
+          "correct_answers": ["metabolismo", "produção de energia"]
+        },
+        {
+          "question": "Conecte cada termo à sua definição:",
+          "type": "matching",
+          "pairs": [
+            {"left": "Termo 1", "right": "Definição 1"},
+            {"left": "Termo 2", "right": "Definição 2"},
+            {"left": "Termo 3", "right": "Definição 3"}
+          ]
+        },
+        {
+          "question": "Ordene os passos do processo na sequência correta:",
+          "type": "ordering",
+          "items": ["Passo C", "Passo A", "Passo B"],
+          "correct_order": [1, 2, 0]
+        }
+      ]
+    }
+  ]
+}
+
+Regras:
+- Gere EXATAMENTE 5 questões interativas em um único nível chamado "Atividades Interativas".
+- Use uma MIX dos 4 tipos: pelo menos 1 de cada tipo, e um tipo extra à sua escolha.
+- Para drag_and_drop: 3-6 itens e 2-3 categorias.
+- Para fill_in_the_blank: use ___ no texto para marcar lacunas. O campo "blanks" contém dicas. O campo "correct_answers" contém as respostas exatas.
+- Para matching: 3-5 pares.
+- Para ordering: 3-5 itens. O campo "correct_order" indica os índices corretos (0-based) a partir do array "items" embaralhado.
+- TODAS as questões devem ser em Português (Brasil).
+- TODAS devem estar DIRETAMENTE relacionadas ao conteúdo fornecido.
+- Retorne APENAS o JSON, sem markdown, sem explicação.`;
+
+
 
 Dado o CONTEÚDO de um material educacional, você DEVE gerar 5 questões de múltipla escolha com 4 alternativas cada uma, diretamente relacionadas ao conteúdo fornecido.
 
