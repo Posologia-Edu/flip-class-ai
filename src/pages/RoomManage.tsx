@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine } from "lucide-react";
+import { ArrowLeft, Plus, Video, FileText, Sparkles, Clock, Trash2, Loader2, BarChart3, Users, Eye, Timer, ChevronDown, ChevronUp, MessageSquare, FileEdit, Check, Save, BookmarkPlus, Library, Download, TrendingUp, Upload, Link, Headphones, Presentation, File, Bot, ThumbsUp, ThumbsDown, Lightbulb, Lock, EyeOff, PenLine, Mail } from "lucide-react";
 import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
 import { RoomCollaborators } from "@/components/RoomCollaborators";
@@ -140,6 +140,7 @@ const RoomManage = () => {
   const [aiGrading, setAiGrading] = useState<string | null>(null);
   const [aiGradingAll, setAiGradingAll] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<Record<string, { grade: number; feedback: string; strengths: string[]; weaknesses: string[]; suggestion: string }>>({});
+  const [sendingFeedbackEmail, setSendingFeedbackEmail] = useState<string | null>(null);
 
   // New material form state
   const [newMaterialType, setNewMaterialType] = useState("video");
