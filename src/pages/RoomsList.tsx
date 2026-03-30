@@ -276,6 +276,64 @@ const RoomsList = () => {
     fetchRooms();
   };
 
+  const duplicateRoom = async (room: Room) => {
+    if (!auth.user) return;
+    if (!canCreateRoom(rooms.length)) {
+      toast({ title: "Limite de salas atingido", variant: "destructive" });
+      return;
+    }
+    const insertData: any = {
+      title: `${room.title} (cópia)`,
+      pin_code: generatePin(),
+      teacher_id: auth.user.id,
+      discipline_id: room.discipline_id || null,
+    };
+    if ((room as any).expire_at) insertData.expire_at = (room as any).expire_at;
+    const { data: newRoom, error } = await supabase.from("rooms").insert(insertData).select().single();
+    if (error) {
+      toast({ title: "Erro ao duplicar", description: error.message, variant: "destructive" });
+      return;
+    }
+    // Copy materials, activities, students
+    const [{ data: mats }, { data: acts }, { data: studs }] = await Promise.all([
+      supabase.from("materials").select("title, type, url, thumbnail_url, content_text_for_ai, is_published").eq("room_id", room.id),
+      supabase.from("activities").select("material_id, quiz_data, is_published, title, peer_review_enabled, peer_review_criteria").eq("room_id", room.id),
+      supabase.from("room_students").select("student_email, student_name").eq("room_id", room.id),
+    ]);
+    if (studs && studs.length > 0) await supabase.from("room_students").insert(studs.map(s => ({ room_id: newRoom.id, student_email: s.student_email, student_name: s.student_name })));
+    if (mats && mats.length > 0) await supabase.from("materials").insert(mats.map(m => ({ room_id: newRoom.id, ...m })));
+    if (acts && acts.length > 0) {
+      const { data: newMats } = await supabase.from("materials").select("id, title").eq("room_id", newRoom.id);
+      const matMap = new Map((newMats || []).map(m => [m.title, m.id]));
+      const { data: origMats } = await supabase.from("materials").select("id, title").eq("room_id", room.id);
+      const origMap = new Map((origMats || []).map(m => [m.id, m.title]));
+      await supabase.from("activities").insert(acts.map(a => {
+        const origTitle = a.material_id ? origMap.get(a.material_id) : null;
+        const newMatId = origTitle ? matMap.get(origTitle) || null : null;
+        return { room_id: newRoom.id, material_id: newMatId, quiz_data: a.quiz_data, is_published: a.is_published, title: a.title, peer_review_enabled: a.peer_review_enabled, peer_review_criteria: a.peer_review_criteria };
+      }));
+    }
+    toast({ title: "Sala duplicada!" });
+    fetchRooms();
+  };
+
+  const renameRoom = async () => {
+    if (!renamingRoom || !renameTitle.trim()) return;
+    const { error } = await supabase.from("rooms").update({ title: renameTitle.trim() }).eq("id", renamingRoom.id);
+    if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
+    else toast({ title: "Sala renomeada!" });
+    setRenamingRoom(null);
+    setRenameTitle("");
+    setRenameDialogOpen(false);
+    fetchRooms();
+  };
+
+  const linkRoomToDiscipline = async (roomId: string, discId: string) => {
+    await (supabase.from("rooms") as any).update({ discipline_id: discId }).eq("id", roomId);
+    toast({ title: "Sala vinculada à disciplina!" });
+    fetchRooms();
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
