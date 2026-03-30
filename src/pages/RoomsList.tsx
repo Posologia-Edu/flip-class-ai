@@ -836,6 +836,19 @@ const RoomsList = () => {
           </div>
         </div>
       )}
+
+      {/* Rename dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={(v) => { setRenameDialogOpen(v); if (!v) setRenamingRoom(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">Renomear Sala</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <Input value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renameRoom()} />
+            <Button onClick={renameRoom} disabled={!renameTitle.trim()} className="w-full font-semibold">Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
