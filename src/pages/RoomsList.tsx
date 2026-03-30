@@ -76,6 +76,10 @@ const RoomsList = () => {
   const [editingDisc, setEditingDisc] = useState<Discipline | null>(null);
   const [creatingDisc, setCreatingDisc] = useState(false);
   const [selectedDisciplineForRoom, setSelectedDisciplineForRoom] = useState<string>("");
+  const [renamingRoom, setRenamingRoom] = useState<Room | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
   const navigate = useNavigate();
   const { toast } = useToast();
