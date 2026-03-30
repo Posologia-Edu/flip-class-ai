@@ -9,8 +9,10 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock,
   CalendarClock, Users2, Download, FileText, ClipboardList,
-  FolderOpen, ArrowLeft, Palette, Pencil,
+  FolderOpen, ArrowLeft, Palette, Pencil, Copy, Link,
+  MoreVertical,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -74,6 +76,10 @@ const RoomsList = () => {
   const [editingDisc, setEditingDisc] = useState<Discipline | null>(null);
   const [creatingDisc, setCreatingDisc] = useState(false);
   const [selectedDisciplineForRoom, setSelectedDisciplineForRoom] = useState<string>("");
+  const [renamingRoom, setRenamingRoom] = useState<Room | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -270,6 +276,64 @@ const RoomsList = () => {
     fetchRooms();
   };
 
+  const duplicateRoom = async (room: Room) => {
+    if (!auth.user) return;
+    if (!canCreateRoom(rooms.length)) {
+      toast({ title: "Limite de salas atingido", variant: "destructive" });
+      return;
+    }
+    const insertData: any = {
+      title: `${room.title} (cópia)`,
+      pin_code: generatePin(),
+      teacher_id: auth.user.id,
+      discipline_id: room.discipline_id || null,
+    };
+    if ((room as any).expire_at) insertData.expire_at = (room as any).expire_at;
+    const { data: newRoom, error } = await supabase.from("rooms").insert(insertData).select().single();
+    if (error) {
+      toast({ title: "Erro ao duplicar", description: error.message, variant: "destructive" });
+      return;
+    }
+    // Copy materials, activities, students
+    const [{ data: mats }, { data: acts }, { data: studs }] = await Promise.all([
+      supabase.from("materials").select("title, type, url, thumbnail_url, content_text_for_ai, is_published").eq("room_id", room.id),
+      supabase.from("activities").select("material_id, quiz_data, is_published, title, peer_review_enabled, peer_review_criteria").eq("room_id", room.id),
+      supabase.from("room_students").select("student_email, student_name").eq("room_id", room.id),
+    ]);
+    if (studs && studs.length > 0) await supabase.from("room_students").insert(studs.map(s => ({ room_id: newRoom.id, student_email: s.student_email, student_name: s.student_name })));
+    if (mats && mats.length > 0) await supabase.from("materials").insert(mats.map(m => ({ room_id: newRoom.id, ...m })));
+    if (acts && acts.length > 0) {
+      const { data: newMats } = await supabase.from("materials").select("id, title").eq("room_id", newRoom.id);
+      const matMap = new Map((newMats || []).map(m => [m.title, m.id]));
+      const { data: origMats } = await supabase.from("materials").select("id, title").eq("room_id", room.id);
+      const origMap = new Map((origMats || []).map(m => [m.id, m.title]));
+      await supabase.from("activities").insert(acts.map(a => {
+        const origTitle = a.material_id ? origMap.get(a.material_id) : null;
+        const newMatId = origTitle ? matMap.get(origTitle) || null : null;
+        return { room_id: newRoom.id, material_id: newMatId, quiz_data: a.quiz_data, is_published: a.is_published, title: a.title, peer_review_enabled: a.peer_review_enabled, peer_review_criteria: a.peer_review_criteria };
+      }));
+    }
+    toast({ title: "Sala duplicada!" });
+    fetchRooms();
+  };
+
+  const renameRoom = async () => {
+    if (!renamingRoom || !renameTitle.trim()) return;
+    const { error } = await supabase.from("rooms").update({ title: renameTitle.trim() }).eq("id", renamingRoom.id);
+    if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
+    else toast({ title: "Sala renomeada!" });
+    setRenamingRoom(null);
+    setRenameTitle("");
+    setRenameDialogOpen(false);
+    fetchRooms();
+  };
+
+  const linkRoomToDiscipline = async (roomId: string, discId: string) => {
+    await (supabase.from("rooms") as any).update({ discipline_id: discId }).eq("id", roomId);
+    toast({ title: "Sala vinculada à disciplina!" });
+    fetchRooms();
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
@@ -313,23 +377,55 @@ const RoomsList = () => {
               )}
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="font-semibold" disabled={atLimit}>
-                {atLimit ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                {atLimit ? "Limite atingido" : "Nova Sala"}
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle className="font-display">Criar Nova Sala</DialogTitle>
-              </DialogHeader>
-              {renderCreateRoomForm()}
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            {unlinkedRooms.length > 0 && (
+              <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="font-semibold">
+                    <Link className="w-4 h-4 mr-2" /> Vincular Sala
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="font-display">Vincular sala existente</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm text-muted-foreground mb-3">Selecione uma sala sem disciplina para vincular a <strong>{disc?.title}</strong>:</p>
+                    {unlinkedRooms.map(r => (
+                      <button
+                        key={r.id}
+                        className="w-full text-left border border-border rounded-lg p-3 hover:bg-accent transition-colors flex items-center justify-between"
+                        onClick={async () => {
+                          await linkRoomToDiscipline(r.id, disciplineId!);
+                          setLinkDialogOpen(false);
+                        }}
+                      >
+                        <span className="font-medium text-foreground">{r.title}</span>
+                        <span className="text-xs text-muted-foreground">{roomStats[r.id]?.studentCount || 0} alunos</span>
+                      </button>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="font-semibold" disabled={atLimit}>
+                  {atLimit ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                  {atLimit ? "Limite atingido" : "Nova Sala"}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="font-display">Criar Nova Sala</DialogTitle>
+                </DialogHeader>
+                {renderCreateRoomForm()}
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {discRooms.length === 0 ? (
+        {discRooms.length === 0 && unlinkedRooms.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-4">
               <BookOpen className="w-8 h-8 text-muted-foreground" />
@@ -337,11 +433,32 @@ const RoomsList = () => {
             <h3 className="font-display text-xl font-semibold text-foreground mb-2">Nenhuma sala nesta disciplina</h3>
             <p className="text-muted-foreground">Crie uma sala de aula invertida para esta disciplina.</p>
           </div>
+        ) : discRooms.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-4">
+              <BookOpen className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-display text-xl font-semibold text-foreground mb-2">Nenhuma sala nesta disciplina</h3>
+            <p className="text-muted-foreground">Crie uma nova sala ou vincule uma existente.</p>
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {discRooms.map(room => renderRoomCard(room))}
           </div>
         )}
+
+        {/* Rename dialog */}
+        <Dialog open={renameDialogOpen} onOpenChange={(v) => { setRenameDialogOpen(v); if (!v) setRenamingRoom(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display">Renomear Sala</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <Input value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renameRoom()} />
+              <Button onClick={renameRoom} disabled={!renameTitle.trim()} className="w-full font-semibold">Salvar</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -437,21 +554,36 @@ const RoomsList = () => {
         onClick={() => navigate(`/dashboard/room/${room.id}`)}
       >
         <div className="flex items-start justify-between mb-3">
-          <h3 className="font-display font-semibold text-lg text-card-foreground group-hover:text-primary transition-colors">
+          <h3 className="font-display font-semibold text-lg text-card-foreground group-hover:text-primary transition-colors pr-2">
             {room.title}
           </h3>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
               expired ? "bg-destructive/10 text-destructive" : "bg-level-easy/10 text-level-easy"
             }`}>
               {expired ? "Expirada" : "Ativa"}
             </span>
-            <button
-              onClick={(e) => { e.stopPropagation(); deleteRoom(room.id); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onClick={() => { setRenamingRoom(room); setRenameTitle(room.title); setRenameDialogOpen(true); }}>
+                  <Pencil className="w-4 h-4 mr-2" /> Renomear
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => duplicateRoom(room)}>
+                  <Copy className="w-4 h-4 mr-2" /> Duplicar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => deleteRoom(room.id)} className="text-destructive focus:text-destructive">
+                  <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
@@ -704,6 +836,19 @@ const RoomsList = () => {
           </div>
         </div>
       )}
+
+      {/* Rename dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={(v) => { setRenameDialogOpen(v); if (!v) setRenamingRoom(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">Renomear Sala</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <Input value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renameRoom()} />
+            <Button onClick={renameRoom} disabled={!renameTitle.trim()} className="w-full font-semibold">Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
