@@ -64,6 +64,7 @@ function AppContent() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/rooms" element={<RoomsList />} />
+          <Route path="/dashboard/rooms/discipline/:disciplineId" element={<RoomsList />} />
           <Route path="/dashboard/room/:roomId" element={<RoomManage />} />
           <Route path="/dashboard/activity-bank" element={<QuestionBank />} />
           <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
