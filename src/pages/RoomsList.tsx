@@ -377,23 +377,55 @@ const RoomsList = () => {
               )}
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="font-semibold" disabled={atLimit}>
-                {atLimit ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                {atLimit ? "Limite atingido" : "Nova Sala"}
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle className="font-display">Criar Nova Sala</DialogTitle>
-              </DialogHeader>
-              {renderCreateRoomForm()}
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            {unlinkedRooms.length > 0 && (
+              <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="font-semibold">
+                    <Link className="w-4 h-4 mr-2" /> Vincular Sala
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="font-display">Vincular sala existente</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm text-muted-foreground mb-3">Selecione uma sala sem disciplina para vincular a <strong>{disc?.title}</strong>:</p>
+                    {unlinkedRooms.map(r => (
+                      <button
+                        key={r.id}
+                        className="w-full text-left border border-border rounded-lg p-3 hover:bg-accent transition-colors flex items-center justify-between"
+                        onClick={async () => {
+                          await linkRoomToDiscipline(r.id, disciplineId!);
+                          setLinkDialogOpen(false);
+                        }}
+                      >
+                        <span className="font-medium text-foreground">{r.title}</span>
+                        <span className="text-xs text-muted-foreground">{roomStats[r.id]?.studentCount || 0} alunos</span>
+                      </button>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="font-semibold" disabled={atLimit}>
+                  {atLimit ? <Lock className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                  {atLimit ? "Limite atingido" : "Nova Sala"}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="font-display">Criar Nova Sala</DialogTitle>
+                </DialogHeader>
+                {renderCreateRoomForm()}
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {discRooms.length === 0 ? (
+        {discRooms.length === 0 && unlinkedRooms.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-4">
               <BookOpen className="w-8 h-8 text-muted-foreground" />
@@ -401,11 +433,32 @@ const RoomsList = () => {
             <h3 className="font-display text-xl font-semibold text-foreground mb-2">Nenhuma sala nesta disciplina</h3>
             <p className="text-muted-foreground">Crie uma sala de aula invertida para esta disciplina.</p>
           </div>
+        ) : discRooms.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-4">
+              <BookOpen className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-display text-xl font-semibold text-foreground mb-2">Nenhuma sala nesta disciplina</h3>
+            <p className="text-muted-foreground">Crie uma nova sala ou vincule uma existente.</p>
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {discRooms.map(room => renderRoomCard(room))}
           </div>
         )}
+
+        {/* Rename dialog */}
+        <Dialog open={renameDialogOpen} onOpenChange={(v) => { setRenameDialogOpen(v); if (!v) setRenamingRoom(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display">Renomear Sala</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <Input value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renameRoom()} />
+              <Button onClick={renameRoom} disabled={!renameTitle.trim()} className="w-full font-semibold">Salvar</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
