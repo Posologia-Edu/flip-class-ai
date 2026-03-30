@@ -501,21 +501,36 @@ const RoomsList = () => {
         onClick={() => navigate(`/dashboard/room/${room.id}`)}
       >
         <div className="flex items-start justify-between mb-3">
-          <h3 className="font-display font-semibold text-lg text-card-foreground group-hover:text-primary transition-colors">
+          <h3 className="font-display font-semibold text-lg text-card-foreground group-hover:text-primary transition-colors pr-2">
             {room.title}
           </h3>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
               expired ? "bg-destructive/10 text-destructive" : "bg-level-easy/10 text-level-easy"
             }`}>
               {expired ? "Expirada" : "Ativa"}
             </span>
-            <button
-              onClick={(e) => { e.stopPropagation(); deleteRoom(room.id); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onClick={() => { setRenamingRoom(room); setRenameTitle(room.title); setRenameDialogOpen(true); }}>
+                  <Pencil className="w-4 h-4 mr-2" /> Renomear
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => duplicateRoom(room)}>
+                  <Copy className="w-4 h-4 mr-2" /> Duplicar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => deleteRoom(room.id)} className="text-destructive focus:text-destructive">
+                  <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
