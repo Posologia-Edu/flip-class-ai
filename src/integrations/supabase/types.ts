@@ -158,6 +158,30 @@ export type Database = {
         }
         Relationships: []
       }
+      disciplines: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          teacher_id: string
+          title: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          teacher_id: string
+          title: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          teacher_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       discussion_posts: {
         Row: {
           author_email: string | null
@@ -662,6 +686,7 @@ export type Database = {
       rooms: {
         Row: {
           created_at: string
+          discipline_id: string | null
           expire_at: string | null
           id: string
           last_student_activity_at: string | null
@@ -672,6 +697,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          discipline_id?: string | null
           expire_at?: string | null
           id?: string
           last_student_activity_at?: string | null
@@ -682,6 +708,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          discipline_id?: string | null
           expire_at?: string | null
           id?: string
           last_student_activity_at?: string | null
@@ -690,7 +717,15 @@ export type Database = {
           title?: string
           unlock_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rooms_discipline_id_fkey"
+            columns: ["discipline_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_activity_logs: {
         Row: {
