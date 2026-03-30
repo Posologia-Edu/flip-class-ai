@@ -180,8 +180,8 @@ const RoomsList = () => {
 
   const deleteDiscipline = async (id: string) => {
     // Unlink rooms first, then delete
-    await supabase.from("rooms").update({ discipline_id: null } as any).eq("discipline_id" as any, id);
-    await supabase.from("disciplines").delete().eq("id", id);
+    await (supabase.from("rooms") as any).update({ discipline_id: null }).eq("discipline_id", id);
+    await (supabase.from("disciplines") as any).delete().eq("id", id);
     fetchDisciplines();
     fetchRooms();
     toast({ title: "Disciplina excluída" });
