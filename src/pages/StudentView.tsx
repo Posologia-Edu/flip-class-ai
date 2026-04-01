@@ -209,7 +209,7 @@ const StudentView = () => {
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [activityTitles, setActivityTitles] = useState<ActivityWithTitle[]>([]);
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review" | "assistant">("materials");
+  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review" | "assistant" | "project">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
