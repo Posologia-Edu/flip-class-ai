@@ -14,7 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Rocket, Lightbulb, CheckCircle2, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { Rocket, Lightbulb, CheckCircle2, Trash2, Sparkles, Loader2 } from "lucide-react";
 
 interface SystemUpdate {
   id: string;

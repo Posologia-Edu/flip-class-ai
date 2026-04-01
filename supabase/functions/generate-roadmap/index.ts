@@ -6,25 +6,40 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `Você é um consultor de produto especializado em plataformas educacionais (EdTech).
-O sistema é uma plataforma de ensino que permite:
-- Professores criarem salas com atividades e quizzes
-- Alunos acessarem via PIN e responderem atividades
-- Correção automática por IA
-- Upload de materiais (vídeos YouTube, PDFs)
-- Transcrição automática de vídeos
-- Revisão por pares entre alunos
-- Fórum de discussão por sala
-- Gestão institucional com painel admin
-- Análise de desempenho e relatórios
-- Banco de questões reutilizáveis
-- Calendário de atividades
-- Notificações em tempo real
-- Planos de assinatura (Free, Professor, Institucional)
+const SYSTEM_PROMPT = `Você é um consultor sênior de produto especializado em plataformas educacionais (EdTech).
 
-Analise o contexto do sistema e as funcionalidades já existentes (no changelog).
-Proponha exatamente 7 novas funcionalidades altamente relevantes que agregariam muito valor ao sistema.
-Para cada sugestão, defina uma prioridade (high, medium, low) baseada no impacto para os usuários.
+O sistema é uma plataforma de Sala de Aula Invertida (Flipped Classroom) com as seguintes capacidades:
+- Professores criam salas com atividades e quizzes gerados por IA
+- Alunos acessam via PIN e respondem atividades com correção automática por IA
+- Upload de materiais (vídeos YouTube com transcrição automática, PDFs com extração de texto)
+- Geração automática de quizzes a partir dos materiais (múltipla escolha, dissertativas, drag-and-drop, fill-in-the-blank, matching, ordering)
+- Revisão por pares entre alunos com critérios personalizáveis
+- Fórum de discussão por sala
+- Assistente de estudo por IA contextualizado nos materiais da sala
+- Gestão institucional com painel admin e white-label
+- Organização de salas por disciplinas
+- Análise de desempenho e relatórios por sala e cross-room
+- Banco de questões reutilizáveis
+- Calendário de atividades com desbloqueio agendado
+- Notificações em tempo real
+- Planos de assinatura (Free, Professor, Institucional) via Stripe
+- Sistema de convites e aprovação de professores
+- Rastreamento de atividade dos alunos (tempo, materiais visualizados)
+- Pipeline de atualizações com changelog e roadmap
+- Feedback do professor por questão com envio de email transacional
+- Cookie consent e políticas de privacidade
+
+Sua tarefa é analisar profundamente as funcionalidades já existentes (listadas no contexto) e propor exatamente 6 novas funcionalidades que:
+1. NÃO existam no sistema (nem implementadas, nem planejadas)
+2. Tragam GRANDE IMPACTO para a experiência de ensino-aprendizagem
+3. Sejam viáveis em uma plataforma web moderna com IA
+4. Considerem tendências atuais em EdTech e pedagogia ativa
+5. Complementem as funcionalidades já existentes de forma sinérgica
+
+Para cada sugestão, forneça:
+- title: nome claro e conciso da funcionalidade (máx 60 caracteres)
+- description: descrição detalhada explicando o que faz, como funciona e qual o impacto pedagógico (2-3 frases)
+- priority: high (impacto transformador), medium (melhoria significativa) ou low (nice-to-have)
 
 Responda APENAS com um JSON array, sem markdown, sem explicações:
 [{"title":"...","description":"...","priority":"high|medium|low"}]`;
@@ -55,14 +70,33 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!roleData) throw new Error("Acesso restrito a administradores");
 
+    // Fetch existing updates for context
     const { data: existing } = await serviceClient
       .from("system_updates")
-      .select("title, status")
+      .select("title, status, description")
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(100);
 
-    const existingTitles = (existing || []).map((u: any) => `- ${u.title} (${u.status})`).join("\n");
-    const userPrompt = `Funcionalidades já existentes ou planejadas:\n${existingTitles}\n\nProponha 7 novas funcionalidades que NÃO estejam na lista acima.`;
+    // Fetch system stats for richer context
+    const [roomsCount, studentsCount, materialsCount, activitiesCount] = await Promise.all([
+      serviceClient.from("rooms").select("*", { count: "exact", head: true }),
+      serviceClient.from("student_sessions").select("*", { count: "exact", head: true }),
+      serviceClient.from("materials").select("*", { count: "exact", head: true }),
+      serviceClient.from("activities").select("*", { count: "exact", head: true }),
+    ]);
+
+    const existingList = (existing || []).map((u: any) => `- ${u.title} (${u.status})${u.description ? ': ' + u.description.substring(0, 100) : ''}`).join("\n");
+    
+    const userPrompt = `Contexto do sistema atual:
+- ${roomsCount.count || 0} salas criadas
+- ${studentsCount.count || 0} sessões de alunos
+- ${materialsCount.count || 0} materiais enviados
+- ${activitiesCount.count || 0} atividades geradas
+
+Funcionalidades já existentes ou planejadas:
+${existingList || "Nenhuma registrada ainda."}
+
+Com base nesse contexto completo, proponha 6 novas funcionalidades de ALTO IMPACTO que ainda NÃO existem no sistema.`;
 
     const content = await callAiWithFallback({
       messages: [
@@ -77,7 +111,7 @@ Deno.serve(async (req) => {
     const suggestions = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(suggestions) || suggestions.length === 0) throw new Error("Nenhuma sugestão gerada");
 
-    const rows = suggestions.slice(0, 8).map((s: any) => ({
+    const rows = suggestions.slice(0, 6).map((s: any) => ({
       title: s.title,
       description: s.description || "",
       type: "idea",
