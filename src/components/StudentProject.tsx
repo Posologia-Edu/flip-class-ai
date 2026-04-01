@@ -49,13 +49,14 @@ export default function StudentProject({ roomId, sessionId }: Props) {
           .maybeSingle();
         if (proj) {
           foundMembership = m;
+          const parsedMilestones = (Array.isArray(proj.milestones) ? proj.milestones : []) as Milestone[];
           setProject({
             ...proj,
             roles: Array.isArray(proj.roles) ? proj.roles : [],
             resources: Array.isArray(proj.resources) ? proj.resources : [],
-            milestones: Array.isArray(proj.milestones) ? proj.milestones : [],
+            milestones: parsedMilestones,
           });
-          setMilestones(Array.isArray(proj.milestones) ? proj.milestones : []);
+          setMilestones(parsedMilestones);
           setGroup(grp);
           setMyRole(m.assigned_role);
           break;
