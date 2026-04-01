@@ -795,6 +795,8 @@ const StudentView = () => {
           <PeerReviewStudent sessionId={sessionId!} roomId={roomId!} quizData={quizData} studentName={sessionData?.student_name || "Aluno"} />
         ) : tab === "assistant" ? (
           <StudyAssistant roomId={roomId!} sessionId={sessionId!} />
+        ) : tab === "project" ? (
+          <StudentProject roomId={roomId!} sessionId={sessionId!} />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
