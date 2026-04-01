@@ -33,7 +33,6 @@ const UpdatesPipeline = () => {
   const [updates, setUpdates] = useState<SystemUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const { toast } = useToast();
 
   const fetchUpdates = useCallback(async () => {
