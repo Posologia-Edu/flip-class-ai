@@ -29,10 +29,6 @@ const priorityConfig = {
   high: { label: "Alta", color: "bg-red-500/10 text-red-600" },
 };
 
-type FormStatus = "done" | "in_progress" | "planned";
-type FormPriority = "low" | "medium" | "high";
-interface FormState { title: string; description: string; type: "update" | "idea"; status: FormStatus; priority: FormPriority; version: string; }
-const emptyForm: FormState = { title: "", description: "", type: "idea", status: "planned", priority: "medium", version: "" };
 
 const UpdatesPipeline = () => {
   const [updates, setUpdates] = useState<SystemUpdate[]>([]);
