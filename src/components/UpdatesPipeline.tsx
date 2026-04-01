@@ -33,10 +33,7 @@ const priorityConfig = {
 const UpdatesPipeline = () => {
   const [updates, setUpdates] = useState<SystemUpdate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const { toast } = useToast();
 
