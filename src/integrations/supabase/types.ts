@@ -158,6 +158,47 @@ export type Database = {
         }
         Relationships: []
       }
+      collaborative_projects: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          milestones: Json
+          resources: Json
+          roles: Json
+          room_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          milestones?: Json
+          resources?: Json
+          roles?: Json
+          room_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          milestones?: Json
+          resources?: Json
+          roles?: Json
+          room_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collaborative_projects_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disciplines: {
         Row: {
           color: string
@@ -588,6 +629,112 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      project_groups: {
+        Row: {
+          created_at: string
+          group_name: string
+          id: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_name: string
+          id?: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          group_name?: string
+          id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_groups_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "collaborative_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_members: {
+        Row: {
+          assigned_role: string
+          created_at: string
+          group_id: string
+          id: string
+          session_id: string
+        }
+        Insert: {
+          assigned_role?: string
+          created_at?: string
+          group_id: string
+          id?: string
+          session_id: string
+        }
+        Update: {
+          assigned_role?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "project_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_progress: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          milestone_index: number
+          notes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          milestone_index: number
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          milestone_index?: number
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_progress_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "project_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       question_bank: {
         Row: {

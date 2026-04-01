@@ -12,6 +12,7 @@ import AnalyticsReport from "@/components/AnalyticsReport";
 import { RoomStudents } from "@/components/RoomStudents";
 import { RoomCollaborators } from "@/components/RoomCollaborators";
 import DiscussionForum from "@/components/DiscussionForum";
+import CollaborativeProjects from "@/components/CollaborativeProjects";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -1934,6 +1935,11 @@ const RoomManage = () => {
         )}
 
         {/* Discussion Forum Section */}
+        {/* Projetos Colaborativos */}
+        <section className="bg-card rounded-xl border border-border p-6">
+          <CollaborativeProjects roomId={roomId!} sessions={sessions.map(s => ({ id: s.id, student_name: s.student_name }))} />
+        </section>
+
         <section>
           <h2 className="font-display text-xl font-bold flex items-center gap-2 mb-4">
             <MessageSquare className="w-5 h-5 text-primary" /> Fórum de Discussão
