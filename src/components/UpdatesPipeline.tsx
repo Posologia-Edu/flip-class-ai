@@ -213,56 +213,6 @@ const UpdatesPipeline = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Editar" : "Nova"} Entrada</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Título *</label>
-              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: Sistema de transcrição automática" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Descrição</label>
-              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descreva a funcionalidade..." rows={3} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium">Tipo</label>
-                <Select value={form.type} onValueChange={(v: any) => setForm(f => ({ ...f, type: v, status: v === "update" ? "done" : "planned" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="update">Atualização (Changelog)</SelectItem>
-                    <SelectItem value="idea">Ideia (Roadmap)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Prioridade</label>
-                <Select value={form.priority} onValueChange={(v: any) => setForm(f => ({ ...f, priority: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Baixa</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {form.type === "update" && (
-              <div>
-                <label className="text-sm font-medium">Versão (opcional)</label>
-                <Input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} placeholder="Ex: 1.2.0" />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
