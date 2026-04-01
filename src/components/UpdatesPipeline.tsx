@@ -82,14 +82,6 @@ const UpdatesPipeline = () => {
   const changelog = updates.filter(u => u.status === "done");
   const roadmap = updates.filter(u => u.status !== "done");
 
-  // Check if we should show generate button (no roadmap items or last generated > 30 days ago)
-  const lastRoadmapDate = roadmap.length > 0
-    ? new Date(Math.max(...roadmap.map(u => new Date(u.created_at).getTime())))
-    : null;
-  const daysSinceLastRoadmap = lastRoadmapDate
-    ? (Date.now() - lastRoadmapDate.getTime()) / (1000 * 60 * 60 * 24)
-    : 999;
-  const canGenerate = roadmap.length === 0 || daysSinceLastRoadmap >= 30;
 
   if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
