@@ -13,6 +13,7 @@ import type { Tables, Json } from "@/integrations/supabase/types";
 import QuestionRenderer, { isInteractiveType, gradeInteractiveQuestion } from "@/components/interactive-questions/QuestionRenderer";
 import type { InteractiveQuestion } from "@/components/interactive-questions/types";
 import StudyAssistant from "@/components/StudyAssistant";
+import StudentProject from "@/components/StudentProject";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
