@@ -48,33 +48,6 @@ const UpdatesPipeline = () => {
 
   useEffect(() => { fetchUpdates(); }, [fetchUpdates]);
 
-  const openNew = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setDialogOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.title.trim()) { toast({ title: "Título obrigatório", variant: "destructive" }); return; }
-    setSaving(true);
-    const payload = {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      type: form.type,
-      status: form.status,
-      priority: form.priority,
-      version: form.version.trim() || null,
-      implemented_at: form.status === "done" ? new Date().toISOString() : null,
-    };
-
-    const { error } = editingId
-      ? await supabase.from("system_updates").update(payload).eq("id", editingId)
-      : await supabase.from("system_updates").insert(payload);
-
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); }
-    else { toast({ title: editingId ? "Atualizado!" : "Registrado!" }); setDialogOpen(false); fetchUpdates(); }
-    setSaving(false);
-  };
 
   const handleDelete = async (id: string) => {
     await supabase.from("system_updates").delete().eq("id", id);
