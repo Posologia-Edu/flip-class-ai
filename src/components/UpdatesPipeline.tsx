@@ -167,14 +167,6 @@ const UpdatesPipeline = () => {
 
         {/* Roadmap Tab */}
         <TabsContent value="roadmap" className="mt-4 space-y-4">
-          {canGenerate && (
-            <div className="flex justify-end">
-              <Button onClick={handleGenerateRoadmap} disabled={generating} variant="outline" size="sm">
-                {generating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                {generating ? "Gerando sugestões..." : "Gerar sugestões com IA"}
-              </Button>
-            </div>
-          )}
 
           {roadmap.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
