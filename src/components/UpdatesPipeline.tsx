@@ -148,8 +148,9 @@ const UpdatesPipeline = () => {
           </h2>
           <p className="text-sm text-muted-foreground mt-1">Histórico de funcionalidades e planejamento futuro do sistema.</p>
         </div>
-        <Button onClick={openNew} size="sm">
-          <Plus className="w-4 h-4 mr-1" /> Nova Entrada
+        <Button onClick={handleGenerateRoadmap} disabled={generating} size="sm">
+          {generating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
+          {generating ? "Analisando sistema..." : "Sugestão por IA"}
         </Button>
       </div>
 
