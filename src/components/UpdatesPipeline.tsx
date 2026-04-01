@@ -2,19 +2,13 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Rocket, Lightbulb, CheckCircle2, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { Rocket, Lightbulb, CheckCircle2, Trash2, Sparkles, Loader2 } from "lucide-react";
 
 interface SystemUpdate {
   id: string;
@@ -34,18 +28,10 @@ const priorityConfig = {
   high: { label: "Alta", color: "bg-red-500/10 text-red-600" },
 };
 
-type FormStatus = "done" | "in_progress" | "planned";
-type FormPriority = "low" | "medium" | "high";
-interface FormState { title: string; description: string; type: "update" | "idea"; status: FormStatus; priority: FormPriority; version: string; }
-const emptyForm: FormState = { title: "", description: "", type: "idea", status: "planned", priority: "medium", version: "" };
 
 const UpdatesPipeline = () => {
   const [updates, setUpdates] = useState<SystemUpdate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const { toast } = useToast();
 
@@ -60,33 +46,6 @@ const UpdatesPipeline = () => {
 
   useEffect(() => { fetchUpdates(); }, [fetchUpdates]);
 
-  const openNew = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setDialogOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.title.trim()) { toast({ title: "Título obrigatório", variant: "destructive" }); return; }
-    setSaving(true);
-    const payload = {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      type: form.type,
-      status: form.status,
-      priority: form.priority,
-      version: form.version.trim() || null,
-      implemented_at: form.status === "done" ? new Date().toISOString() : null,
-    };
-
-    const { error } = editingId
-      ? await supabase.from("system_updates").update(payload).eq("id", editingId)
-      : await supabase.from("system_updates").insert(payload);
-
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); }
-    else { toast({ title: editingId ? "Atualizado!" : "Registrado!" }); setDialogOpen(false); fetchUpdates(); }
-    setSaving(false);
-  };
 
   const handleDelete = async (id: string) => {
     await supabase.from("system_updates").delete().eq("id", id);
@@ -121,14 +80,6 @@ const UpdatesPipeline = () => {
   const changelog = updates.filter(u => u.status === "done");
   const roadmap = updates.filter(u => u.status !== "done");
 
-  // Check if we should show generate button (no roadmap items or last generated > 30 days ago)
-  const lastRoadmapDate = roadmap.length > 0
-    ? new Date(Math.max(...roadmap.map(u => new Date(u.created_at).getTime())))
-    : null;
-  const daysSinceLastRoadmap = lastRoadmapDate
-    ? (Date.now() - lastRoadmapDate.getTime()) / (1000 * 60 * 60 * 24)
-    : 999;
-  const canGenerate = roadmap.length === 0 || daysSinceLastRoadmap >= 30;
 
   if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
@@ -148,8 +99,9 @@ const UpdatesPipeline = () => {
           </h2>
           <p className="text-sm text-muted-foreground mt-1">Histórico de funcionalidades e planejamento futuro do sistema.</p>
         </div>
-        <Button onClick={openNew} size="sm">
-          <Plus className="w-4 h-4 mr-1" /> Nova Entrada
+        <Button onClick={handleGenerateRoadmap} disabled={generating} size="sm">
+          {generating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
+          {generating ? "Analisando sistema..." : "Sugestão por IA"}
         </Button>
       </div>
 
@@ -166,14 +118,6 @@ const UpdatesPipeline = () => {
 
         {/* Roadmap Tab */}
         <TabsContent value="roadmap" className="mt-4 space-y-4">
-          {canGenerate && (
-            <div className="flex justify-end">
-              <Button onClick={handleGenerateRoadmap} disabled={generating} variant="outline" size="sm">
-                {generating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                {generating ? "Gerando sugestões..." : "Gerar sugestões com IA"}
-              </Button>
-            </div>
-          )}
 
           {roadmap.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
@@ -267,56 +211,6 @@ const UpdatesPipeline = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Editar" : "Nova"} Entrada</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Título *</label>
-              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: Sistema de transcrição automática" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Descrição</label>
-              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descreva a funcionalidade..." rows={3} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium">Tipo</label>
-                <Select value={form.type} onValueChange={(v: any) => setForm(f => ({ ...f, type: v, status: v === "update" ? "done" : "planned" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="update">Atualização (Changelog)</SelectItem>
-                    <SelectItem value="idea">Ideia (Roadmap)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Prioridade</label>
-                <Select value={form.priority} onValueChange={(v: any) => setForm(f => ({ ...f, priority: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Baixa</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {form.type === "update" && (
-              <div>
-                <label className="text-sm font-medium">Versão (opcional)</label>
-                <Input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} placeholder="Ex: 1.2.0" />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
