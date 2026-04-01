@@ -1,124 +1,78 @@
 
 
-## Plano: Atividades Interativas + Assistente de Estudo IA
+## Plano: Projetos Colaborativos Orientados por IA
 
 ### Visão Geral
 
-Duas funcionalidades principais: (1) novos tipos de atividades interativas (arrastar e soltar, preencher lacunas, correspondência, ordenação) e (2) um chatbot de estudo por IA integrado à visão do aluno.
+Adicionar uma funcionalidade onde o professor pode gerar projetos em grupo via IA, baseados nos materiais da sala. A IA sugere ideias de projeto, define papéis para os membros, recursos necessários e etapas. Os alunos podem ver seus projetos, atualizar progresso por etapa e colaborar. O professor monitora o andamento de todos os grupos.
 
 ---
 
-### Funcionalidade 1: Atividades Interativas
+### Mudanças no Banco de Dados
 
-**Situação atual**: O sistema suporta apenas `multiple_choice`, `case_study` e `open_ended`. As questões são armazenadas em `quiz_data` (JSONB) na tabela `activities`. A renderização acontece em `StudentView.tsx` (linhas 842-872) com um `if/else` simples entre múltipla escolha e textarea.
+**Nova tabela `collaborative_projects`**:
+- `id`, `room_id`, `title`, `description`, `roles` (JSONB — lista de papéis sugeridos), `resources` (JSONB — recursos recomendados), `milestones` (JSONB — etapas com título e descrição), `created_at`
 
-**Novos tipos de questão**:
-- `drag_and_drop` — arrastar itens para categorias corretas
-- `fill_in_the_blank` — preencher lacunas em um texto
-- `matching` — conectar pares (termo ↔ definição)
-- `ordering` — ordenar itens na sequência correta
+**Nova tabela `project_groups`**:
+- `id`, `project_id` (FK → collaborative_projects), `group_name`, `created_at`
 
-**Mudanças necessárias**:
+**Nova tabela `project_members`**:
+- `id`, `group_id` (FK → project_groups), `session_id` (FK → student_sessions), `assigned_role` (text), `created_at`
 
-1. **Componentes de renderização interativa** (`src/components/interactive-questions/`)
-   - `DragAndDropQuestion.tsx` — grid de itens arrastáveis + zonas de drop por categoria. Usa `@dnd-kit/core` para drag-and-drop acessível.
-   - `FillInTheBlankQuestion.tsx` — renderiza texto com `___` substituído por inputs inline.
-   - `MatchingQuestion.tsx` — duas colunas com linhas de conexão ou drag entre colunas.
-   - `OrderingQuestion.tsx` — lista reordenável com drag-and-drop vertical.
-   - `QuestionRenderer.tsx` — componente dispatcher que seleciona o renderer correto pelo `type`.
+**Nova tabela `project_progress`**:
+- `id`, `group_id` (FK → project_groups), `milestone_index` (integer), `status` (text: "pending", "in_progress", "done"), `notes` (text), `updated_at`, `created_at`
 
-2. **Atualizar `StudentView.tsx`** — substituir o bloco `if/else` (linhas 842-872) pelo `QuestionRenderer`, que despacha para o componente correto.
-
-3. **Atualizar `generate-quiz/index.ts`** — adicionar um novo prompt `INTERACTIVE_PROMPT` que instrui a IA a gerar questões nos novos formatos. O professor escolheria o tipo "Atividade Interativa" ao gerar.
-
-4. **Atualizar `RoomManage.tsx`** — adicionar "interactive" como novo `ActivityGenerationType` e UI para criação manual dos novos tipos.
-
-5. **Estrutura JSON das novas questões**:
-
-```text
-drag_and_drop:
-  { type: "drag_and_drop", question: "...", items: ["A","B","C"], 
-    categories: ["Cat1","Cat2"], correct_mapping: {"A":"Cat1","B":"Cat2","C":"Cat1"} }
-
-fill_in_the_blank:
-  { type: "fill_in_the_blank", question: "O ___ é a capital do ___",
-    blanks: ["Brasil", "país"], correct_answers: ["Brasília", "Brasil"] }
-
-matching:
-  { type: "matching", question: "...", 
-    pairs: [{"left":"DNA","right":"Ácido desoxirribonucleico"}, ...] }
-
-ordering:
-  { type: "ordering", question: "Ordene os eventos...",
-    items: ["Evento A","Evento B","Evento C"], correct_order: [2,0,1] }
-```
-
-6. **Dependência**: instalar `@dnd-kit/core` e `@dnd-kit/sortable` para drag-and-drop.
-
-7. **Correção automática**: As respostas dos novos tipos são verificáveis programaticamente (comparação de mapeamento, ordem, texto). Adicionar lógica de auto-correção no submit do aluno, sem necessidade de IA.
+RLS: professores donos da sala gerenciam tudo; alunos podem ler seus projetos e atualizar progresso do próprio grupo. Realtime habilitado em `project_progress`.
 
 ---
 
-### Funcionalidade 2: Assistente de Estudo IA
+### Edge Function: `generate-project`
 
-**Conceito**: Chatbot acessível na aba "Materiais" ou como nova aba "Assistente" no `StudentView`. Usa o conteúdo dos materiais da sala como contexto para responder perguntas, gerar resumos e sugerir exercícios.
-
-**Mudanças necessárias**:
-
-1. **Edge Function `supabase/functions/study-assistant/index.ts`**
-   - Recebe: `room_id`, `session_id`, `message`, `conversation_history`
-   - Busca materiais da sala (`content_text_for_ai`) + dados de desempenho do aluno
-   - Constrói system prompt com contexto dos materiais e performance
-   - Chama `callAiWithFallback` (provedores externos primeiro, Lovable AI como fallback)
-   - Retorna resposta em streaming (SSE)
-
-2. **Componente `src/components/StudyAssistant.tsx`**
-   - Interface de chat com histórico de mensagens
-   - Botões de ação rápida: "Resuma o material", "Explique X", "Gere exercícios"
-   - Renderização de markdown nas respostas
-   - Indicador de digitação durante streaming
-
-3. **Atualizar `StudentView.tsx`**
-   - Adicionar nova aba "Assistente IA" com ícone de Bot
-   - Renderizar `StudyAssistant` passando `roomId`, `sessionId`
-
-4. **Controle de uso**
-   - Usar `ai_usage_log` para limitar interações por plano (ex: Free: 10/mês, Professor: 50/mês, Institucional: ilimitado)
-   - Registrar cada interação na tabela existente
-
-5. **System prompt dinâmico**:
-   - Inclui conteúdo dos materiais da sala (truncado a 30k chars)
-   - Inclui resumo do desempenho do aluno (notas, questões erradas)
-   - Instruções para responder em português, ser pedagógico, e referenciar o material
+- Recebe `room_id`; busca materiais da sala (`content_text_for_ai`)
+- Usa `callAiWithFallback` para gerar 2-3 ideias de projeto com: título, descrição, 3-5 papéis, recursos sugeridos e 4-6 etapas (milestones)
+- Retorna JSON estruturado; professor escolhe qual projeto salvar
 
 ---
 
-### Detalhes Técnicos
+### Lado do Professor (`RoomManage.tsx`)
 
-**Arquivos a criar**:
-- `src/components/interactive-questions/DragAndDropQuestion.tsx`
-- `src/components/interactive-questions/FillInTheBlankQuestion.tsx`
-- `src/components/interactive-questions/MatchingQuestion.tsx`
-- `src/components/interactive-questions/OrderingQuestion.tsx`
-- `src/components/interactive-questions/QuestionRenderer.tsx`
-- `src/components/StudyAssistant.tsx`
-- `supabase/functions/study-assistant/index.ts`
-
-**Arquivos a modificar**:
-- `src/pages/StudentView.tsx` — nova aba + QuestionRenderer
-- `src/pages/RoomManage.tsx` — tipo "interactive" na geração + criação manual
-- `supabase/functions/generate-quiz/index.ts` — novo prompt INTERACTIVE_PROMPT
-- `package.json` — adicionar `@dnd-kit/core`, `@dnd-kit/sortable`, `react-markdown`
-
-**Nenhuma migração de banco necessária** — os novos tipos usam o campo `quiz_data` JSONB existente.
+- Nova seção/aba "Projetos Colaborativos" com botão "Gerar Projetos por IA"
+- Exibe as ideias geradas em cards; professor seleciona e salva
+- Após salvar, pode criar grupos manualmente (arrastando alunos) ou usar distribuição automática
+- Painel de acompanhamento mostrando progresso de cada grupo por etapa (barra de progresso)
 
 ---
 
-### Ordem de implementação sugerida
+### Lado do Aluno (`StudentView.tsx`)
 
-1. Componentes de questões interativas + QuestionRenderer
-2. Integração no StudentView
-3. Prompt de geração interativa + UI no RoomManage
-4. Edge Function do assistente de estudo
-5. Componente StudyAssistant + integração no StudentView
+- Nova aba "Projeto" (ícone Users/Lightbulb)
+- Exibe: título do projeto, descrição, papel atribuído ao aluno, membros do grupo
+- Lista de etapas (milestones) com status visual (pendente → em andamento → concluído)
+- Aluno pode atualizar status e adicionar notas em cada etapa do seu grupo
+
+---
+
+### Arquivos a Criar
+- `supabase/functions/generate-project/index.ts`
+- `src/components/CollaborativeProjects.tsx` (painel do professor)
+- `src/components/StudentProject.tsx` (visão do aluno)
+
+### Arquivos a Modificar
+- `src/pages/RoomManage.tsx` — adicionar aba/seção de projetos
+- `src/pages/StudentView.tsx` — adicionar aba "Projeto"
+- `supabase/config.toml` — registrar nova function
+
+### Migração SQL
+- Criar 4 tabelas com RLS + habilitar realtime em `project_progress`
+
+---
+
+### Ordem de Implementação
+
+1. Migração de banco (tabelas + RLS)
+2. Edge Function `generate-project`
+3. Componente do professor (`CollaborativeProjects`)
+4. Integração no `RoomManage`
+5. Componente do aluno (`StudentProject`)
+6. Integração no `StudentView`
 
