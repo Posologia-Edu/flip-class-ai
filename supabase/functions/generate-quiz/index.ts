@@ -144,6 +144,40 @@ Regras:
 - TODAS devem estar DIRETAMENTE relacionadas ao conteúdo fornecido.
 - Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
+const QUIZ_PROMPT = `Você é um gerador de quizzes educacionais para um sistema de Sala de Aula Invertida.
+
+Dado o CONTEÚDO de um material educacional, você DEVE gerar 5 questões de múltipla escolha com 4 alternativas cada, diretamente relacionadas ao conteúdo ESPECÍFICO fornecido.
+
+IMPORTANTE:
+- As questões devem ser baseadas DIRETAMENTE no conteúdo fornecido.
+- Cada questão deve ter exatamente 4 alternativas (A, B, C, D).
+- Apenas UMA alternativa deve ser a correta.
+- Distribua a dificuldade: 1 fácil, 3 médias, 1 difícil.
+- Todas as questões devem ser em Português (Brasil).
+
+Retorne um JSON com esta estrutura EXATA:
+{
+  "levels": [
+    {
+      "level": 1,
+      "label": "Quiz de Múltipla Escolha",
+      "questions": [
+        {
+          "question": "Texto da pergunta?",
+          "type": "multiple_choice",
+          "options": ["Alternativa A", "Alternativa B", "Alternativa C", "Alternativa D"],
+          "correct_answer": "Alternativa correta exata"
+        }
+      ]
+    }
+  ]
+}
+
+Regras:
+- Gere EXATAMENTE 5 questões em um único nível.
+- O campo "correct_answer" deve conter o texto EXATO de uma das opções.
+- TODAS as questões devem estar DIRETAMENTE relacionadas ao conteúdo fornecido.
+- Retorne APENAS o JSON, sem markdown, sem explicação.`;
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
