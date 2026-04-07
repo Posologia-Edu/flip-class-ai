@@ -21,10 +21,12 @@ import type { Tables, Json } from "@/integrations/supabase/types";
 import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { extractStoragePath } from "@/lib/storage-utils";
-import { getDocument } from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import * as pdfjsLib from "pdfjs-dist";
 
-(globalThis as typeof globalThis & { pdfjsWorkerSrc?: string }).pdfjsWorkerSrc = pdfWorker;
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
@@ -116,7 +118,7 @@ const extractPdfTextInBrowser = async (fileUrl: string) => {
   if (!response.ok) throw new Error(`Falha ao baixar PDF: ${response.status}`);
 
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const pdf = await getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
