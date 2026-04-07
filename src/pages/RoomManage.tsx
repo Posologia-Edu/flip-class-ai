@@ -1996,7 +1996,7 @@ const RoomManage = () => {
         {/* Discussion Forum Section */}
         {/* Grupos de Alunos */}
         <section className="bg-card rounded-xl border border-border p-6">
-          <StudentGroups roomId={roomId!} sessions={sessions.map(s => ({ id: s.id, student_name: s.student_name }))} />
+          <StudentGroups roomId={roomId!} />
         </section>
 
         {/* Projetos Colaborativos */}

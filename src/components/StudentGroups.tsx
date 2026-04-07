@@ -11,26 +11,42 @@ import { Users, Plus, Trash2, Loader2, Shuffle, UserPlus, X } from "lucide-react
 
 interface Props {
   roomId: string;
-  sessions: { id: string; student_name: string }[];
+}
+
+interface Student {
+  id: string;
+  student_name: string | null;
+  student_email: string;
 }
 
 interface RoomGroup {
   id: string;
   group_name: string;
-  members: { id: string; session_id: string; student_name: string }[];
+  members: { id: string; student_id: string; student_name: string; student_email: string }[];
 }
 
-export default function StudentGroups({ roomId, sessions }: Props) {
+export default function StudentGroups({ roomId }: Props) {
   const { toast } = useToast();
+  const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<RoomGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showAddMembersDialog, setShowAddMembersDialog] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
-  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [groupCount, setGroupCount] = useState("2");
 
-  const fetchGroups = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    // Fetch enrolled students from room_students
+    const { data: roomStudents } = await supabase
+      .from("room_students")
+      .select("id, student_name, student_email")
+      .eq("room_id", roomId)
+      .order("student_name");
+
+    setStudents(roomStudents || []);
+
+    // Fetch groups
     const { data: grps } = await supabase
       .from("room_groups")
       .select("*")
@@ -46,19 +62,24 @@ export default function StudentGroups({ roomId, sessions }: Props) {
           .eq("group_id", g.id);
 
         const enriched = (members || []).map((m: any) => {
-          const session = sessions.find((s) => s.id === m.session_id);
-          return { id: m.id, session_id: m.session_id, student_name: session?.student_name || "Aluno" };
+          const student = (roomStudents || []).find((s) => s.id === m.student_id);
+          return {
+            id: m.id,
+            student_id: m.student_id,
+            student_name: student?.student_name || student?.student_email || "Aluno",
+            student_email: student?.student_email || "",
+          };
         });
         fullGroups.push({ id: g.id, group_name: g.group_name, members: enriched });
       }
       setGroups(fullGroups);
     }
     setLoading(false);
-  }, [roomId, sessions]);
+  }, [roomId]);
 
   useEffect(() => {
-    fetchGroups();
-  }, [fetchGroups]);
+    fetchData();
+  }, [fetchData]);
 
   const createGroup = async () => {
     if (!newGroupName.trim()) return;
@@ -70,31 +91,31 @@ export default function StudentGroups({ roomId, sessions }: Props) {
     toast({ title: "Grupo criado!" });
     setNewGroupName("");
     setShowCreateDialog(false);
-    fetchGroups();
+    fetchData();
   };
 
   const deleteGroup = async (groupId: string) => {
     await supabase.from("room_groups").delete().eq("id", groupId);
-    fetchGroups();
+    fetchData();
   };
 
   const removeMember = async (memberId: string) => {
     await supabase.from("room_group_members").delete().eq("id", memberId);
-    fetchGroups();
+    fetchData();
   };
 
   const addMembers = async (groupId: string) => {
-    if (selectedSessions.length === 0) return;
-    const inserts = selectedSessions.map((session_id) => ({ group_id: groupId, session_id }));
+    if (selectedStudents.length === 0) return;
+    const inserts = selectedStudents.map((student_id) => ({ group_id: groupId, student_id }));
     const { error } = await supabase.from("room_group_members").insert(inserts);
     if (error) {
       toast({ title: "Erro ao adicionar membros", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: `${selectedSessions.length} aluno(s) adicionado(s)!` });
-    setSelectedSessions([]);
+    toast({ title: `${selectedStudents.length} aluno(s) adicionado(s)!` });
+    setSelectedStudents([]);
     setShowAddMembersDialog(null);
-    fetchGroups();
+    fetchData();
   };
 
   const autoDistribute = async () => {
@@ -103,12 +124,12 @@ export default function StudentGroups({ roomId, sessions }: Props) {
       toast({ title: "Informe pelo menos 2 grupos", variant: "destructive" });
       return;
     }
-    if (sessions.length === 0) {
-      toast({ title: "Nenhum aluno na sala", variant: "destructive" });
+    if (students.length === 0) {
+      toast({ title: "Nenhum aluno cadastrado na sala", variant: "destructive" });
       return;
     }
 
-    // Delete existing groups first
+    // Delete existing groups
     for (const g of groups) {
       await supabase.from("room_groups").delete().eq("id", g.id);
     }
@@ -124,25 +145,23 @@ export default function StudentGroups({ roomId, sessions }: Props) {
       if (data) groupIds.push(data.id);
     }
 
-    // Shuffle students
-    const shuffled = [...sessions].sort(() => Math.random() - 0.5);
-
-    // Round-robin assign
+    // Shuffle students and round-robin assign
+    const shuffled = [...students].sort(() => Math.random() - 0.5);
     for (let i = 0; i < shuffled.length; i++) {
       const groupIdx = i % groupIds.length;
       await supabase.from("room_group_members").insert({
         group_id: groupIds[groupIdx],
-        session_id: shuffled[i].id,
+        student_id: shuffled[i].id,
       });
     }
 
     toast({ title: `${shuffled.length} alunos distribuídos em ${count} grupos!` });
-    fetchGroups();
+    fetchData();
   };
 
-  const getUnassignedStudents = (groupId: string) => {
-    const assignedInGroup = groups.find((g) => g.id === groupId)?.members.map((m) => m.session_id) || [];
-    return sessions.filter((s) => !assignedInGroup.includes(s.id));
+  const getAvailableStudents = (groupId: string) => {
+    const assignedInGroup = groups.find((g) => g.id === groupId)?.members.map((m) => m.student_id) || [];
+    return students.filter((s) => !assignedInGroup.includes(s.id));
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -153,37 +172,37 @@ export default function StudentGroups({ roomId, sessions }: Props) {
         <h3 className="font-display text-lg font-semibold flex items-center gap-2">
           <Users className="w-5 h-5 text-primary" /> Grupos de Alunos
         </h3>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowCreateDialog(true)}>
-            <Plus className="w-4 h-4 mr-1" /> Novo Grupo
-          </Button>
-        </div>
-      </div>
-
-      {/* Auto distribute */}
-      <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-3">
-        <Shuffle className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Distribuir automaticamente em</span>
-        <Input
-          type="number"
-          min="2"
-          max="20"
-          value={groupCount}
-          onChange={(e) => setGroupCount(e.target.value)}
-          className="w-16 h-8 text-center"
-        />
-        <span className="text-sm text-muted-foreground">grupos</span>
-        <Button size="sm" variant="outline" onClick={autoDistribute}>
-          Distribuir
+        <Button size="sm" variant="outline" onClick={() => setShowCreateDialog(true)}>
+          <Plus className="w-4 h-4 mr-1" /> Novo Grupo
         </Button>
       </div>
 
-      {/* Groups list */}
+      {students.length > 0 && (
+        <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-3">
+          <Shuffle className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Distribuir automaticamente em</span>
+          <Input
+            type="number"
+            min="2"
+            max="20"
+            value={groupCount}
+            onChange={(e) => setGroupCount(e.target.value)}
+            className="w-16 h-8 text-center"
+          />
+          <span className="text-sm text-muted-foreground">grupos</span>
+          <Button size="sm" variant="outline" onClick={autoDistribute}>Distribuir</Button>
+        </div>
+      )}
+
       {groups.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <p>Nenhum grupo criado ainda.</p>
-          <p className="text-xs mt-1">Crie grupos manualmente ou distribua automaticamente.</p>
+          <p className="text-xs mt-1">
+            {students.length === 0
+              ? "Cadastre alunos na sala primeiro (aba Alunos)."
+              : "Crie grupos manualmente ou distribua automaticamente."}
+          </p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -193,7 +212,7 @@ export default function StudentGroups({ roomId, sessions }: Props) {
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-sm">{group.group_name}</p>
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setSelectedSessions([]); setShowAddMembersDialog(group.id); }}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setSelectedStudents([]); setShowAddMembersDialog(group.id); }}>
                       <UserPlus className="w-3.5 h-3.5" />
                     </Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteGroup(group.id)}>
@@ -210,9 +229,7 @@ export default function StudentGroups({ roomId, sessions }: Props) {
                       </button>
                     </Badge>
                   ))}
-                  {group.members.length === 0 && (
-                    <span className="text-xs text-muted-foreground">Sem membros</span>
-                  )}
+                  {group.members.length === 0 && <span className="text-xs text-muted-foreground">Sem membros</span>}
                 </div>
                 <p className="text-xs text-muted-foreground">{group.members.length} membro(s)</p>
               </CardContent>
@@ -232,9 +249,7 @@ export default function StudentGroups({ roomId, sessions }: Props) {
               onChange={(e) => setNewGroupName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createGroup()}
             />
-            <Button onClick={createGroup} className="w-full" disabled={!newGroupName.trim()}>
-              Criar Grupo
-            </Button>
+            <Button onClick={createGroup} className="w-full" disabled={!newGroupName.trim()}>Criar Grupo</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -244,27 +259,32 @@ export default function StudentGroups({ roomId, sessions }: Props) {
         <DialogContent>
           <DialogHeader><DialogTitle>Adicionar Alunos</DialogTitle></DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {showAddMembersDialog && getUnassignedStudents(showAddMembersDialog).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Todos os alunos já estão neste grupo.</p>
+            {showAddMembersDialog && getAvailableStudents(showAddMembersDialog).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                {students.length === 0 ? "Nenhum aluno cadastrado na sala." : "Todos os alunos já estão neste grupo."}
+              </p>
             ) : (
-              showAddMembersDialog && getUnassignedStudents(showAddMembersDialog).map((s) => (
+              showAddMembersDialog && getAvailableStudents(showAddMembersDialog).map((s) => (
                 <label key={s.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 cursor-pointer">
                   <Checkbox
-                    checked={selectedSessions.includes(s.id)}
+                    checked={selectedStudents.includes(s.id)}
                     onCheckedChange={(checked) => {
-                      setSelectedSessions((prev) =>
+                      setSelectedStudents((prev) =>
                         checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
                       );
                     }}
                   />
-                  <span className="text-sm">{s.student_name}</span>
+                  <div>
+                    <span className="text-sm">{s.student_name || s.student_email}</span>
+                    {s.student_name && <span className="text-xs text-muted-foreground ml-2">{s.student_email}</span>}
+                  </div>
                 </label>
               ))
             )}
           </div>
-          {selectedSessions.length > 0 && (
+          {selectedStudents.length > 0 && (
             <Button onClick={() => showAddMembersDialog && addMembers(showAddMembersDialog)} className="w-full">
-              Adicionar {selectedSessions.length} aluno(s)
+              Adicionar {selectedStudents.length} aluno(s)
             </Button>
           )}
         </DialogContent>
