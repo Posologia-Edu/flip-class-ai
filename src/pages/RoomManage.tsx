@@ -524,8 +524,8 @@ const RoomManage = () => {
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       if (response.error) {
-        const errorMsg = typeof response.error === "object" && response.error.message ? response.error.message : String(response.error);
-        if (errorMsg.includes("muito grande") || errorMsg.includes("WORKER_LIMIT")) {
+        const errorMsg = await getFunctionErrorMessage(response.error);
+        if (errorMsg.includes("muito grande") || errorMsg.includes("WORKER_LIMIT") || errorMsg.includes("15MB")) {
           setGeneratingQuiz(null);
           setSelectedMaterialForQuiz(material);
           setManualTranscript("");
