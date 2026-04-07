@@ -803,19 +803,19 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
-          session_id: string
+          student_id: string
         }
         Insert: {
           created_at?: string
           group_id: string
           id?: string
-          session_id: string
+          student_id: string
         }
         Update: {
           created_at?: string
           group_id?: string
           id?: string
-          session_id?: string
+          student_id?: string
         }
         Relationships: [
           {
@@ -826,10 +826,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "room_group_members_session_id_fkey"
-            columns: ["session_id"]
+            foreignKeyName: "room_group_members_student_id_fkey"
+            columns: ["student_id"]
             isOneToOne: false
-            referencedRelation: "student_sessions"
+            referencedRelation: "room_students"
             referencedColumns: ["id"]
           },
         ]
