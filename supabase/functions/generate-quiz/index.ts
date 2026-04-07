@@ -325,6 +325,22 @@ async function checkAndLogAiUsage(serviceSupabase: any, userId: string, usageTyp
   return { allowed: used < limit, used, limit };
 }
 
+async function getCustomProviderKeys(serviceSupabase: any): Promise<Record<string, string>> {
+  const { data, error } = await serviceSupabase
+    .from("ai_api_keys")
+    .select("provider, api_key");
+
+  if (error || !data) {
+    console.warn("Failed to load custom AI keys from database:", error?.message);
+    return {};
+  }
+
+  return data.reduce((acc: Record<string, string>, row: { provider: string; api_key: string }) => {
+    if (row.provider && row.api_key) acc[row.provider] = row.api_key;
+    return acc;
+  }, {});
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -359,6 +375,7 @@ serve(async (req) => {
 
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+    const customProviderKeys = await getCustomProviderKeys(serviceSupabase);
     const { data: room } = await serviceSupabase.from("rooms").select("teacher_id").eq("id", roomId).single();
     if (!room || room.teacher_id !== userId) {
       return new Response(JSON.stringify({ error: "Unauthorized: you don't own this room" }), {
@@ -460,6 +477,7 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
           { role: "user", content: userPrompt },
         ],
         signal: controller.signal,
+        customProviderKeys,
       });
 
       clearTimeout(timeout);
