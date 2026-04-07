@@ -2,6 +2,7 @@ interface AiCallOptions {
   model?: string;
   messages: Array<{ role: string; content: any }>;
   signal?: AbortSignal;
+  customProviderKeys?: Partial<Record<string, string>>;
 }
 
 export interface AiCallResult {
@@ -92,11 +93,14 @@ export async function callAiWithFallback(options: AiCallOptions): Promise<string
 }
 
 export async function callAiWithFallbackDetailed(options: AiCallOptions): Promise<AiCallResult> {
-  // Read AI keys from environment variables (Supabase secrets) — no DB query needed
   const customKeys: Record<string, string> = {};
   for (const [providerId, config] of Object.entries(PROVIDER_CONFIG)) {
     const val = Deno.env.get(config.envKey);
     if (val) customKeys[providerId] = val;
+  }
+
+  for (const [providerId, apiKey] of Object.entries(options.customProviderKeys || {})) {
+    if (apiKey) customKeys[providerId] = apiKey;
   }
 
   // Try custom providers first
