@@ -13,6 +13,7 @@ import { RoomStudents } from "@/components/RoomStudents";
 import { RoomCollaborators } from "@/components/RoomCollaborators";
 import DiscussionForum from "@/components/DiscussionForum";
 import CollaborativeProjects from "@/components/CollaborativeProjects";
+import StudentGroups from "@/components/StudentGroups";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -1993,6 +1994,11 @@ const RoomManage = () => {
         )}
 
         {/* Discussion Forum Section */}
+        {/* Grupos de Alunos */}
+        <section className="bg-card rounded-xl border border-border p-6">
+          <StudentGroups roomId={roomId!} sessions={sessions.map(s => ({ id: s.id, student_name: s.student_name }))} />
+        </section>
+
         {/* Projetos Colaborativos */}
         <section className="bg-card rounded-xl border border-border p-6">
           <CollaborativeProjects roomId={roomId!} sessions={sessions.map(s => ({ id: s.id, student_name: s.student_name }))} />
