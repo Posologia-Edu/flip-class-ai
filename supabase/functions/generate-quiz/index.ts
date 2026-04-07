@@ -522,9 +522,11 @@ IMPORTANTE: Use EXCLUSIVAMENTE o conteúdo acima para criar os casos. Não inven
     }
   } catch (e) {
     console.error("generate-quiz error:", e);
+    const msg = e instanceof Error ? e.message : "Erro desconhecido";
+    const isSizeError = msg.includes("muito grande") || msg.includes("WORKER_LIMIT");
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: msg }),
+      { status: isSizeError ? 400 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
