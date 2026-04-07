@@ -798,6 +798,71 @@ export type Database = {
           },
         ]
       }
+      room_group_members: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "room_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_group_members_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_groups: {
+        Row: {
+          created_at: string
+          group_name: string
+          id: string
+          room_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_name: string
+          id?: string
+          room_id: string
+        }
+        Update: {
+          created_at?: string
+          group_name?: string
+          id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_groups_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_students: {
         Row: {
           created_at: string
