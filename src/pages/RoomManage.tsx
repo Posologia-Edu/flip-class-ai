@@ -20,6 +20,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { Tables, Json } from "@/integrations/supabase/types";
 import { useFeatureGate } from "@/hooks/useFeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
+import { extractStoragePath } from "@/lib/storage-utils";
+import { getDocument } from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+(globalThis as typeof globalThis & { pdfjsWorkerSrc?: string }).pdfjsWorkerSrc = pdfWorker;
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
@@ -102,6 +107,43 @@ const getFunctionErrorMessage = async (error: any) => {
     }
   }
   return error?.message || "Tente novamente.";
+};
+
+const LARGE_FILE_THRESHOLD = 15 * 1024 * 1024;
+
+const extractPdfTextInBrowser = async (fileUrl: string) => {
+  const response = await fetch(fileUrl);
+  if (!response.ok) throw new Error(`Falha ao baixar PDF: ${response.status}`);
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const pdf = await getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
+  const pages: string[] = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (pageText) pages.push(pageText);
+  }
+
+  const extracted = pages.join("\n\n").trim();
+  if (extracted.length < 50) {
+    throw new Error("Não foi possível extrair texto suficiente do PDF. Cole o conteúdo textual manualmente.");
+  }
+
+  return extracted;
+};
+
+const getSignedMaterialUrl = async (url: string) => {
+  const path = extractStoragePath(url);
+  const { data, error } = await supabase.storage.from("materials").createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) throw error || new Error("Não foi possível acessar o arquivo.");
+  return data.signedUrl;
 };
 
 const RoomManage = () => {
@@ -516,6 +558,19 @@ const RoomManage = () => {
   const generateQuizFromFile = async (material: Material) => {
     setGeneratingQuiz(material.id);
     try {
+      if (material.type === "pdf" && material.url) {
+        const signedUrl = await getSignedMaterialUrl(material.url);
+        const headResponse = await fetch(signedUrl, { method: "HEAD" });
+        const contentLength = Number(headResponse.headers.get("content-length") || 0);
+
+        if (contentLength > LARGE_FILE_THRESHOLD) {
+          const extractedContent = await extractPdfTextInBrowser(signedUrl);
+          await supabase.from("materials").update({ content_text_for_ai: extractedContent }).eq("id", material.id);
+          await generateQuizDirect(material, extractedContent);
+          return;
+        }
+      }
+
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Tempo limite excedido. O arquivo pode ser muito grande. Tente colar o conteúdo textual manualmente.")), 150000)
       );
@@ -540,12 +595,13 @@ const RoomManage = () => {
     } catch (err: any) {
       const message = await getFunctionErrorMessage(err);
       const isTimeout = message?.includes("Tempo limite");
+      const isCredits = message?.includes("Créditos insuficientes") || message?.includes("INSUFFICIENT_CREDITS");
       if (isTimeout) {
         setSelectedMaterialForQuiz(material);
         setManualTranscript("");
         setTranscriptDialogOpen(true);
       }
-      toast({ title: isTimeout ? "Tempo limite excedido" : "Erro ao gerar", description: message || "Tente novamente.", variant: "destructive" });
+      toast({ title: isCredits ? "Créditos de IA insuficientes" : isTimeout ? "Tempo limite excedido" : "Erro ao gerar", description: message || "Tente novamente.", variant: "destructive" });
     }
     setGeneratingQuiz(null);
   };
