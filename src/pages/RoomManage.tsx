@@ -1778,7 +1778,7 @@ const RoomManage = () => {
             /* Answers tab */
             <div className="space-y-3">
               {sessions.filter(s => s.completed_at && s.answers).map((s) => {
-                const studentAnswers = s.answers as Record<string, string>;
+                const studentAnswers = s.answers as Record<string, any>;
                 const isExpanded = expandedStudent === s.id;
                 // Use all activities for answers display, filtering hidden questions
                 // to match the student view indices
