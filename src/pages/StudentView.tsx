@@ -754,7 +754,7 @@ const StudentView = () => {
           <button onClick={() => setTab("materials")} className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === "materials" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <BookOpen className="w-4 h-4 inline mr-1.5" /> Materiais
           </button>
-          <button onClick={() => unlocked && quizData && handleStartQuiz()} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${!unlocked || !quizData ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" : tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          <button onClick={() => unlocked && quizData && (!groupInfo || groupInfo.isLeader) && handleStartQuiz()} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${!unlocked || !quizData || (groupInfo && !groupInfo.isLeader) ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" : tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             {!unlocked && <Lock className="w-3.5 h-3.5" />} Atividade
           </button>
           <button onClick={() => setTab("progress")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "progress" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
