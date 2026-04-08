@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAiWithFallback, callAiWithFallbackDetailed } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallback, callAiWithFallbackDetailed, getCustomProviderKeys } from "../_shared/ai-with-fallback.ts";
 
 // Estimated cost per 1M tokens (USD) by provider
 const COST_PER_M_TOKENS: Record<string, { input: number; output: number }> = {
@@ -325,21 +325,7 @@ async function checkAndLogAiUsage(serviceSupabase: any, userId: string, usageTyp
   return { allowed: used < limit, used, limit };
 }
 
-async function getCustomProviderKeys(serviceSupabase: any): Promise<Record<string, string>> {
-  const { data, error } = await serviceSupabase
-    .from("ai_api_keys")
-    .select("provider, api_key");
-
-  if (error || !data) {
-    console.warn("Failed to load custom AI keys from database:", error?.message);
-    return {};
-  }
-
-  return data.reduce((acc: Record<string, string>, row: { provider: string; api_key: string }) => {
-    if (row.provider && row.api_key) acc[row.provider] = row.api_key;
-    return acc;
-  }, {});
-}
+// getCustomProviderKeys is now imported from shared module
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
