@@ -1000,7 +1000,9 @@ export type Database = {
           completed_at: string | null
           created_at: string
           feedback_email_sent_at: string | null
+          group_id: string | null
           id: string
+          is_group_leader: boolean
           room_id: string
           score: number | null
           student_email: string | null
@@ -1011,7 +1013,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           feedback_email_sent_at?: string | null
+          group_id?: string | null
           id?: string
+          is_group_leader?: boolean
           room_id: string
           score?: number | null
           student_email?: string | null
@@ -1022,13 +1026,22 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           feedback_email_sent_at?: string | null
+          group_id?: string | null
           id?: string
+          is_group_leader?: boolean
           room_id?: string
           score?: number | null
           student_email?: string | null
           student_name?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "student_sessions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "room_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "student_sessions_room_id_fkey"
             columns: ["room_id"]
