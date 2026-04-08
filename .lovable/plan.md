@@ -1,78 +1,80 @@
 
 
-## Plano: Projetos Colaborativos Orientados por IA
+## Plano: Atividades em Grupo — Acesso e Pontuação Coletiva
 
 ### Visão Geral
 
-Adicionar uma funcionalidade onde o professor pode gerar projetos em grupo via IA, baseados nos materiais da sala. A IA sugere ideias de projeto, define papéis para os membros, recursos necessários e etapas. Os alunos podem ver seus projetos, atualizar progresso por etapa e colaborar. O professor monitora o andamento de todos os grupos.
+Quando o professor cria grupos de alunos numa sala, qualquer aluno dessa sala poderá optar por entrar no modo "grupo". O primeiro aluno do grupo a entrar será o líder e realizará a atividade. Ao submeter, a nota obtida pelo grupo será automaticamente replicada para todos os membros do grupo.
 
----
+### Fluxo do Aluno
 
-### Mudanças no Banco de Dados
+```text
+[PIN] → [Dados + Toggle Grupo/Individual] → [Se grupo: sessão compartilhada] → [Atividade] → [Nota replicada]
+```
 
-**Nova tabela `collaborative_projects`**:
-- `id`, `room_id`, `title`, `description`, `roles` (JSONB — lista de papéis sugeridos), `resources` (JSONB — recursos recomendados), `milestones` (JSONB — etapas com título e descrição), `created_at`
+1. **Tela do PIN (sem alteração)** — aluno digita o PIN normalmente.
 
-**Nova tabela `project_groups`**:
-- `id`, `project_id` (FK → collaborative_projects), `group_name`, `created_at`
+2. **Tela de Dados (alterada)** — após validar o PIN, o sistema verifica se a sala possui grupos (`room_groups`). Se sim, aparece um toggle "Individual / Grupo" abaixo dos campos de nome e email.
+   - **Individual**: fluxo normal, cria sessão individual.
+   - **Grupo**: o aluno preenche nome e email, clica "Começar". O sistema verifica em qual grupo esse aluno está (via `room_group_members` → `room_students` pelo email). Se encontrado, o aluno entra como **líder do grupo**.
 
-**Nova tabela `project_members`**:
-- `id`, `group_id` (FK → project_groups), `session_id` (FK → student_sessions), `assigned_role` (text), `created_at`
+3. **Sessão de Grupo** — ao entrar em modo grupo:
+   - O backend cria (ou reutiliza) uma sessão para cada membro do grupo automaticamente.
+   - A sessão do líder é marcada como a sessão "principal" do grupo (nova coluna `group_session_id` em `student_sessions` apontando para si mesma, ou campo `is_group_leader`).
+   - Os demais membros recebem sessões vinculadas ao mesmo grupo.
 
-**Nova tabela `project_progress`**:
-- `id`, `group_id` (FK → project_groups), `milestone_index` (integer), `status` (text: "pending", "in_progress", "done"), `notes` (text), `updated_at`, `created_at`
+4. **Realização da Atividade** — apenas o líder responde. A StudentView mostra um banner "Atividade em Grupo — Grupo X" com os nomes dos membros.
 
-RLS: professores donos da sala gerenciam tudo; alunos podem ler seus projetos e atualizar progresso do próprio grupo. Realtime habilitado em `project_progress`.
+5. **Submissão e Nota** — ao submeter a atividade, a nota é copiada para as sessões de todos os membros do grupo.
 
----
+### Mudanças Técnicas
 
-### Edge Function: `generate-project`
+#### 1. Migração de Banco de Dados
 
-- Recebe `room_id`; busca materiais da sala (`content_text_for_ai`)
-- Usa `callAiWithFallback` para gerar 2-3 ideias de projeto com: título, descrição, 3-5 papéis, recursos sugeridos e 4-6 etapas (milestones)
-- Retorna JSON estruturado; professor escolhe qual projeto salvar
+- Adicionar colunas em `student_sessions`:
+  - `group_id UUID REFERENCES room_groups(id)` — indica que a sessão pertence a um grupo
+  - `is_group_leader BOOLEAN DEFAULT false` — marca o líder
+- Política RLS: manter as existentes (não afeta segurança pois a lógica de replicação roda no backend).
 
----
+#### 2. Tela de Entrada (`src/pages/Index.tsx`)
 
-### Lado do Professor (`RoomManage.tsx`)
+- Após buscar a sala pelo PIN, verificar se existem `room_groups` para esse `room_id`.
+- Se existirem grupos, exibir um **Switch/Toggle** "Atividade em Grupo" na tela de dados.
+- Quando ativado, ao submeter:
+  - Enviar `mode: "group"` no payload para a edge function `student-session`.
 
-- Nova seção/aba "Projetos Colaborativos" com botão "Gerar Projetos por IA"
-- Exibe as ideias geradas em cards; professor seleciona e salva
-- Após salvar, pode criar grupos manualmente (arrastando alunos) ou usar distribuição automática
-- Painel de acompanhamento mostrando progresso de cada grupo por etapa (barra de progresso)
+#### 3. Edge Function `student-session/index.ts`
 
----
+- Na action `create_session` com `mode: "group"`:
+  1. Buscar o `room_students` pelo email do aluno.
+  2. Buscar o grupo do aluno via `room_group_members`.
+  3. Se não estiver em nenhum grupo, retornar erro.
+  4. Criar sessão para o líder com `group_id` e `is_group_leader = true`.
+  5. Para cada outro membro do grupo, criar (ou reutilizar) uma sessão com o mesmo `group_id` e `is_group_leader = false`.
+  6. Retornar a sessão do líder + lista de membros do grupo.
 
-### Lado do Aluno (`StudentView.tsx`)
+- Na action `submit` (quando a sessão tem `group_id` e `is_group_leader`):
+  1. Salvar score e answers na sessão do líder.
+  2. Replicar o mesmo `score` e `answers` para todas as sessões com o mesmo `group_id`.
 
-- Nova aba "Projeto" (ícone Users/Lightbulb)
-- Exibe: título do projeto, descrição, papel atribuído ao aluno, membros do grupo
-- Lista de etapas (milestones) com status visual (pendente → em andamento → concluído)
-- Aluno pode atualizar status e adicionar notas em cada etapa do seu grupo
+#### 4. StudentView (`src/pages/StudentView.tsx`)
 
----
+- Ao carregar, se a sessão tiver `group_id`, exibir banner com nome do grupo e membros.
+- Se `is_group_leader = false`, exibir mensagem "O líder do seu grupo está realizando a atividade" e desabilitar a aba de atividade (ou mostrar em modo somente leitura).
+- Se `is_group_leader = true`, fluxo normal de atividade.
 
-### Arquivos a Criar
-- `supabase/functions/generate-project/index.ts`
-- `src/components/CollaborativeProjects.tsx` (painel do professor)
-- `src/components/StudentProject.tsx` (visão do aluno)
+#### 5. Feedback do Professor
 
-### Arquivos a Modificar
-- `src/pages/RoomManage.tsx` — adicionar aba/seção de projetos
-- `src/pages/StudentView.tsx` — adicionar aba "Projeto"
-- `supabase/config.toml` — registrar nova function
+- No painel do professor (`RoomManage`), ao visualizar sessões de grupo, mostrar um badge indicando o grupo.
+- A nota atribuída pelo professor (feedback manual) também será replicada para todos os membros do grupo via trigger ou lógica no frontend.
 
-### Migração SQL
-- Criar 4 tabelas com RLS + habilitar realtime em `project_progress`
+### Resumo das Alterações por Arquivo
 
----
-
-### Ordem de Implementação
-
-1. Migração de banco (tabelas + RLS)
-2. Edge Function `generate-project`
-3. Componente do professor (`CollaborativeProjects`)
-4. Integração no `RoomManage`
-5. Componente do aluno (`StudentProject`)
-6. Integração no `StudentView`
+| Arquivo | Alteração |
+|---|---|
+| Migração SQL | Adicionar `group_id` e `is_group_leader` em `student_sessions` |
+| `src/pages/Index.tsx` | Toggle grupo/individual, verificação de grupos na sala |
+| `supabase/functions/student-session/index.ts` | Lógica de criação de sessão em grupo e replicação de nota |
+| `src/pages/StudentView.tsx` | Banner de grupo, bloqueio para não-líderes |
+| `src/pages/RoomManage.tsx` | Badge de grupo nas sessões, replicação de feedback |
 
