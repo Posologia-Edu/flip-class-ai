@@ -209,13 +209,14 @@ const RoomManage = () => {
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
-    const [roomRes, matRes, actRes, sessRes, logsRes, enrolledRes] = await Promise.all([
+    const [roomRes, matRes, actRes, sessRes, logsRes, enrolledRes, groupsRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("id", roomId).single(),
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("activities").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_sessions").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_activity_logs").select("activity_type, material_id, duration_seconds, session_id, created_at").eq("room_id", roomId),
       supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
+      supabase.from("room_groups").select("id, group_name").eq("room_id", roomId),
     ]);
     setRoom(roomRes.data);
     setMaterials(matRes.data || []);
@@ -223,6 +224,12 @@ const RoomManage = () => {
     setSessions(sessRes.data || []);
     setActivityLogs((logsRes.data as ActivityLog[]) || []);
     setEnrolledStudents((enrolledRes.data || []) as { student_email: string; student_name: string | null }[]);
+    // Build group name map
+    const gMap: Record<string, string> = {};
+    for (const g of (groupsRes.data || [])) {
+      gMap[g.id] = g.group_name;
+    }
+    setGroupNameMap(gMap);
 
     const sessionIds = (sessRes.data || []).map(s => s.id);
     if (sessionIds.length > 0) {
