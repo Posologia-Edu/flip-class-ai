@@ -229,7 +229,7 @@ const StudentView = () => {
   const viewedMaterials = useRef<Set<string>>(new Set());
   const accessedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
-
+  const [groupInfo, setGroupInfo] = useState<{ groupId: string; groupName: string; isLeader: boolean; members: { id: string; name: string; email: string; isLeader: boolean }[] } | null>(null);
   // Refs to avoid resetting the heartbeat interval on every tab/material change
   const tabRef = useRef(tab);
   const activeMaterialIdRef = useRef(activeMaterialId);
@@ -361,6 +361,9 @@ const StudentView = () => {
               setAnswers(sessionResult.session.answers as Record<string, string>);
             }
           }
+        }
+        if (sessionResult.groupInfo) {
+          setGroupInfo(sessionResult.groupInfo);
         }
         if (sessionResult.teacherFeedbacks) {
           const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
@@ -751,7 +754,7 @@ const StudentView = () => {
           <button onClick={() => setTab("materials")} className={`py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === "materials" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <BookOpen className="w-4 h-4 inline mr-1.5" /> Materiais
           </button>
-          <button onClick={() => unlocked && quizData && handleStartQuiz()} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${!unlocked || !quizData ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" : tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          <button onClick={() => unlocked && quizData && (!groupInfo || groupInfo.isLeader) && handleStartQuiz()} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${!unlocked || !quizData || (groupInfo && !groupInfo.isLeader) ? "opacity-50 cursor-not-allowed border-transparent text-muted-foreground" : tab === "activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             {!unlocked && <Lock className="w-3.5 h-3.5" />} Atividade
           </button>
           <button onClick={() => setTab("progress")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "progress" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
@@ -773,6 +776,24 @@ const StudentView = () => {
       </div>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
+        {/* Group Banner */}
+        {groupInfo && (
+          <div className="mb-6 bg-primary/10 border border-primary/20 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-5 h-5 text-primary" />
+              <span className="font-display font-semibold text-foreground">Atividade em Grupo — {groupInfo.groupName}</span>
+              {groupInfo.isLeader && (
+                <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground">Líder</span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Membros: {groupInfo.members.map(m => m.name).join(", ")}
+            </p>
+            {!groupInfo.isLeader && (
+              <p className="text-sm text-primary font-medium mt-2">O líder do seu grupo está realizando a atividade. A nota será compartilhada com todos os membros.</p>
+            )}
+          </div>
+        )}
         {tab === "materials" ? (
           <div className="space-y-6">
             {!unlocked && timeLeft && (

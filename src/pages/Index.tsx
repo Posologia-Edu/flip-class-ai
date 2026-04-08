@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import FloatingAuth from "@/components/FloatingAuth";
@@ -55,6 +57,8 @@ const Index = () => {
   const { toast } = useToast();
 
   const [roomId, setRoomId] = useState("");
+  const [hasGroups, setHasGroups] = useState(false);
+  const [groupMode, setGroupMode] = useState(false);
 
   const handlePinSubmit = async () => {
     if (pin.length < 6) {
@@ -77,6 +81,16 @@ const Index = () => {
       return;
     }
     setRoomId(data.id);
+
+    // Check if room has groups
+    const { data: groups } = await supabase
+      .from("room_groups")
+      .select("id")
+      .eq("room_id", data.id)
+      .limit(1);
+    setHasGroups(!!(groups && groups.length > 0));
+    setGroupMode(false);
+
     setStep("info");
   };
 
@@ -111,6 +125,7 @@ const Index = () => {
             student_name: trimmedName,
             student_email: trimmedEmail,
           },
+          ...(groupMode ? { mode: "group" } : {}),
         },
       });
       setLoading(false);
@@ -219,6 +234,15 @@ const Index = () => {
                     className="h-14 text-lg bg-secondary border-none"
                     onKeyDown={(e) => e.key === "Enter" && handleInfoSubmit()}
                   />
+                  {hasGroups && (
+                    <div className="flex items-center justify-between bg-secondary rounded-lg px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-primary" />
+                        <Label htmlFor="group-mode" className="text-sm font-medium cursor-pointer">Atividade em Grupo</Label>
+                      </div>
+                      <Switch id="group-mode" checked={groupMode} onCheckedChange={setGroupMode} />
+                    </div>
+                  )}
                   <Button
                     className="w-full h-12 text-base font-semibold"
                     onClick={handleInfoSubmit}

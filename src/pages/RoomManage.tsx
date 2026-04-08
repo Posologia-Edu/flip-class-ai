@@ -166,6 +166,7 @@ const RoomManage = () => {
   const [sessions, setSessions] = useState<Tables<"student_sessions">[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [enrolledStudents, setEnrolledStudents] = useState<{ student_email: string; student_name: string | null }[]>([]);
+  const [groupNameMap, setGroupNameMap] = useState<Record<string, string>>({});
   const [statsTab, setStatsTab] = useState<"overview" | "details" | "answers" | "reports">("overview");
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
@@ -209,13 +210,14 @@ const RoomManage = () => {
 
   const fetchData = useCallback(async () => {
     if (!roomId) return;
-    const [roomRes, matRes, actRes, sessRes, logsRes, enrolledRes] = await Promise.all([
+    const [roomRes, matRes, actRes, sessRes, logsRes, enrolledRes, groupsRes] = await Promise.all([
       supabase.from("rooms").select("*").eq("id", roomId).single(),
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("activities").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_sessions").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_activity_logs").select("activity_type, material_id, duration_seconds, session_id, created_at").eq("room_id", roomId),
       supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
+      supabase.from("room_groups").select("id, group_name").eq("room_id", roomId),
     ]);
     setRoom(roomRes.data);
     setMaterials(matRes.data || []);
@@ -223,6 +225,12 @@ const RoomManage = () => {
     setSessions(sessRes.data || []);
     setActivityLogs((logsRes.data as ActivityLog[]) || []);
     setEnrolledStudents((enrolledRes.data || []) as { student_email: string; student_name: string | null }[]);
+    // Build group name map
+    const gMap: Record<string, string> = {};
+    for (const g of (groupsRes.data || [])) {
+      gMap[g.id] = g.group_name;
+    }
+    setGroupNameMap(gMap);
 
     const sessionIds = (sessRes.data || []).map(s => s.id);
     if (sessionIds.length > 0) {
@@ -1636,9 +1644,17 @@ const RoomManage = () => {
                 </thead>
                 <tbody>
                   {/* Sessions */}
-                  {sessions.map((s) => (
+                   {sessions.map((s) => (
                     <tr key={s.id} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {s.student_name}
+                        {(s as any).group_id && groupNameMap[(s as any).group_id] && (
+                          <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                            {groupNameMap[(s as any).group_id]}
+                            {(s as any).is_group_leader && " ★"}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{(s as any).student_email || "—"}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.completed_at ? "bg-level-easy/10 text-level-easy" : "bg-secondary text-muted-foreground"}`}>
@@ -1679,7 +1695,15 @@ const RoomManage = () => {
                 <tbody>
                   {studentStats.map(({ session: s, totalTime, materialsViewed, quizTime }) => (
                     <tr key={s.id} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {s.student_name}
+                        {(s as any).group_id && groupNameMap[(s as any).group_id] && (
+                          <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                            {groupNameMap[(s as any).group_id]}
+                            {(s as any).is_group_leader && " ★"}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{formatDuration(totalTime)}</td>
                       <td className="px-4 py-3">{materialsViewed} / {materials.length}</td>
                       <td className="px-4 py-3">{formatDuration(quizTime)}</td>

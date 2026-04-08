@@ -69,10 +69,26 @@ serve(async (req) => {
         });
       }
 
+      // If session has a group, fetch group info and members
+      let groupInfo = null;
+      if (sessRes.data.group_id) {
+        const [groupRes, membersRes] = await Promise.all([
+          supabase.from("room_groups").select("id, group_name").eq("id", sessRes.data.group_id).single(),
+          supabase.from("student_sessions").select("id, student_name, student_email, is_group_leader").eq("group_id", sessRes.data.group_id).eq("room_id", sessRes.data.room_id),
+        ]);
+        groupInfo = {
+          groupId: sessRes.data.group_id,
+          groupName: groupRes.data?.group_name || "Grupo",
+          isLeader: sessRes.data.is_group_leader,
+          members: (membersRes.data || []).map((m: any) => ({ id: m.id, name: m.student_name, email: m.student_email, isLeader: m.is_group_leader })),
+        };
+      }
+
       return new Response(JSON.stringify({
         session: sessRes.data,
         activityLogs: logsRes.data || [],
         teacherFeedbacks: feedbackRes.data || [],
+        groupInfo,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -80,7 +96,7 @@ serve(async (req) => {
 
     if (req.method === "POST") {
       const body = await req.json();
-      const { action, sessionId, roomId, data, token } = body;
+      const { action, sessionId, roomId, data, token, mode } = body;
 
       if (action === "create_session") {
         if (!roomId || typeof roomId !== "string") {
@@ -241,6 +257,110 @@ serve(async (req) => {
           }
         }
 
+        // --- GROUP MODE ---
+        if (mode === "group") {
+          // Find the student in room_students
+          const { data: roomStudent } = await supabase
+            .from("room_students")
+            .select("id")
+            .eq("room_id", roomId)
+            .eq("student_email", email)
+            .maybeSingle();
+
+          if (!roomStudent) {
+            return new Response(JSON.stringify({ error: "Seu email não está cadastrado nesta sala." }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 403,
+            });
+          }
+
+          // Find which group this student belongs to
+          const { data: membership } = await supabase
+            .from("room_group_members")
+            .select("group_id, room_groups!inner(id, group_name)")
+            .eq("student_id", roomStudent.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (!membership) {
+            return new Response(JSON.stringify({ error: "Você não pertence a nenhum grupo nesta sala. Peça ao professor para adicioná-lo a um grupo." }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 403,
+            });
+          }
+
+          const groupId = membership.group_id;
+
+          // Check if there's already a leader session for this group in this room
+          const { data: existingLeader } = await supabase
+            .from("student_sessions")
+            .select("id")
+            .eq("room_id", roomId)
+            .eq("group_id", groupId)
+            .eq("is_group_leader", true)
+            .maybeSingle();
+
+          if (existingLeader) {
+            // Return existing leader session (group already started)
+            const leaderToken = await generateSessionToken(existingLeader.id);
+            return new Response(JSON.stringify({ sessionId: existingLeader.id, token: leaderToken, groupId, groupName: (membership as any).room_groups?.group_name }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          // Get all members of this group
+          const { data: allMembers } = await supabase
+            .from("room_group_members")
+            .select("student_id, room_students!inner(id, student_name, student_email)")
+            .eq("group_id", groupId);
+
+          if (!allMembers || allMembers.length === 0) {
+            return new Response(JSON.stringify({ error: "Grupo sem membros." }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 400,
+            });
+          }
+
+          // Create leader session
+          const { data: leaderSession, error: leaderErr } = await supabase
+            .from("student_sessions")
+            .insert({
+              room_id: roomId,
+              student_name: sanitizedName,
+              student_email: email,
+              group_id: groupId,
+              is_group_leader: true,
+            })
+            .select("id")
+            .single();
+
+          if (leaderErr) throw leaderErr;
+
+          // Create sessions for other group members
+          const otherMembers = allMembers.filter((m: any) => (m.room_students as any).student_email.toLowerCase() !== email);
+          if (otherMembers.length > 0) {
+            const memberInserts = otherMembers.map((m: any) => ({
+              room_id: roomId,
+              student_name: (m.room_students as any).student_name || (m.room_students as any).student_email,
+              student_email: (m.room_students as any).student_email,
+              group_id: groupId,
+              is_group_leader: false,
+            }));
+            await supabase.from("student_sessions").insert(memberInserts);
+          }
+
+          const leaderToken = await generateSessionToken(leaderSession.id);
+          return new Response(JSON.stringify({
+            sessionId: leaderSession.id,
+            token: leaderToken,
+            groupId,
+            groupName: (membership as any).room_groups?.group_name,
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // --- INDIVIDUAL MODE (default) ---
         const { data: session, error: insertErr } = await supabase
           .from("student_sessions")
           .insert({
@@ -337,7 +457,7 @@ serve(async (req) => {
       if (action === "submit") {
         const { data: existing } = await supabase
           .from("student_sessions")
-          .select("completed_at")
+          .select("completed_at, group_id, is_group_leader")
           .eq("id", sessionId)
           .single();
 
@@ -348,13 +468,23 @@ serve(async (req) => {
           });
         }
 
+        const completedAt = new Date().toISOString();
         const { error } = await supabase.from("student_sessions").update({
           score: data.score,
           answers: data.answers,
-          completed_at: new Date().toISOString(),
+          completed_at: completedAt,
         }).eq("id", sessionId);
 
         if (error) throw error;
+
+        // If this is a group leader, replicate score/answers to all group members
+        if (existing?.group_id && existing?.is_group_leader) {
+          await supabase.from("student_sessions").update({
+            score: data.score,
+            answers: data.answers,
+            completed_at: completedAt,
+          }).eq("group_id", existing.group_id).neq("id", sessionId);
+        }
 
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
