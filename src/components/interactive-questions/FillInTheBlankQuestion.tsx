@@ -32,18 +32,7 @@ export default function FillInTheBlankQuestionComponent({ question, value, onCha
           </span>
         ))}
       </div>
-      {q.blanks && q.blanks.length > 0 && (
-        <div className="bg-secondary/50 rounded-lg p-3">
-          <p className="text-xs text-muted-foreground font-medium mb-2">Dicas:</p>
-          <div className="flex flex-wrap gap-2">
-            {q.blanks.map((hint, i) => (
-              <span key={i} className="px-2 py-1 bg-muted rounded text-xs text-muted-foreground">
-                {hint}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Hints removed - students should not see the answers */}
     </div>
   );
 }
