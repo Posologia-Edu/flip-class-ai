@@ -5,6 +5,26 @@ interface AiCallOptions {
   customProviderKeys?: Partial<Record<string, string>>;
 }
 
+export async function getCustomProviderKeys(serviceSupabase: any): Promise<Record<string, string>> {
+  try {
+    const { data, error } = await serviceSupabase
+      .from("ai_api_keys")
+      .select("provider, api_key");
+
+    if (error || !data) {
+      console.warn("Failed to load custom AI keys from database:", error?.message);
+      return {};
+    }
+
+    return data.reduce((acc: Record<string, string>, row: { provider: string; api_key: string }) => {
+      if (row.provider && row.api_key) acc[row.provider] = row.api_key;
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
 export interface AiCallResult {
   content: string;
   provider: string;

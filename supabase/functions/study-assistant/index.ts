@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallback, getCustomProviderKeys } from "../_shared/ai-with-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +87,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+    const customProviderKeys = await getCustomProviderKeys(serviceSupabase);
 
     // Get room materials for context
     const { data: materials } = await serviceSupabase
@@ -187,6 +188,7 @@ ${studentPerformance}`;
 
     const response = await callAiWithFallback({
       messages: aiMessages,
+      customProviderKeys,
     });
 
     // Log usage (use a placeholder user_id since students aren't authenticated)

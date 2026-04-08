@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallback, getCustomProviderKeys } from "../_shared/ai-with-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
     if (authError || !user) throw new Error("Não autorizado");
 
     const serviceClient = createClient(supabaseUrl, serviceKey);
+    const customProviderKeys = await getCustomProviderKeys(serviceClient);
     const { data: roleData } = await serviceClient
       .from("user_roles")
       .select("role")
@@ -103,6 +104,7 @@ Com base nesse contexto completo, proponha 6 novas funcionalidades de ALTO IMPAC
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
+      customProviderKeys,
     });
 
     const jsonMatch = content.match(/\[[\s\S]*\]/);
