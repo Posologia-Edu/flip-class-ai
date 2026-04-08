@@ -104,7 +104,7 @@ export async function callAiWithFallbackDetailed(options: AiCallOptions): Promis
   }
 
   // Try custom providers first
-  const providerOrder = ["groq", "openai", "openrouter", "google", "anthropic"];
+  const providerOrder = ["google", "groq", "openai", "openrouter", "anthropic"];
   const availableProviders = providerOrder.filter((p) => customKeys[p]);
 
   for (const providerId of availableProviders) {
