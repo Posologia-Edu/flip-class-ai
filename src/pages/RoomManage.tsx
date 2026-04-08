@@ -1644,9 +1644,17 @@ const RoomManage = () => {
                 </thead>
                 <tbody>
                   {/* Sessions */}
-                  {sessions.map((s) => (
+                   {sessions.map((s) => (
                     <tr key={s.id} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {s.student_name}
+                        {(s as any).group_id && groupNameMap[(s as any).group_id] && (
+                          <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                            {groupNameMap[(s as any).group_id]}
+                            {(s as any).is_group_leader && " ★"}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{(s as any).student_email || "—"}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.completed_at ? "bg-level-easy/10 text-level-easy" : "bg-secondary text-muted-foreground"}`}>
