@@ -441,7 +441,7 @@ serve(async (req) => {
       if (action === "submit") {
         const { data: existing } = await supabase
           .from("student_sessions")
-          .select("completed_at")
+          .select("completed_at, group_id, is_group_leader")
           .eq("id", sessionId)
           .single();
 
@@ -452,13 +452,23 @@ serve(async (req) => {
           });
         }
 
+        const completedAt = new Date().toISOString();
         const { error } = await supabase.from("student_sessions").update({
           score: data.score,
           answers: data.answers,
-          completed_at: new Date().toISOString(),
+          completed_at: completedAt,
         }).eq("id", sessionId);
 
         if (error) throw error;
+
+        // If this is a group leader, replicate score/answers to all group members
+        if (existing?.group_id && existing?.is_group_leader) {
+          await supabase.from("student_sessions").update({
+            score: data.score,
+            answers: data.answers,
+            completed_at: completedAt,
+          }).eq("group_id", existing.group_id).neq("id", sessionId);
+        }
 
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
