@@ -776,6 +776,24 @@ const StudentView = () => {
       </div>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
+        {/* Group Banner */}
+        {groupInfo && (
+          <div className="mb-6 bg-primary/10 border border-primary/20 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-5 h-5 text-primary" />
+              <span className="font-display font-semibold text-foreground">Atividade em Grupo — {groupInfo.groupName}</span>
+              {groupInfo.isLeader && (
+                <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary text-primary-foreground">Líder</span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Membros: {groupInfo.members.map(m => m.name).join(", ")}
+            </p>
+            {!groupInfo.isLeader && (
+              <p className="text-sm text-primary font-medium mt-2">O líder do seu grupo está realizando a atividade. A nota será compartilhada com todos os membros.</p>
+            )}
+          </div>
+        )}
         {tab === "materials" ? (
           <div className="space-y-6">
             {!unlocked && timeLeft && (
