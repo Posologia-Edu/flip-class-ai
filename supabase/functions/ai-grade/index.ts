@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAiWithFallbackDetailed, type AiCallResult } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallbackDetailed, getCustomProviderKeys, type AiCallResult } from "../_shared/ai-with-fallback.ts";
 
 // Estimated cost per 1M tokens (USD) by provider
 const COST_PER_M_TOKENS: Record<string, { input: number; output: number }> = {
@@ -157,6 +157,7 @@ serve(async (req) => {
     const userId = claimsData.claims.sub;
     
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+    const customProviderKeys = await getCustomProviderKeys(serviceSupabase);
 
     // Check AI usage limits using resolved plan (admin + Stripe)
     const planKey = await resolveServerPlan(serviceSupabase, userId);
@@ -211,6 +212,7 @@ Avalie a resposta do aluno e retorne o JSON com nota (0-${itemMaxScore}), feedba
             { role: "system", content: buildSystemPrompt(itemMaxScore) },
             { role: "user", content: userPrompt },
           ],
+          customProviderKeys,
         });
 
         let gradeResult;

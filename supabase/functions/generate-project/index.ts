@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAiWithFallback } from "../_shared/ai-with-fallback.ts";
+import { callAiWithFallback, getCustomProviderKeys } from "../_shared/ai-with-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,6 +44,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+    const customProviderKeys = await getCustomProviderKeys(serviceSupabase);
 
     // Auth check
     const authHeader = req.headers.get("Authorization");
@@ -114,6 +115,7 @@ serve(async (req) => {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Sala: "${room?.title || "Sala"}"\n\nMateriais:\n${materialContext}\n\nGere 3 ideias de projetos colaborativos.` },
       ],
+      customProviderKeys,
     });
 
     // Parse AI response
