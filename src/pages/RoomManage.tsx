@@ -1470,7 +1470,48 @@ const RoomManage = () => {
                                     })}
                                   </div>
                                 )}
-                                <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                                {/* Gabarito for all question types */}
+                                {q.correct_answer && (
+                                  <p className="text-xs text-muted-foreground"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                                )}
+                                {(q as any).type === "drag_and_drop" && (q as any).correct_mapping && (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    <span className="font-semibold">Gabarito (mapeamento):</span>
+                                    <div className="mt-1 space-y-0.5">
+                                      {Object.entries((q as any).correct_mapping).map(([item, cat]) => (
+                                        <p key={item} className="pl-2">• {item} → {cat as string}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {(q as any).type === "fill_in_the_blank" && (q as any).correct_answers && (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    <span className="font-semibold">Gabarito (lacunas):</span>{" "}
+                                    {((q as any).correct_answers as string[]).map((a, i) => (
+                                      <span key={i} className="inline-flex px-1.5 py-0.5 bg-primary/10 text-primary rounded mr-1 font-medium">{a}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                {(q as any).type === "matching" && (q as any).pairs && (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    <span className="font-semibold">Gabarito (correspondência):</span>
+                                    <div className="mt-1 space-y-0.5">
+                                      {((q as any).pairs as Array<{ left: string; right: string }>).map((p, i) => (
+                                        <p key={i} className="pl-2">• {p.left} ↔ {p.right}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {(q as any).type === "ordering" && (q as any).items && (q as any).correct_order && (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    <span className="font-semibold">Gabarito (ordem correta):</span>
+                                    <div className="mt-1 space-y-0.5">
+                                      {((q as any).correct_order as number[]).map((idx, pos) => (
+                                        <p key={pos} className="pl-2">{pos + 1}. {((q as any).items as string[])[idx]}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 {isOwner && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <Label className="text-xs text-muted-foreground">Pontos:</Label>
@@ -1737,7 +1778,7 @@ const RoomManage = () => {
             /* Answers tab */
             <div className="space-y-3">
               {sessions.filter(s => s.completed_at && s.answers).map((s) => {
-                const studentAnswers = s.answers as Record<string, string>;
+                const studentAnswers = s.answers as Record<string, any>;
                 const isExpanded = expandedStudent === s.id;
                 // Use all activities for answers display, filtering hidden questions
                 // to match the student view indices
@@ -1827,9 +1868,56 @@ const RoomManage = () => {
                                   <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
                                   <div className="bg-background rounded-lg p-3 mb-2">
                                     <p className="text-xs font-semibold text-muted-foreground mb-1">Resposta do aluno:</p>
-                                    <p className="text-sm text-foreground">{answer || <span className="italic text-muted-foreground">Não respondida</span>}</p>
+                                    <p className="text-sm text-foreground">
+                                      {answer == null ? (
+                                        <span className="italic text-muted-foreground">Não respondida</span>
+                                      ) : typeof answer === "string" ? (
+                                        answer
+                                      ) : Array.isArray(answer) ? (
+                                        answer.map((a, i) => <span key={i} className="inline-flex px-1.5 py-0.5 bg-secondary rounded mr-1 mb-1">{typeof a === "object" ? JSON.stringify(a) : String(a)}</span>)
+                                      ) : typeof answer === "object" ? (
+                                        <span className="text-xs">{Object.entries(answer).map(([k, v]) => `${k} → ${v}`).join(", ")}</span>
+                                      ) : (
+                                        String(answer)
+                                      )}
+                                    </p>
                                   </div>
-                                  <p className="text-xs text-muted-foreground mb-3"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                                  {/* Gabarito */}
+                                  {q.correct_answer && (
+                                    <p className="text-xs text-muted-foreground mb-3"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
+                                  )}
+                                  {(q as any).type === "drag_and_drop" && (q as any).correct_mapping && (
+                                    <div className="mb-3 text-xs text-muted-foreground">
+                                      <span className="font-semibold">Gabarito:</span>
+                                      {Object.entries((q as any).correct_mapping).map(([item, cat]) => (
+                                        <span key={item} className="ml-1">{item}→{cat as string};</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {(q as any).type === "fill_in_the_blank" && (q as any).correct_answers && (
+                                    <div className="mb-3 text-xs text-muted-foreground">
+                                      <span className="font-semibold">Gabarito:</span>{" "}
+                                      {((q as any).correct_answers as string[]).map((a, i) => (
+                                        <span key={i} className="inline-flex px-1.5 py-0.5 bg-primary/10 text-primary rounded mr-1 font-medium">{a}</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {(q as any).type === "matching" && (q as any).pairs && (
+                                    <div className="mb-3 text-xs text-muted-foreground">
+                                      <span className="font-semibold">Gabarito:</span>{" "}
+                                      {((q as any).pairs as Array<{ left: string; right: string }>).map((p, i) => (
+                                        <span key={i} className="ml-1">{p.left}↔{p.right};</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {(q as any).type === "ordering" && (q as any).items && (q as any).correct_order && (
+                                    <div className="mb-3 text-xs text-muted-foreground">
+                                      <span className="font-semibold">Ordem correta:</span>{" "}
+                                      {((q as any).correct_order as number[]).map((idx, pos) => (
+                                        <span key={pos} className="ml-1">{pos + 1}.{((q as any).items as string[])[idx]};</span>
+                                      ))}
+                                    </div>
+                                  )}
                                   {/* Feedback do professor */}
                                   <div className="border-t border-border pt-3 mt-3 space-y-3">
                                     {(() => {
