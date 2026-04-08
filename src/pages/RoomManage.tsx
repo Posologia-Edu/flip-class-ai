@@ -1695,7 +1695,15 @@ const RoomManage = () => {
                 <tbody>
                   {studentStats.map(({ session: s, totalTime, materialsViewed, quizTime }) => (
                     <tr key={s.id} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{s.student_name}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {s.student_name}
+                        {(s as any).group_id && groupNameMap[(s as any).group_id] && (
+                          <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                            {groupNameMap[(s as any).group_id]}
+                            {(s as any).is_group_leader && " ★"}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{formatDuration(totalTime)}</td>
                       <td className="px-4 py-3">{materialsViewed} / {materials.length}</td>
                       <td className="px-4 py-3">{formatDuration(quizTime)}</td>
