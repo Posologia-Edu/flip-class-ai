@@ -33,6 +33,12 @@ IMPORTANTE:
 - Os casos DEVEM ser baseados DIRETAMENTE no conteúdo fornecido. Use termos, conceitos e exemplos mencionados no material.
 - Cada caso deve ter um contexto narrativo detalhado (pelo menos 3-4 frases) seguido de uma pergunta que exija análise e raciocínio.
 
+REGRA CRÍTICA SOBRE "context" vs "question":
+- O campo "context" contém APENAS a narrativa do caso (cenário, personagens, situação). NÃO inclua perguntas no context.
+- O campo "question" contém APENAS a pergunta dissertativa que o aluno deve responder. NÃO repita ou resuma o caso na pergunta.
+- A pergunta deve ser CURTA e DIRETA, referenciando o caso de forma genérica (ex: "Com base no caso apresentado..." ou "Diante dessa situação...").
+- NUNCA repita os detalhes do caso (nomes, dados, cenário) dentro do campo "question". O aluno já terá lido o contexto acima.
+
 Retorne um JSON com esta estrutura EXATA:
 {
   "levels": [
@@ -43,7 +49,7 @@ Retorne um JSON com esta estrutura EXATA:
         {
           "question": "Com base no caso apresentado, como você agiria?",
           "type": "case_study",
-          "context": "Descrição detalhada de um caso real aplicado...",
+          "context": "Descrição detalhada de um caso real aplicado. Inclua personagens, dados e situação completa aqui.",
           "correct_answer": "Resposta esperada com fundamentação..."
         }
       ]
@@ -55,7 +61,7 @@ Retorne um JSON com esta estrutura EXATA:
         {
           "question": "Analise o caso e proponha uma solução fundamentada.",
           "type": "case_study",
-          "context": "Caso mais complexo com múltiplas variáveis...",
+          "context": "Caso mais complexo com múltiplas variáveis. Toda a narrativa fica aqui.",
           "correct_answer": "Resposta esperada com análise aprofundada..."
         }
       ]
@@ -65,9 +71,9 @@ Retorne um JSON com esta estrutura EXATA:
       "label": "Nível 3 — Caso Complexo",
       "questions": [
         {
-          "question": "Diante deste cenário complexo, elabore uma estratégia completa.",
+          "question": "Diante deste cenário, elabore uma estratégia completa.",
           "type": "case_study",
-          "context": "Caso complexo que exige síntese e pensamento crítico...",
+          "context": "Caso complexo com todos os detalhes narrativos aqui.",
           "correct_answer": "Resposta modelo com síntese e proposição..."
         }
       ]
