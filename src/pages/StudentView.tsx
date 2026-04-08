@@ -229,7 +229,7 @@ const StudentView = () => {
   const viewedMaterials = useRef<Set<string>>(new Set());
   const accessedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
-
+  const [groupInfo, setGroupInfo] = useState<{ groupId: string; groupName: string; isLeader: boolean; members: { id: string; name: string; email: string; isLeader: boolean }[] } | null>(null);
   // Refs to avoid resetting the heartbeat interval on every tab/material change
   const tabRef = useRef(tab);
   const activeMaterialIdRef = useRef(activeMaterialId);
@@ -361,6 +361,9 @@ const StudentView = () => {
               setAnswers(sessionResult.session.answers as Record<string, string>);
             }
           }
+        }
+        if (sessionResult.groupInfo) {
+          setGroupInfo(sessionResult.groupInfo);
         }
         if (sessionResult.teacherFeedbacks) {
           const fbMap: Record<string, { feedback_text: string; grade: number | null }> = {};
