@@ -69,10 +69,26 @@ serve(async (req) => {
         });
       }
 
+      // If session has a group, fetch group info and members
+      let groupInfo = null;
+      if (sessRes.data.group_id) {
+        const [groupRes, membersRes] = await Promise.all([
+          supabase.from("room_groups").select("id, group_name").eq("id", sessRes.data.group_id).single(),
+          supabase.from("student_sessions").select("id, student_name, student_email, is_group_leader").eq("group_id", sessRes.data.group_id).eq("room_id", sessRes.data.room_id),
+        ]);
+        groupInfo = {
+          groupId: sessRes.data.group_id,
+          groupName: groupRes.data?.group_name || "Grupo",
+          isLeader: sessRes.data.is_group_leader,
+          members: (membersRes.data || []).map((m: any) => ({ id: m.id, name: m.student_name, email: m.student_email, isLeader: m.is_group_leader })),
+        };
+      }
+
       return new Response(JSON.stringify({
         session: sessRes.data,
         activityLogs: logsRes.data || [],
         teacherFeedbacks: feedbackRes.data || [],
+        groupInfo,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
