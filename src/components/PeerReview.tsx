@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock, Percent } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -26,23 +27,47 @@ interface PeerReviewTeacherProps {
   onUpdate: () => void;
 }
 
+const DEFAULT_INDIVIDUAL_CRITERIA: Criterion[] = [
+  { id: "1", label: "Clareza", description: "A resposta é clara e bem organizada?", maxScore: 10 },
+  { id: "2", label: "Fundamentação", description: "Usa conceitos do material corretamente?", maxScore: 10 },
+  { id: "3", label: "Análise Crítica", description: "Demonstra pensamento crítico e profundidade?", maxScore: 10 },
+];
+
+const DEFAULT_GROUP_CRITERIA: Criterion[] = [
+  { id: "g1", label: "Participação nas Discussões", description: "Contribuiu ativamente nas discussões do grupo?", maxScore: 100 },
+  { id: "g2", label: "Contribuição para as Respostas", description: "Ajudou na formulação e elaboração das respostas?", maxScore: 100 },
+  { id: "g3", label: "Colaboração e Engajamento", description: "Demonstrou espírito colaborativo e comprometimento com o grupo?", maxScore: 100 },
+];
+
+function detectGroupMode(sessions: any[]): boolean {
+  return sessions.some((s: any) => s.group_id != null);
+}
+
 // ====================== TEACHER SIDE ======================
 export const PeerReviewTeacher = ({
   activityId, roomId, sessions, quizData, peerReviewEnabled, peerReviewCriteria, onUpdate
 }: PeerReviewTeacherProps) => {
   const { toast } = useToast();
-  const [criteria, setCriteria] = useState<Criterion[]>(
-    peerReviewCriteria.length > 0 ? peerReviewCriteria : [
-      { id: "1", label: "Clareza", description: "A resposta é clara e bem organizada?", maxScore: 10 },
-      { id: "2", label: "Fundamentação", description: "Usa conceitos do material corretamente?", maxScore: 10 },
-      { id: "3", label: "Análise Crítica", description: "Demonstra pensamento crítico e profundidade?", maxScore: 10 },
-    ]
-  );
+  const isGroupMode = detectGroupMode(sessions);
+
+  const getDefaultCriteria = () => {
+    if (peerReviewCriteria.length > 0) return peerReviewCriteria;
+    return isGroupMode ? DEFAULT_GROUP_CRITERIA : DEFAULT_INDIVIDUAL_CRITERIA;
+  };
+
+  const [criteria, setCriteria] = useState<Criterion[]>(getDefaultCriteria());
   const [enabled, setEnabled] = useState(peerReviewEnabled);
   const [saving, setSaving] = useState(false);
   const [distributing, setDistributing] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
+
+  // Update criteria defaults when group mode changes and no criteria saved yet
+  useEffect(() => {
+    if (peerReviewCriteria.length === 0) {
+      setCriteria(isGroupMode ? DEFAULT_GROUP_CRITERIA : DEFAULT_INDIVIDUAL_CRITERIA);
+    }
+  }, [isGroupMode, peerReviewCriteria.length]);
 
   const fetchAssignments = useCallback(async () => {
     const { data } = await supabase
@@ -102,7 +127,7 @@ export const PeerReviewTeacher = ({
       id: String(Date.now()),
       label: "",
       description: "",
-      maxScore: 10,
+      maxScore: isGroupMode ? 100 : 10,
     }]);
   };
 
@@ -152,6 +177,7 @@ export const PeerReviewTeacher = ({
   };
 
   const completedCount = assignments.length > 0 ? reviews.length : 0;
+  const isPercentMode = criteria.some(c => c.maxScore === 100);
 
   return (
     <div className="space-y-6">
@@ -159,8 +185,17 @@ export const PeerReviewTeacher = ({
         <div>
           <h3 className="font-display text-base font-semibold flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" /> Avaliação por Pares
+            {isGroupMode && (
+              <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                Modo Grupo — Participação %
+              </span>
+            )}
           </h3>
-          <p className="text-sm text-muted-foreground">Alunos avaliam respostas de colegas com critérios definidos.</p>
+          <p className="text-sm text-muted-foreground">
+            {isGroupMode
+              ? "Alunos avaliam a participação e contribuição dos colegas de grupo em percentual."
+              : "Alunos avaliam respostas de colegas com critérios definidos."}
+          </p>
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -176,16 +211,25 @@ export const PeerReviewTeacher = ({
       {enabled && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-6">
           <div className="space-y-3">
-            <Label className="text-sm font-semibold">Critérios de Avaliação</Label>
+            <Label className="text-sm font-semibold">
+              {isGroupMode ? "Critérios de Participação (em %)" : "Critérios de Avaliação"}
+            </Label>
             {criteria.map((c, i) => (
               <div key={c.id} className="bg-secondary rounded-lg p-4 space-y-2">
                 <div className="flex gap-2">
                   <div className="flex-1 space-y-1">
                     <Input placeholder="Nome do critério" value={c.label} onChange={(e) => updateCriterion(i, "label", e.target.value)} className="bg-background" />
                   </div>
-                  <div className="w-24 space-y-1">
-                    <Input type="number" min={1} max={10} value={c.maxScore} onChange={(e) => updateCriterion(i, "maxScore", parseInt(e.target.value) || 10)} className="bg-background" />
-                  </div>
+                  {!isGroupMode && (
+                    <div className="w-24 space-y-1">
+                      <Input type="number" min={1} max={10} value={c.maxScore} onChange={(e) => updateCriterion(i, "maxScore", parseInt(e.target.value) || 10)} className="bg-background" />
+                    </div>
+                  )}
+                  {isGroupMode && (
+                    <div className="w-20 flex items-center justify-center text-sm font-medium text-muted-foreground">
+                      0–100%
+                    </div>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => removeCriterion(i)} className="text-destructive">×</Button>
                 </div>
                 <Input placeholder="Descrição do critério..." value={c.description} onChange={(e) => updateCriterion(i, "description", e.target.value)} className="bg-background text-sm" />
@@ -205,7 +249,7 @@ export const PeerReviewTeacher = ({
             </Button>
           </div>
 
-          {/* ========== REDESIGNED ASSIGNMENT STATUS & RESULTS ========== */}
+          {/* ========== ASSIGNMENT STATUS & RESULTS ========== */}
           {assignments.length > 0 && (
             <div className="space-y-4">
               {/* Summary cards */}
@@ -274,7 +318,7 @@ export const PeerReviewTeacher = ({
                                 <div key={c.id} className="flex-1 min-w-[120px] bg-secondary/50 rounded-lg px-3 py-2.5">
                                   <p className="text-xs text-muted-foreground mb-0.5">{c.label}</p>
                                   <p className={`text-lg font-bold ${colorClass}`}>
-                                    {score}<span className="text-xs font-normal text-muted-foreground">/{maxScore}</span>
+                                    {isPercentMode ? `${score}%` : <>{score}<span className="text-xs font-normal text-muted-foreground">/{maxScore}</span></>}
                                   </p>
                                 </div>
                               );
@@ -292,8 +336,10 @@ export const PeerReviewTeacher = ({
                           {/* Average score badge */}
                           <div className="flex justify-end">
                             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10">
-                              <Star className="w-3.5 h-3.5 text-primary" />
-                              <span className="text-sm font-bold text-primary">Média: {avg.toFixed(1)}</span>
+                              {isPercentMode ? <Percent className="w-3.5 h-3.5 text-primary" /> : <Star className="w-3.5 h-3.5 text-primary" />}
+                              <span className="text-sm font-bold text-primary">
+                                {isPercentMode ? `Média: ${avg.toFixed(0)}%` : `Média: ${avg.toFixed(1)}`}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -332,10 +378,20 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
   const [loading, setLoading] = useState(true);
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
   const [activeQuizData, setActiveQuizData] = useState<any>(quizData);
+  const [isGroupActivity, setIsGroupActivity] = useState(false);
   const hasFetched = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
+      // Check if this session is part of a group
+      const { data: sessionData } = await supabase
+        .from("student_sessions")
+        .select("group_id")
+        .eq("id", sessionId)
+        .maybeSingle();
+      const groupMode = sessionData?.group_id != null;
+      setIsGroupActivity(groupMode);
+
       const [{ data: reviewerAssignments }, { data: revieweeAssignments }] = await Promise.all([
         supabase
           .from("peer_review_assignments" as any)
@@ -516,6 +572,7 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
   }
 
   const levels = activeQuizData?.levels || [];
+  const isPercentMode = criteria.some(c => c.maxScore === 100);
 
   return (
     <div className="space-y-8">
@@ -525,79 +582,114 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
           <div className="bg-card border border-border rounded-xl p-6 space-y-6">
             <div>
               <h2 className="font-display text-lg font-bold flex items-center gap-2">
-                <Eye className="w-5 h-5 text-primary" /> Avaliar Colega
+                {isPercentMode ? <Percent className="w-5 h-5 text-primary" /> : <Eye className="w-5 h-5 text-primary" />}
+                {isPercentMode ? "Avaliar Participação do Colega" : "Avaliar Colega"}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Leia as respostas do(a) colega e avalie de acordo com os critérios abaixo.
+                {isPercentMode
+                  ? "Avalie o percentual de participação e contribuição do(a) colega no grupo."
+                  : "Leia as respostas do(a) colega e avalie de acordo com os critérios abaixo."}
               </p>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Respostas do Colega</h3>
-              {levels.map((level: any, li: number) => (
-                <div key={li}>
-                  <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
-                  {level.questions?.map((q: any, qi: number) => {
-                    const key = `${li}-${qi}`;
-                    const answer = revieweeAnswers[key];
-                    return (
-                      <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
-                        {q.context && (
-                          <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>
-                        )}
-                        <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
-                        <div className="bg-background rounded-lg p-3">
-                          <p className="text-sm text-foreground">
-                            {answer || <span className="italic text-muted-foreground">Não respondida</span>}
-                          </p>
+            {/* Show answers only in non-percentage mode */}
+            {!isPercentMode && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Respostas do Colega</h3>
+                {levels.map((level: any, li: number) => (
+                  <div key={li}>
+                    <p className="font-semibold text-sm text-primary mb-2">{level.label}</p>
+                    {level.questions?.map((q: any, qi: number) => {
+                      const key = `${li}-${qi}`;
+                      const answer = revieweeAnswers[key];
+                      return (
+                        <div key={qi} className="mb-3 bg-secondary rounded-lg p-4">
+                          {q.context && (
+                            <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>
+                          )}
+                          <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
+                          <div className="bg-background rounded-lg p-3">
+                            <p className="text-sm text-foreground">
+                              {answer || <span className="italic text-muted-foreground">Não respondida</span>}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-4">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Sua Avaliação</h3>
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                {isPercentMode ? "Percentual de Participação" : "Sua Avaliação"}
+              </h3>
               {criteria.map((c) => (
                 <div key={c.id} className="bg-secondary rounded-lg p-4">
                   <div className="flex items-center justify-between mb-1">
                     <Label className="font-medium text-sm">{c.label}</Label>
-                    <span className="text-xs text-muted-foreground">Nota: {scores[c.id] ?? "—"} / {c.maxScore}</span>
+                    <span className={`text-sm font-bold ${
+                      (scores[c.id] ?? 0) >= 70 ? "text-level-easy" : (scores[c.id] ?? 0) >= 40 ? "text-level-medium" : "text-destructive"
+                    }`}>
+                      {isPercentMode ? `${scores[c.id] ?? 0}%` : `${scores[c.id] ?? "—"} / ${c.maxScore}`}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">{c.description}</p>
-                  <div className="flex gap-1">
-                    {Array.from({ length: c.maxScore }, (_, i) => i + 1).map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => setScores(prev => ({ ...prev, [c.id]: n }))}
-                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
-                          scores[c.id] === n
-                            ? "bg-primary text-primary-foreground"
-                            : (scores[c.id] || 0) >= n
-                              ? "bg-primary/20 text-primary"
-                              : "bg-background text-muted-foreground hover:bg-primary/10"
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
+
+                  {isPercentMode ? (
+                    <div className="space-y-2">
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[scores[c.id] ?? 0]}
+                        onValueChange={([val]) => setScores(prev => ({ ...prev, [c.id]: val }))}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>0%</span>
+                        <span>25%</span>
+                        <span>50%</span>
+                        <span>75%</span>
+                        <span>100%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-1">
+                      {Array.from({ length: c.maxScore }, (_, i) => i + 1).map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setScores(prev => ({ ...prev, [c.id]: n }))}
+                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
+                            scores[c.id] === n
+                              ? "bg-primary text-primary-foreground"
+                              : (scores[c.id] || 0) >= n
+                                ? "bg-primary/20 text-primary"
+                                : "bg-background text-muted-foreground hover:bg-primary/10"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Comentário Geral (opcional)</Label>
                 <Textarea
-                  placeholder="Deixe um comentário construtivo para o colega..."
+                  placeholder={isPercentMode
+                    ? "Descreva como foi a participação do colega no grupo..."
+                    : "Deixe um comentário construtivo para o colega..."}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   rows={4}
                 />
               </div>
 
-              <Button onClick={submitReview} disabled={submitting || criteria.some(c => !scores[c.id])}>
+              <Button onClick={submitReview} disabled={submitting || criteria.some(c => scores[c.id] == null)}>
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
                 {existingReview ? "Atualizar Avaliação" : "Enviar Avaliação"}
               </Button>
@@ -615,18 +707,39 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
             </h2>
             {receivedReviews.map((review: any, i: number) => {
               const reviewScores = (review.criteria_scores as Record<string, number>) || {};
+              const avg = Object.values(reviewScores).length > 0
+                ? Object.values(reviewScores).reduce((s: number, v: any) => s + (Number(v) || 0), 0) / Object.values(reviewScores).length
+                : 0;
               return (
                 <div key={review.id} className="bg-secondary rounded-lg p-4 space-y-3">
-                  <p className="text-xs text-muted-foreground font-medium">Avaliação {i + 1}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground font-medium">Avaliação {i + 1}</p>
+                    {isPercentMode && (
+                      <span className={`text-sm font-bold ${avg >= 70 ? "text-level-easy" : avg >= 40 ? "text-level-medium" : "text-destructive"}`}>
+                        Média: {avg.toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {criteria.map((c) => (
-                      <div key={c.id} className="flex items-center justify-between bg-background rounded-lg px-3 py-2">
-                        <span className="text-sm text-foreground">{c.label}</span>
-                        <span className="inline-flex items-center gap-1 text-sm font-bold text-primary">
-                          <Star className="w-3.5 h-3.5" /> {reviewScores[c.id] ?? "—"}/{c.maxScore}
-                        </span>
-                      </div>
-                    ))}
+                    {criteria.map((c) => {
+                      const score = reviewScores[c.id] ?? 0;
+                      return (
+                        <div key={c.id} className="flex items-center justify-between bg-background rounded-lg px-3 py-2">
+                          <span className="text-sm text-foreground">{c.label}</span>
+                          <span className={`inline-flex items-center gap-1 text-sm font-bold ${
+                            isPercentMode
+                              ? (score >= 70 ? "text-level-easy" : score >= 40 ? "text-level-medium" : "text-destructive")
+                              : "text-primary"
+                          }`}>
+                            {isPercentMode ? (
+                              <><Percent className="w-3.5 h-3.5" /> {score}%</>
+                            ) : (
+                              <><Star className="w-3.5 h-3.5" /> {score}/{c.maxScore}</>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                   {review.comment && (
                     <div className="bg-background rounded-lg p-3">
