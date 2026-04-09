@@ -10,7 +10,7 @@ import {
   Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock,
   CalendarClock, Users2, Download, FileText, ClipboardList,
   FolderOpen, ArrowLeft, Palette, Pencil, Copy, Link,
-  MoreVertical,
+  MoreVertical, RotateCcw,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -334,6 +334,20 @@ const RoomsList = () => {
     fetchRooms();
   };
 
+  const reactivateRoom = async (roomId: string) => {
+    const newExpire = new Date();
+    newExpire.setDate(newExpire.getDate() + 7);
+    const { error } = await (supabase.from("rooms") as any)
+      .update({ expire_at: newExpire.toISOString(), last_student_activity_at: new Date().toISOString() })
+      .eq("id", roomId);
+    if (error) {
+      toast({ title: "Erro ao reativar sala", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Sala reativada!", description: "A sala ficará ativa por mais 7 dias." });
+    fetchRooms();
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
@@ -573,6 +587,11 @@ const RoomsList = () => {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {expired && (
+                  <DropdownMenuItem onClick={() => reactivateRoom(room.id)}>
+                    <RotateCcw className="w-4 h-4 mr-2" /> Reativar
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => { setRenamingRoom(room); setRenameTitle(room.title); setRenameDialogOpen(true); }}>
                   <Pencil className="w-4 h-4 mr-2" /> Renomear
                 </DropdownMenuItem>
