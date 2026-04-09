@@ -587,6 +587,11 @@ const RoomsList = () => {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {expired && (
+                  <DropdownMenuItem onClick={() => reactivateRoom(room.id)}>
+                    <RotateCcw className="w-4 h-4 mr-2" /> Reativar
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => { setRenamingRoom(room); setRenameTitle(room.title); setRenameDialogOpen(true); }}>
                   <Pencil className="w-4 h-4 mr-2" /> Renomear
                 </DropdownMenuItem>
