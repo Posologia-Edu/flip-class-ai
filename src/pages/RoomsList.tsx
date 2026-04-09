@@ -10,7 +10,7 @@ import {
   Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock,
   CalendarClock, Users2, Download, FileText, ClipboardList,
   FolderOpen, ArrowLeft, Palette, Pencil, Copy, Link,
-  MoreVertical,
+  MoreVertical, RotateCcw,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
