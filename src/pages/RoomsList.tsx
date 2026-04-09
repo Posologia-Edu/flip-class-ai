@@ -334,6 +334,20 @@ const RoomsList = () => {
     fetchRooms();
   };
 
+  const reactivateRoom = async (roomId: string) => {
+    const newExpire = new Date();
+    newExpire.setDate(newExpire.getDate() + 7);
+    const { error } = await (supabase.from("rooms") as any)
+      .update({ expire_at: newExpire.toISOString(), last_student_activity_at: new Date().toISOString() })
+      .eq("id", roomId);
+    if (error) {
+      toast({ title: "Erro ao reativar sala", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Sala reativada!", description: "A sala ficará ativa por mais 7 dias." });
+    fetchRooms();
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Carregando...</div>;
   }
