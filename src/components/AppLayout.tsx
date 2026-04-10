@@ -1,8 +1,17 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, Navigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function AppLayout() {
+  const { user, loading, isApproved } = useAuth();
+
+  if (loading) return null;
+
+  if (!user) return <Navigate to="/auth" replace />;
+
+  if (!isApproved) return <Navigate to="/pending-approval" replace />;
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
