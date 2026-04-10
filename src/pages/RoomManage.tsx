@@ -1532,7 +1532,6 @@ const RoomManage = () => {
                                       key={`${act.id}-${li}-${qi}-${q.points}`}
                                       onBlur={(e) => updateQuestionPoints(act.id, li, qi, quiz, parseDecimalInput(e.target.value))}
                                     />
-                                    />
                                   </div>
                                 )}
                                 {!isOwner && q.points != null && (
@@ -1623,7 +1622,6 @@ const RoomManage = () => {
                           key={`manual-${li}-${qi}-${(q as any).points}`}
                           onBlur={(e) => updateManualQuestion(li, qi, "points", parseDecimalInput(e.target.value))}
                           className="w-32 text-sm"
-                        />
                         />
                       </div>
                     </div>
