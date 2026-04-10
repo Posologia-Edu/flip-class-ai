@@ -1836,7 +1836,7 @@ const RoomManage = () => {
                         <p className="text-xs text-muted-foreground">
                           {(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}
                           {totalPossiblePoints > 0 && (
-                            <span className="ml-2 font-semibold text-primary">• {earnedPoints}/{totalPossiblePoints} pts</span>
+                             <span className="ml-2 font-semibold text-primary">• {Math.round(earnedPoints * 100) / 100}/{totalPossiblePoints} pts</span>
                           )}
                         </p>
                       </div>
