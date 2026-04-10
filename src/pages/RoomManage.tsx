@@ -674,12 +674,13 @@ const RoomManage = () => {
     return `${h}h ${m % 60}min`;
   };
 
-  const saveFeedback = async (sessionId: string, questionKey: string) => {
+  const saveFeedback = async (sessionId: string, questionKey: string, replicateToSessionIds?: string[]) => {
     const fbKey = `${sessionId}-${questionKey}`;
     const fb = feedbacks[fbKey];
     if (!fb) return;
     setSavingFeedback(fbKey);
     try {
+      // Save for the primary session
       const { error } = await supabase
         .from("teacher_feedback" as any)
         .upsert({
@@ -688,6 +689,22 @@ const RoomManage = () => {
         } as any, { onConflict: "session_id,question_key" });
       if (error) throw error;
       setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: true } }));
+
+      // Replicate to other group members if provided
+      if (replicateToSessionIds && replicateToSessionIds.length > 1) {
+        const otherIds = replicateToSessionIds.filter(id => id !== sessionId);
+        for (const otherId of otherIds) {
+          await supabase
+            .from("teacher_feedback" as any)
+            .upsert({
+              session_id: otherId, question_key: questionKey,
+              feedback_text: fb.feedback_text, grade: fb.grade,
+            } as any, { onConflict: "session_id,question_key" });
+          const otherFbKey = `${otherId}-${questionKey}`;
+          setFeedbacks(prev => ({ ...prev, [otherFbKey]: { feedback_text: fb.feedback_text, grade: fb.grade, saved: true } }));
+        }
+      }
+
       toast({ title: "Feedback salvo!" });
     } catch (err: any) {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
