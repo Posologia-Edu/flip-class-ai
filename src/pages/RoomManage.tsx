@@ -479,6 +479,14 @@ const RoomManage = () => {
     fetchData();
   };
 
+  const parseDecimalInput = (raw: string): number | undefined => {
+    if (!raw || raw.trim() === "") return undefined;
+    const normalized = raw.replace(",", ".");
+    const num = parseFloat(normalized);
+    if (isNaN(num) || num < 0) return undefined;
+    return Math.round(num * 100) / 100;
+  };
+
   const updateQuestionPoints = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData, points: number | undefined) => {
     const newLevels = quiz.levels.map((level, li) => {
       if (li !== levelIndex) return level;
@@ -1515,14 +1523,14 @@ const RoomManage = () => {
                                 {isOwner && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <Label className="text-xs text-muted-foreground">Pontos:</Label>
-                                    <Input
-                                      type="number"
-                                      step="0.1"
-                                      min={0}
+                                     <Input
+                                      type="text"
+                                      inputMode="decimal"
                                       className="w-20 h-7 text-xs"
-                                      value={q.points ?? ""}
+                                      defaultValue={q.points != null ? String(q.points).replace(".", ",") : ""}
                                       placeholder="—"
-                                      onChange={(e) => updateQuestionPoints(act.id, li, qi, quiz, e.target.value ? Number(e.target.value) : undefined)}
+                                      key={`${act.id}-${li}-${qi}-${q.points}`}
+                                      onBlur={(e) => updateQuestionPoints(act.id, li, qi, quiz, parseDecimalInput(e.target.value))}
                                     />
                                   </div>
                                 )}
@@ -1607,11 +1615,12 @@ const RoomManage = () => {
                       <div className="space-y-2">
                         <Label className="text-xs">Pontuação da questão (opcional)</Label>
                         <Input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="decimal"
                           placeholder="Ex: 10"
-                          value={(q as any).points ?? ""}
-                          onChange={(e) => updateManualQuestion(li, qi, "points", e.target.value ? Number(e.target.value) : undefined)}
+                          defaultValue={(q as any).points != null ? String((q as any).points).replace(".", ",") : ""}
+                          key={`manual-${li}-${qi}-${(q as any).points}`}
+                          onBlur={(e) => updateManualQuestion(li, qi, "points", parseDecimalInput(e.target.value))}
                           className="w-32 text-sm"
                         />
                       </div>
