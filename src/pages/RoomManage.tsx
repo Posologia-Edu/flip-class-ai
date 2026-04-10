@@ -479,6 +479,14 @@ const RoomManage = () => {
     fetchData();
   };
 
+  const parseDecimalInput = (raw: string): number | undefined => {
+    if (!raw || raw.trim() === "") return undefined;
+    const normalized = raw.replace(",", ".");
+    const num = parseFloat(normalized);
+    if (isNaN(num) || num < 0) return undefined;
+    return Math.round(num * 100) / 100;
+  };
+
   const updateQuestionPoints = async (activityId: string, levelIndex: number, questionIndex: number, quiz: QuizData, points: number | undefined) => {
     const newLevels = quiz.levels.map((level, li) => {
       if (li !== levelIndex) return level;
