@@ -674,12 +674,13 @@ const RoomManage = () => {
     return `${h}h ${m % 60}min`;
   };
 
-  const saveFeedback = async (sessionId: string, questionKey: string) => {
+  const saveFeedback = async (sessionId: string, questionKey: string, replicateToSessionIds?: string[]) => {
     const fbKey = `${sessionId}-${questionKey}`;
     const fb = feedbacks[fbKey];
     if (!fb) return;
     setSavingFeedback(fbKey);
     try {
+      // Save for the primary session
       const { error } = await supabase
         .from("teacher_feedback" as any)
         .upsert({
@@ -688,6 +689,22 @@ const RoomManage = () => {
         } as any, { onConflict: "session_id,question_key" });
       if (error) throw error;
       setFeedbacks(prev => ({ ...prev, [fbKey]: { ...prev[fbKey], saved: true } }));
+
+      // Replicate to other group members if provided
+      if (replicateToSessionIds && replicateToSessionIds.length > 1) {
+        const otherIds = replicateToSessionIds.filter(id => id !== sessionId);
+        for (const otherId of otherIds) {
+          await supabase
+            .from("teacher_feedback" as any)
+            .upsert({
+              session_id: otherId, question_key: questionKey,
+              feedback_text: fb.feedback_text, grade: fb.grade,
+            } as any, { onConflict: "session_id,question_key" });
+          const otherFbKey = `${otherId}-${questionKey}`;
+          setFeedbacks(prev => ({ ...prev, [otherFbKey]: { feedback_text: fb.feedback_text, grade: fb.grade, saved: true } }));
+        }
+      }
+
       toast({ title: "Feedback salvo!" });
     } catch (err: any) {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
@@ -1785,12 +1802,19 @@ const RoomManage = () => {
             </div>
           ) : (
             /* Answers tab */
-            <div className="space-y-3">
-              {sessions.filter(s => s.completed_at && s.answers).map((s) => {
-                const studentAnswers = s.answers as Record<string, any>;
-                const isExpanded = expandedStudent === s.id;
-                // Use all activities for answers display, filtering hidden questions
-                // to match the student view indices
+            (() => {
+              const completedSessions = sessions.filter(s => s.completed_at && s.answers);
+              const hasGroupSessions = completedSessions.some(s => (s as any).group_id != null);
+
+              // Helper to render a student answer card (shared between individual and group views)
+              const renderAnswerCard = (
+                cardKey: string,
+                headerContent: React.ReactNode,
+                representativeSession: Tables<"student_sessions">,
+                allSessionsInCard: Tables<"student_sessions">[],
+              ) => {
+                const studentAnswers = representativeSession.answers as Record<string, any>;
+                const isExpanded = expandedStudent === cardKey;
                 const allQuizLevels = activities.flatMap(act => {
                   const q = act.quiz_data as unknown as QuizData;
                   if (!q?.levels) return [];
@@ -1800,18 +1824,13 @@ const RoomManage = () => {
                   })).filter(l => l.questions.length > 0);
                 });
                 const combinedQuiz: QuizData = { levels: allQuizLevels };
-
-                // Calculate points earned from teacher feedbacks + auto-graded objectives
                 const totalPossiblePoints = allQuizLevels.reduce((sum, l) => sum + (l.questions?.reduce((s2, q) => s2 + (q.points || 0), 0) || 0), 0);
                 const earnedPoints = allQuizLevels.reduce((sum, l, li) => {
                   return sum + (l.questions?.reduce((s2, q, qi) => {
                     if (!q.points) return s2;
-                    const fbKey = `${s.id}-${li}-${qi}`;
+                    const fbKey = `${representativeSession.id}-${li}-${qi}`;
                     const fb = feedbacks[fbKey];
-                    if (fb?.grade != null) {
-                      return s2 + fb.grade;
-                    }
-                    // For auto-gradeable types, count if correct
+                    if (fb?.grade != null) return s2 + fb.grade;
                     if (q.type === "multiple_choice") {
                       const answer = studentAnswers?.[`${li}-${qi}`];
                       if (answer === q.correct_answer) return s2 + q.points;
@@ -1821,22 +1840,14 @@ const RoomManage = () => {
                 }, 0);
 
                 return (
-                  <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                    <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-card-foreground">{s.student_name}</p>
-                          {(s as any).feedback_email_sent_at && (
-                            <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0">
-                              <MailCheck className="w-3 h-3" />
-                              Feedback enviado
-                            </Badge>
-                          )}
-                        </div>
+                  <div key={cardKey} className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedStudent(isExpanded ? null : cardKey)}>
+                      <div className="flex-1">
+                        {headerContent}
                         <p className="text-xs text-muted-foreground">
-                          {(s as any).student_email || ""} • Concluído em {new Date(s.completed_at!).toLocaleDateString("pt-BR")}
+                          Concluído em {new Date(representativeSession.completed_at!).toLocaleDateString("pt-BR")}
                           {totalPossiblePoints > 0 && (
-                            <span className="ml-2 font-semibold text-primary">• {earnedPoints}/{totalPossiblePoints} pts</span>
+                            <span className="ml-2 font-semibold text-primary">• {Math.round(earnedPoints * 100) / 100}/{totalPossiblePoints} pts</span>
                           )}
                         </p>
                       </div>
@@ -1848,10 +1859,10 @@ const RoomManage = () => {
                                 <span>
                                   <Button
                                     size="sm" variant="outline" className="text-xs"
-                                    disabled={aiGradingAll === s.id || !canUseAiCorrection()}
-                                    onClick={(e) => { e.stopPropagation(); aiGradeAllStudent(s.id, combinedQuiz, studentAnswers || {}); }}
+                                    disabled={aiGradingAll === representativeSession.id || !canUseAiCorrection()}
+                                    onClick={(e) => { e.stopPropagation(); aiGradeAllStudent(representativeSession.id, combinedQuiz, studentAnswers || {}); }}
                                   >
-                                    {aiGradingAll === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5 mr-1" /> : <Bot className="w-3.5 h-3.5 mr-1" />}
+                                    {aiGradingAll === representativeSession.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5 mr-1" /> : <Bot className="w-3.5 h-3.5 mr-1" />}
                                     Corrigir Todas com IA
                                   </Button>
                                 </span>
@@ -1876,7 +1887,7 @@ const RoomManage = () => {
                                   {q.context && <p className="text-xs text-muted-foreground mb-2 italic">{q.context}</p>}
                                   <p className="font-medium text-sm text-foreground mb-2">{qi + 1}. {q.question}</p>
                                   <div className="bg-background rounded-lg p-3 mb-2">
-                                    <p className="text-xs font-semibold text-muted-foreground mb-1">Resposta do aluno:</p>
+                                    <p className="text-xs font-semibold text-muted-foreground mb-1">Resposta {hasGroupSessions ? "do grupo" : "do aluno"}:</p>
                                     <p className="text-sm text-foreground">
                                       {answer == null ? (
                                         <span className="italic text-muted-foreground">Não respondida</span>
@@ -1891,7 +1902,6 @@ const RoomManage = () => {
                                       )}
                                     </p>
                                   </div>
-                                  {/* Gabarito */}
                                   {q.correct_answer && (
                                     <p className="text-xs text-muted-foreground mb-3"><span className="font-semibold">Resposta esperada:</span> {q.correct_answer}</p>
                                   )}
@@ -1930,7 +1940,7 @@ const RoomManage = () => {
                                   {/* Feedback do professor */}
                                   <div className="border-t border-border pt-3 mt-3 space-y-3">
                                     {(() => {
-                                      const fbKey = `${s.id}-${key}`;
+                                      const fbKey = `${representativeSession.id}-${key}`;
                                       const fb = feedbacks[fbKey];
                                       const isSaved = fb?.saved === true;
                                       return (
@@ -1946,7 +1956,7 @@ const RoomManage = () => {
                                                   <span>
                                                     <Button size="sm" variant="ghost" className="text-xs h-7 gap-1"
                                                       disabled={aiGrading === fbKey || !answer || !canUseAiCorrection()}
-                                                      onClick={() => aiGradeQuestion(s.id, key, q.question, q.context, q.correct_answer, answer || "", q.points)}
+                                                      onClick={() => aiGradeQuestion(representativeSession.id, key, q.question, q.context, q.correct_answer, answer || "", q.points)}
                                                     >
                                                       {aiGrading === fbKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : !canUseAiCorrection() ? <Lock className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                                                       Corrigir com IA
@@ -1968,7 +1978,7 @@ const RoomManage = () => {
                                           <Textarea
                                             placeholder="Escreva seu feedback para esta resposta..."
                                             value={fb?.feedback_text || ""}
-                                            onChange={(e) => updateFeedbackField(s.id, key, "feedback_text", e.target.value)}
+                                            onChange={(e) => updateFeedbackField(representativeSession.id, key, "feedback_text", e.target.value)}
                                             rows={3}
                                             className="resize-y text-sm"
                                             disabled={isSaved}
@@ -1981,10 +1991,8 @@ const RoomManage = () => {
                                                 const qType = q.type || "open_ended";
                                                 let gradeOptions: number[];
                                                 if (qType === "multiple_choice" || qType === "drag_and_drop" || qType === "ordering") {
-                                                  // Binary: 0 or full points
                                                   gradeOptions = [0, maxPts];
                                                 } else if (qType === "fill_in_the_blank" || qType === "matching") {
-                                                  // Partial credit in integer steps or half-steps for small values
                                                   if (maxPts <= 2) {
                                                     gradeOptions = Array.from({ length: Math.floor(maxPts * 2) + 1 }, (_, i) => Math.round(i * 0.5 * 100) / 100);
                                                   } else {
@@ -1992,7 +2000,6 @@ const RoomManage = () => {
                                                     if (!gradeOptions.includes(maxPts)) gradeOptions.push(maxPts);
                                                   }
                                                 } else {
-                                                  // case_study, open_ended: granular steps
                                                   if (maxPts <= 2) {
                                                     gradeOptions = Array.from({ length: Math.floor(maxPts * 4) + 1 }, (_, i) => Math.round(i * 0.25 * 100) / 100);
                                                   } else if (maxPts <= 5) {
@@ -2005,7 +2012,7 @@ const RoomManage = () => {
                                                 return (
                                                   <Select
                                                     value={fb?.grade?.toString() ?? ""}
-                                                    onValueChange={(v) => updateFeedbackField(s.id, key, "grade", v === "" ? null : parseFloat(v))}
+                                                    onValueChange={(v) => updateFeedbackField(representativeSession.id, key, "grade", v === "" ? null : parseFloat(v))}
                                                     disabled={isSaved}
                                                   >
                                                     <SelectTrigger className="w-24 h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
@@ -2026,7 +2033,7 @@ const RoomManage = () => {
                                                 <FileEdit className="w-3.5 h-3.5 mr-1" /> Editar
                                               </Button>
                                             ) : (
-                                              <Button size="sm" variant="outline" onClick={() => saveFeedback(s.id, key)} disabled={savingFeedback === fbKey}>
+                                              <Button size="sm" variant="outline" onClick={() => saveFeedback(representativeSession.id, key, allSessionsInCard.map(ss => ss.id))} disabled={savingFeedback === fbKey}>
                                                 {savingFeedback === fbKey ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
                                                 Salvar
                                               </Button>
@@ -2040,52 +2047,153 @@ const RoomManage = () => {
                               );
                             })}
                           </div>
-                          ))}
-                          {/* Send feedback email button */}
-                          {(() => {
-                            const allQKeys = combinedQuiz.levels.flatMap((l, li) =>
-                              (l.questions || []).map((q, qi) => ({ fbKey: `${s.id}-${li}-${qi}`, type: q.type, correct: q.correct_answer, answer: studentAnswers?.[`${li}-${qi}`], points: q.points }))
-                            );
-                            // Objective questions count as "done" even without explicit save
-                            const allDone = allQKeys.length > 0 && allQKeys.every(({ fbKey, type }) => {
-                              if (type === "multiple_choice") return true; // auto-graded
-                              return feedbacks[fbKey]?.saved;
-                            });
-                            const hasEmail = !!(s as any).student_email;
-                            const alreadySent = !!(s as any).feedback_email_sent_at;
-                            return allDone ? (
-                              <div className="border-t border-border pt-4 mt-4 flex items-center justify-end gap-3">
-                                {alreadySent && (
-                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <MailCheck className="w-3.5 h-3.5 text-green-600" />
-                                    Enviado em {new Date((s as any).feedback_email_sent_at).toLocaleDateString("pt-BR")}
-                                  </span>
-                                )}
-                                <Button
-                                  size="sm"
-                                  className="gap-2"
-                                  variant={alreadySent ? "outline" : "default"}
-                                  disabled={sendingFeedbackEmail === s.id || !hasEmail}
-                                  onClick={() => sendFeedbackEmail(s, combinedQuiz.levels, studentAnswers || {})}
-                                >
-                                  {sendingFeedbackEmail === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                                  {!hasEmail ? "Aluno sem e-mail cadastrado" : alreadySent ? "Reenviar feedback" : "Enviar feedback por e-mail"}
-                                </Button>
-                              </div>
-                            ) : null;
-                          })()}
-                        </div>
+                        ))}
+                        {/* Send feedback email button */}
+                        {(() => {
+                          const allQKeys = combinedQuiz.levels.flatMap((l, li) =>
+                            (l.questions || []).map((q, qi) => ({ fbKey: `${representativeSession.id}-${li}-${qi}`, type: q.type, correct: q.correct_answer, answer: studentAnswers?.[`${li}-${qi}`], points: q.points }))
+                          );
+                          const allDone = allQKeys.length > 0 && allQKeys.every(({ fbKey, type }) => {
+                            if (type === "multiple_choice") return true;
+                            return feedbacks[fbKey]?.saved;
+                          });
+                          const anyHasEmail = allSessionsInCard.some(ss => !!(ss as any).student_email);
+                          const allSent = allSessionsInCard.every(ss => !!(ss as any).feedback_email_sent_at);
+                          return allDone ? (
+                            <div className="border-t border-border pt-4 mt-4 flex items-center justify-end gap-3">
+                              {allSent && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <MailCheck className="w-3.5 h-3.5 text-green-600" />
+                                  Feedback enviado a todos
+                                </span>
+                              )}
+                              <Button
+                                size="sm"
+                                className="gap-2"
+                                variant={allSent ? "outline" : "default"}
+                                disabled={sendingFeedbackEmail === cardKey || !anyHasEmail}
+                                onClick={async () => {
+                                  // Send feedback email to all members in the card
+                                  for (const ss of allSessionsInCard) {
+                                    await sendFeedbackEmail(ss, combinedQuiz.levels, studentAnswers || {});
+                                  }
+                                }}
+                              >
+                                {sendingFeedbackEmail === cardKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                                {!anyHasEmail ? "Alunos sem e-mail" : allSent ? "Reenviar feedback" : `Enviar feedback${allSessionsInCard.length > 1 ? ` (${allSessionsInCard.length} alunos)` : " por e-mail"}`}
+                              </Button>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
                     )}
                   </div>
                 );
-              })}
-              {sessions.filter(s => s.completed_at && s.answers).length === 0 && (
-                <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-                  <MessageSquare className="w-8 h-8 mx-auto mb-2" />
-                  <p>Nenhum aluno enviou respostas ainda.</p>
+              };
+
+              if (hasGroupSessions) {
+                // Group mode: group sessions by group_id
+                const groupMap = new Map<string, Tables<"student_sessions">[]>();
+                const individualSessions: Tables<"student_sessions">[] = [];
+                completedSessions.forEach(s => {
+                  const gid = (s as any).group_id;
+                  if (gid) {
+                    if (!groupMap.has(gid)) groupMap.set(gid, []);
+                    groupMap.get(gid)!.push(s);
+                  } else {
+                    individualSessions.push(s);
+                  }
+                });
+
+                return (
+                  <div className="space-y-3">
+                    {Array.from(groupMap.entries()).map(([groupId, groupSessions]) => {
+                      // Use the leader session (or first) as the representative
+                      const leader = groupSessions.find(s => (s as any).is_group_leader) || groupSessions[0];
+                      const groupName = groupNameMap[groupId] || "Grupo";
+                      const allSent = groupSessions.every(ss => !!(ss as any).feedback_email_sent_at);
+
+                      const headerContent = (
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="secondary" className="gap-1"><Users className="w-3 h-3" />{groupName}</Badge>
+                            {allSent && (
+                              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0">
+                                <MailCheck className="w-3 h-3" />
+                                Feedback enviado
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {groupSessions.map(gs => (
+                              <span key={gs.id} className="text-xs text-muted-foreground">
+                                {gs.student_name}{(gs as any).is_group_leader ? " ★" : ""}
+                                {gs !== groupSessions[groupSessions.length - 1] ? ", " : ""}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+
+                      return renderAnswerCard(`group-${groupId}`, headerContent, leader, groupSessions);
+                    })}
+                    {/* Individual sessions (no group) */}
+                    {individualSessions.map(s => {
+                      const headerContent = (
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-card-foreground">{s.student_name}</p>
+                            {(s as any).feedback_email_sent_at && (
+                              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0">
+                                <MailCheck className="w-3 h-3" />
+                                Feedback enviado
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{(s as any).student_email || ""}</p>
+                        </div>
+                      );
+                      return renderAnswerCard(s.id, headerContent, s, [s]);
+                    })}
+                    {completedSessions.length === 0 && (
+                      <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+                        <MessageSquare className="w-8 h-8 mx-auto mb-2" />
+                        <p>Nenhum aluno enviou respostas ainda.</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Individual mode (original behavior)
+              return (
+                <div className="space-y-3">
+                  {completedSessions.map((s) => {
+                    const headerContent = (
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-card-foreground">{s.student_name}</p>
+                          {(s as any).feedback_email_sent_at && (
+                            <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0">
+                              <MailCheck className="w-3 h-3" />
+                              Feedback enviado
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{(s as any).student_email || ""}</p>
+                      </div>
+                    );
+                    return renderAnswerCard(s.id, headerContent, s, [s]);
+                  })}
+                  {completedSessions.length === 0 && (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+                      <MessageSquare className="w-8 h-8 mx-auto mb-2" />
+                      <p>Nenhum aluno enviou respostas ainda.</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()
           )}
         </section>
 
