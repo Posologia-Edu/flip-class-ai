@@ -159,9 +159,10 @@ export default function StudentGroups({ roomId }: Props) {
     fetchData();
   };
 
-  const getAvailableStudents = (groupId: string) => {
-    const assignedInGroup = groups.find((g) => g.id === groupId)?.members.map((m) => m.student_id) || [];
-    return students.filter((s) => !assignedInGroup.includes(s.id));
+  const getAvailableStudents = (_groupId: string) => {
+    // Students already in ANY group are excluded (each student can only be in one group)
+    const assignedAnywhere = new Set(groups.flatMap((g) => g.members.map((m) => m.student_id)));
+    return students.filter((s) => !assignedAnywhere.has(s.id));
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>;
