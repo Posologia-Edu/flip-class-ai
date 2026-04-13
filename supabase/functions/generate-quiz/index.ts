@@ -196,7 +196,7 @@ function getMimeType(fileUrl: string, materialType: string): string {
   return "application/octet-stream";
 }
 
-async function extractTextFromFileUrl(fileUrl: string, materialType: string): Promise<string> {
+async function extractTextFromFileUrl(fileUrl: string, materialType: string, customProviderKeys?: Partial<Record<string, string>>): Promise<string> {
   console.log("Fetching file for AI extraction:", fileUrl);
   const headResponse = await fetch(fileUrl, { method: "HEAD" });
   const contentLength = parseInt(headResponse.headers.get("content-length") || "0", 10);
