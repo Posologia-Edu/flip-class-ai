@@ -196,7 +196,7 @@ function getMimeType(fileUrl: string, materialType: string): string {
   return "application/octet-stream";
 }
 
-async function extractTextFromFileUrl(fileUrl: string, materialType: string): Promise<string> {
+async function extractTextFromFileUrl(fileUrl: string, materialType: string, customProviderKeys?: Partial<Record<string, string>>): Promise<string> {
   console.log("Fetching file for AI extraction:", fileUrl);
   const headResponse = await fetch(fileUrl, { method: "HEAD" });
   const contentLength = parseInt(headResponse.headers.get("content-length") || "0", 10);
@@ -221,6 +221,7 @@ async function extractTextFromFileUrl(fileUrl: string, materialType: string): Pr
         { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } }
       ] }
     ],
+    customProviderKeys: customProviderKeys as Record<string, string>,
   });
   if (!extractedText || extractedText.length < 50) {
     throw new Error("Não foi possível extrair conteúdo suficiente do documento");
@@ -408,7 +409,7 @@ serve(async (req) => {
 
     if (resolvedFileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
       console.log("Extracting content from file:", resolvedFileUrl);
-      finalContent = await extractTextFromFileUrl(resolvedFileUrl, materialType || "file");
+      finalContent = await extractTextFromFileUrl(resolvedFileUrl, materialType || "file", customProviderKeys);
       if (materialId) {
         await serviceSupabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
         console.log("Saved extracted text to material");
