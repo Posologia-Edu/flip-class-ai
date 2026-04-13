@@ -33,18 +33,104 @@ export interface AiCallResult {
   tokens_output: number;
 }
 
-const PROVIDER_CONFIG: Record<string, { baseUrl: string; defaultModel: string; format: "openai" | "anthropic"; envKey: string }> = {
-  groq: { baseUrl: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "llama-3.3-70b-versatile", format: "openai", envKey: "AI_KEY_GROQ" },
-  openai: { baseUrl: "https://api.openai.com/v1/chat/completions", defaultModel: "gpt-4o-mini", format: "openai", envKey: "AI_KEY_OPENAI" },
-  openrouter: { baseUrl: "https://openrouter.ai/api/v1/chat/completions", defaultModel: "google/gemini-2.5-flash", format: "openai", envKey: "AI_KEY_OPENROUTER" },
-  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-2.5-flash", format: "openai", envKey: "AI_KEY_GOOGLE" },
-  anthropic: { baseUrl: "https://api.anthropic.com/v1/messages", defaultModel: "claude-sonnet-4-20250514", format: "anthropic", envKey: "AI_KEY_ANTHROPIC" },
+const PROVIDER_CONFIG: Record<string, {
+  baseUrl: string;
+  defaultModel: string;
+  format: "openai" | "anthropic";
+  envKey: string;
+  supportsOpenAiContentArray?: boolean;
+}> = {
+  groq: {
+    baseUrl: "https://api.groq.com/openai/v1/chat/completions",
+    defaultModel: "llama-3.3-70b-versatile",
+    format: "openai",
+    envKey: "AI_KEY_GROQ",
+    supportsOpenAiContentArray: false,
+  },
+  openai: {
+    baseUrl: "https://api.openai.com/v1/chat/completions",
+    defaultModel: "gpt-4o-mini",
+    format: "openai",
+    envKey: "AI_KEY_OPENAI",
+    supportsOpenAiContentArray: true,
+  },
+  openrouter: {
+    baseUrl: "https://openrouter.ai/api/v1/chat/completions",
+    defaultModel: "google/gemini-2.5-flash",
+    format: "openai",
+    envKey: "AI_KEY_OPENROUTER",
+    supportsOpenAiContentArray: true,
+  },
+  google: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    defaultModel: "gemini-2.5-flash",
+    format: "openai",
+    envKey: "AI_KEY_GOOGLE",
+    supportsOpenAiContentArray: true,
+  },
+  anthropic: {
+    baseUrl: "https://api.anthropic.com/v1/messages",
+    defaultModel: "claude-sonnet-4-20250514",
+    format: "anthropic",
+    envKey: "AI_KEY_ANTHROPIC",
+    supportsOpenAiContentArray: false,
+  },
 };
 
 interface RawApiResult {
   content: string;
   tokens_input: number;
   tokens_output: number;
+}
+
+function hasStructuredContent(messages: Array<{ role: string; content: any }>): boolean {
+  return messages.some((message) => Array.isArray(message.content));
+}
+
+function providerSupportsMessageFormat(providerId: string, messages: Array<{ role: string; content: any }>): boolean {
+  const config = PROVIDER_CONFIG[providerId];
+  if (!config) return false;
+  if (!hasStructuredContent(messages)) return true;
+  if (config.format !== "openai") return false;
+  return config.supportsOpenAiContentArray === true;
+}
+
+function isTransientProviderError(error: Error): boolean {
+  const message = error.message || "";
+  return (
+    message.includes(" 429") ||
+    message.includes(" 500") ||
+    message.includes(" 502") ||
+    message.includes(" 503") ||
+    message.includes(" 504") ||
+    message.includes("RATE_LIMIT") ||
+    message.includes("UNAVAILABLE") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("overloaded")
+  );
+}
+
+async function withRetry<T>(operation: () => Promise<T>, shouldRetry: (error: Error) => boolean, attempts = 3): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      lastError = error;
+
+      if (attempt === attempts || !shouldRetry(error)) {
+        throw error;
+      }
+
+      const waitMs = attempt * 1200;
+      console.warn(`Transient AI provider error on attempt ${attempt}/${attempts}: ${error.message}. Retrying in ${waitMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+
+  throw lastError ?? new Error("Unknown AI provider error");
 }
 
 async function callAnthropicApi(apiKey: string, model: string, messages: Array<{ role: string; content: any }>, signal?: AbortSignal): Promise<RawApiResult> {
@@ -131,15 +217,19 @@ export async function callAiWithFallbackDetailed(options: AiCallOptions): Promis
     const config = PROVIDER_CONFIG[providerId];
     if (!config) continue;
 
+    if (!providerSupportsMessageFormat(providerId, options.messages)) {
+      console.log(`Skipping custom AI provider ${providerId}: unsupported message format`);
+      continue;
+    }
+
     try {
       console.log(`Trying custom AI provider: ${providerId}`);
-      let raw: RawApiResult;
-
-      if (config.format === "anthropic") {
-        raw = await callAnthropicApi(customKeys[providerId], config.defaultModel, options.messages, options.signal);
-      } else {
-        raw = await callOpenAiCompatibleApi(config.baseUrl, customKeys[providerId], config.defaultModel, options.messages, options.signal);
-      }
+      const raw = await withRetry(async () => {
+        if (config.format === "anthropic") {
+          return await callAnthropicApi(customKeys[providerId], config.defaultModel, options.messages, options.signal);
+        }
+        return await callOpenAiCompatibleApi(config.baseUrl, customKeys[providerId], config.defaultModel, options.messages, options.signal);
+      }, isTransientProviderError);
 
       if (raw.content && raw.content.length > 0) {
         console.log(`Success with custom provider: ${providerId}`);
@@ -152,7 +242,8 @@ export async function callAiWithFallbackDetailed(options: AiCallOptions): Promis
         };
       }
     } catch (err) {
-      console.warn(`Custom provider ${providerId} failed:`, err.message);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Custom provider ${providerId} failed:`, message);
     }
   }
 
