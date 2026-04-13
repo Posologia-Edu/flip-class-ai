@@ -409,7 +409,7 @@ serve(async (req) => {
 
     if (resolvedFileUrl && (!finalContent || finalContent.length < 50 || finalContent.startsWith("YouTube video ID:"))) {
       console.log("Extracting content from file:", resolvedFileUrl);
-      finalContent = await extractTextFromFileUrl(resolvedFileUrl, materialType || "file");
+      finalContent = await extractTextFromFileUrl(resolvedFileUrl, materialType || "file", customProviderKeys);
       if (materialId) {
         await serviceSupabase.from("materials").update({ content_text_for_ai: finalContent }).eq("id", materialId);
         console.log("Saved extracted text to material");
