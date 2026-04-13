@@ -221,6 +221,7 @@ async function extractTextFromFileUrl(fileUrl: string, materialType: string, cus
         { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } }
       ] }
     ],
+    customProviderKeys: customProviderKeys as Record<string, string>,
   });
   if (!extractedText || extractedText.length < 50) {
     throw new Error("Não foi possível extrair conteúdo suficiente do documento");
