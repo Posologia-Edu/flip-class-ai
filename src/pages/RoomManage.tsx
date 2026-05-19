@@ -1573,6 +1573,8 @@ const RoomManage = () => {
           )}
         </section>
 
+        <SimulationsManager roomId={roomId!} materials={materials} isOwner={isOwner} />
+
         {/* Manual Activity Dialog */}
         <Dialog open={manualActivityDialogOpen} onOpenChange={(open) => { if (!open) resetManualActivityForm(); else setManualActivityDialogOpen(true); }}>
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
