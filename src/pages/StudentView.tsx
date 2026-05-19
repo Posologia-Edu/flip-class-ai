@@ -14,6 +14,7 @@ import QuestionRenderer, { isInteractiveType, gradeInteractiveQuestion } from "@
 import type { InteractiveQuestion } from "@/components/interactive-questions/types";
 import StudyAssistant from "@/components/StudyAssistant";
 import StudentProject from "@/components/StudentProject";
+import SimulationPlayer from "@/components/SimulationPlayer";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
