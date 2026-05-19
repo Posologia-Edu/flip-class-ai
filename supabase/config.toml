@@ -35,3 +35,7 @@ project_id = "qxqvttkcemshgsdobgfe"
     verify_jwt = false
   [functions.generate-project]
     verify_jwt = false
+  [functions.generate-simulation]
+    verify_jwt = false
+  [functions.simulation-step]
+    verify_jwt = false
