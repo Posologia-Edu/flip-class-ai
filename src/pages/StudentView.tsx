@@ -773,6 +773,9 @@ const StudentView = () => {
           <button onClick={() => setTab("project")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "project" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Lightbulb className="w-4 h-4" /> Projeto
           </button>
+          <button onClick={() => setTab("simulations")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "simulations" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Sparkles className="w-4 h-4" /> Simulações
+          </button>
         </div>
       </div>
 
