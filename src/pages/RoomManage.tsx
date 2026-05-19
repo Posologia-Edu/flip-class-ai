@@ -14,6 +14,7 @@ import { RoomCollaborators } from "@/components/RoomCollaborators";
 import DiscussionForum from "@/components/DiscussionForum";
 import CollaborativeProjects from "@/components/CollaborativeProjects";
 import StudentGroups from "@/components/StudentGroups";
+import SimulationsManager from "@/components/SimulationsManager";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
