@@ -939,6 +939,93 @@ export type Database = {
           },
         ]
       }
+      simulation_sessions: {
+        Row: {
+          ai_feedback: string | null
+          ai_score: number | null
+          completed_at: string | null
+          created_at: string
+          history: Json
+          id: string
+          simulation_id: string
+          status: string
+          student_session_id: string
+          teacher_feedback: string | null
+          teacher_score: number | null
+          updated_at: string
+        }
+        Insert: {
+          ai_feedback?: string | null
+          ai_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          history?: Json
+          id?: string
+          simulation_id: string
+          status?: string
+          student_session_id: string
+          teacher_feedback?: string | null
+          teacher_score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ai_feedback?: string | null
+          ai_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          history?: Json
+          id?: string
+          simulation_id?: string
+          status?: string
+          student_session_id?: string
+          teacher_feedback?: string | null
+          teacher_score?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      simulations: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_published: boolean
+          learning_objectives: string | null
+          material_ids: string[] | null
+          max_steps: number
+          room_id: string
+          scenario: Json
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          learning_objectives?: string | null
+          material_ids?: string[] | null
+          max_steps?: number
+          room_id: string
+          scenario?: Json
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          learning_objectives?: string | null
+          material_ids?: string[] | null
+          max_steps?: number
+          room_id?: string
+          scenario?: Json
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       student_activity_logs: {
         Row: {
           activity_type: string
