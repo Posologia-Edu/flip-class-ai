@@ -18,6 +18,8 @@ interface Simulation {
   scenario: any;
   max_steps: number;
   is_published: boolean;
+  is_longitudinal: boolean;
+  total_chapters: number;
   created_at: string;
 }
 interface SimSession {
@@ -54,6 +56,8 @@ export default function SimulationsManager({ roomId, materials, isOwner }: Props
     learning_objectives: "",
     material_ids: [] as string[],
     max_steps: 6,
+    is_longitudinal: false,
+    total_chapters: 3,
   });
   const [editing, setEditing] = useState<Record<string, { score: string; feedback: string }>>({});
 
@@ -111,13 +115,15 @@ export default function SimulationsManager({ roomId, materials, isOwner }: Props
           description: form.description,
           learningObjectives: form.learning_objectives,
           maxSteps: form.max_steps,
+          isLongitudinal: form.is_longitudinal,
+          totalChapters: form.total_chapters,
         },
       });
       if (error) throw new Error(error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast({ title: "Simulação criada!" });
+      toast({ title: form.is_longitudinal ? "Caso longitudinal criado!" : "Simulação criada!" });
       setOpen(false);
-      setForm({ title: "", description: "", learning_objectives: "", material_ids: [], max_steps: 6 });
+      setForm({ title: "", description: "", learning_objectives: "", material_ids: [], max_steps: 6, is_longitudinal: false, total_chapters: 3 });
       load();
     } catch (e: any) {
       toast({ title: "Erro ao gerar", description: e.message, variant: "destructive" });
@@ -179,9 +185,16 @@ export default function SimulationsManager({ roomId, materials, isOwner }: Props
               <div key={s.id} className={`bg-card border rounded-xl overflow-hidden ${s.is_published ? "border-border" : "border-dashed border-muted-foreground/30 opacity-70"}`}>
                 <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExp ? null : s.id)}>
                   <div className="flex-1">
-                    <p className="font-medium text-card-foreground">{s.title}</p>
+                    <p className="font-medium text-card-foreground flex items-center gap-2">
+                      {s.title}
+                      {s.is_longitudinal && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                          LONGITUDINAL · {s.total_chapters} cap.
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(s.created_at).toLocaleDateString("pt-BR")} • {s.max_steps} passos •
+                      {new Date(s.created_at).toLocaleDateString("pt-BR")} • {s.max_steps} passos/cap. •
                       {" "}{completed.length}/{runs.length} concluídas
                     </p>
                   </div>
@@ -318,7 +331,7 @@ export default function SimulationsManager({ roomId, materials, isOwner }: Props
               />
             </div>
             <div>
-              <Label>Número de passos (decisões)</Label>
+              <Label>Passos (decisões) por capítulo</Label>
               <Input
                 type="number"
                 min={3}
@@ -326,6 +339,31 @@ export default function SimulationsManager({ roomId, materials, isOwner }: Props
                 value={form.max_steps}
                 onChange={(e) => setForm({ ...form, max_steps: Math.max(3, Math.min(12, parseInt(e.target.value) || 6)) })}
               />
+            </div>
+            <div className="border border-border rounded-lg p-3 bg-secondary/30 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.is_longitudinal}
+                  onChange={(e) => setForm({ ...form, is_longitudinal: e.target.checked })}
+                />
+                <span className="text-sm font-medium">Caso longitudinal (paciente virtual persistente)</span>
+              </label>
+              <p className="text-xs text-muted-foreground -mt-2 pl-6">
+                O paciente evolui em múltiplos capítulos. Decisões do aluno num capítulo afetam o estado clínico nos seguintes.
+              </p>
+              {form.is_longitudinal && (
+                <div className="pl-6">
+                  <Label className="text-xs">Número de capítulos</Label>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={8}
+                    value={form.total_chapters}
+                    onChange={(e) => setForm({ ...form, total_chapters: Math.max(2, Math.min(8, parseInt(e.target.value) || 3)) })}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <Label>Materiais da sala (selecione os que devem fundamentar o cenário)</Label>
