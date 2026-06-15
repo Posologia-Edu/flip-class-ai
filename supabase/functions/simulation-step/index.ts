@@ -155,7 +155,7 @@ serve(async (req) => {
       clearTimeout(timeout);
       const ch = safeParseJson(ai.content);
 
-      // Reset history for new chapter; keep chapters_history accumulated
+      // Reset history for new chapter; store chapter intro inside patient_state.__current_chapter_intro
       const newScenarioChapter = {
         initial_situation: ch.initial_situation,
         initial_options: ch.initial_options || [],
@@ -163,20 +163,12 @@ serve(async (req) => {
       };
       const { data: updated, error: uerr } = await svc.from("simulation_sessions").update({
         chapter: newChapterNum,
+        status: "in_progress",
         history: [],
-        current_chapter_intro: newScenarioChapter as any,
-      } as any).eq("id", run.id).select("*").single();
-      // current_chapter_intro column may not exist; store via patient_state metadata instead
-      let finalRun = updated;
-      if (uerr) {
-        const { data: u2, error: e2 } = await svc.from("simulation_sessions").update({
-          chapter: newChapterNum,
-          history: [],
-          patient_state: { ...(run.patient_state || {}), __current_chapter_intro: newScenarioChapter },
-        }).eq("id", run.id).select("*").single();
-        if (e2) throw new Error(e2.message);
-        finalRun = u2;
-      }
+        patient_state: { ...(run.patient_state || {}), __current_chapter_intro: newScenarioChapter },
+      }).eq("id", run.id).select("*").single();
+      if (uerr) throw new Error(uerr.message);
+      const finalRun = updated;
 
       return new Response(JSON.stringify({ success: true, run: finalRun, chapter_intro: newScenarioChapter }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
