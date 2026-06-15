@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Loader2, Award, ChevronRight, CheckCircle2, MessageSquare, RotateCcw } from "lucide-react";
+import { Sparkles, Loader2, Award, ChevronRight, CheckCircle2, MessageSquare, RotateCcw, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,6 +12,8 @@ interface Simulation {
   learning_objectives: string;
   scenario: any;
   max_steps: number;
+  is_longitudinal?: boolean;
+  total_chapters?: number;
 }
 
 interface Run {
@@ -23,6 +25,9 @@ interface Run {
   ai_feedback: string | null;
   teacher_score: number | null;
   teacher_feedback: string | null;
+  chapter?: number;
+  chapters_history?: any[];
+  patient_state?: any;
 }
 
 interface Props {
@@ -38,6 +43,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
   const [activeRun, setActiveRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(false);
   const [stepLoading, setStepLoading] = useState(false);
+  const [chapterLoading, setChapterLoading] = useState(false);
 
   const load = useCallback(async () => {
     const { data: s } = await supabase
@@ -99,6 +105,27 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
     }
   };
 
+  const nextChapter = async () => {
+    if (!activeRun || chapterLoading) return;
+    setChapterLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("simulation-step", {
+        body: { action: "next_chapter", sessionRunId: activeRun.id },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const updated = { ...((data as any).run as Run), status: "in_progress" };
+      // Force in_progress (server returns updated row; chapter_intro lives inside patient_state)
+      await supabase.from("simulation_sessions").update({ status: "in_progress" }).eq("id", updated.id);
+      setActiveRun(updated);
+      setRuns(prev => ({ ...prev, [updated.simulation_id]: updated }));
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setChapterLoading(false);
+    }
+  };
+
   const restart = async (sim: Simulation) => {
     if (!confirm("Iniciar nova tentativa? A anterior será mantida no histórico.")) return;
     setLoading(true);
@@ -116,22 +143,42 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
     const scenario = activeSim.scenario || {};
     const history = activeRun.history || [];
     const isFinal = activeRun.status === "completed";
+    const chapterEnded = activeRun.status === "chapter_ended";
+    const isLongitudinal = !!activeSim.is_longitudinal;
+    const totalChapters = activeSim.total_chapters || 1;
+    const currentChapter = activeRun.chapter || 1;
+    const chapterIntro = (activeRun.patient_state as any)?.__current_chapter_intro;
+
     const current = history.length === 0
-      ? { narrative: scenario.initial_situation, options: scenario.initial_options || [] }
+      ? {
+          narrative: chapterIntro?.initial_situation || scenario.initial_situation,
+          options: chapterIntro?.initial_options || scenario.initial_options || [],
+        }
       : { narrative: history[history.length - 1].narrative, options: history[history.length - 1].options || [] };
+
+    const lastChapterRecord = (activeRun.chapters_history || [])[((activeRun.chapters_history || []).length - 1)];
 
     return (
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="bg-card border border-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-xl font-semibold">{activeSim.title}</h2>
+            <div>
+              <h2 className="font-display text-xl font-semibold">{activeSim.title}</h2>
+              {isLongitudinal && (
+                <p className="text-xs text-primary font-semibold mt-1 flex items-center gap-1">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Capítulo {currentChapter} de {totalChapters}
+                  {chapterIntro?.chapter_title && <span className="text-muted-foreground font-normal"> — {chapterIntro.chapter_title}</span>}
+                </p>
+              )}
+            </div>
             <Button variant="ghost" size="sm" onClick={() => { setActiveSim(null); setActiveRun(null); load(); }}>
               Voltar
             </Button>
           </div>
           <p className="text-sm text-muted-foreground italic mb-3">{scenario.setting}</p>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Progresso:</span>
+            <span className="text-muted-foreground">Progresso do capítulo:</span>
             <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
               <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, (history.length / activeSim.max_steps) * 100)}%` }} />
             </div>
@@ -139,7 +186,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
           </div>
         </div>
 
-        {history.length > 0 && history[history.length - 1].feedback_on_previous && !isFinal && (
+        {history.length > 0 && history[history.length - 1].feedback_on_previous && !isFinal && !chapterEnded && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-primary/5 border border-primary/20 rounded-xl p-4">
             <p className="text-xs font-semibold text-primary mb-1 flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> Consequência</p>
             <p className="text-sm text-foreground">{history[history.length - 1].feedback_on_previous}</p>
@@ -148,7 +195,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={history.length}
+            key={`${currentChapter}-${history.length}-${activeRun.status}`}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -158,7 +205,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
               <div>
                 <CheckCircle2 className="w-10 h-10 text-level-easy mb-3" />
                 <h3 className="font-display text-2xl font-bold mb-2">Simulação concluída!</h3>
-                <p className="text-sm text-foreground mb-4">{current.narrative}</p>
+                <p className="text-sm text-foreground mb-4 whitespace-pre-wrap">{current.narrative || (history[history.length - 1] || {}).narrative}</p>
                 {activeRun.ai_score != null && (
                   <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -171,6 +218,30 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
                   </div>
                 )}
                 <Button onClick={() => { setActiveSim(null); setActiveRun(null); load(); }}>Voltar à lista</Button>
+              </div>
+            ) : chapterEnded ? (
+              <div>
+                <BookOpen className="w-10 h-10 text-primary mb-3" />
+                <h3 className="font-display text-2xl font-bold mb-2">Capítulo {currentChapter} concluído</h3>
+                <p className="text-sm text-foreground mb-3 whitespace-pre-wrap">{history[history.length - 1]?.narrative}</p>
+                {lastChapterRecord?.summary && (
+                  <div className="bg-secondary rounded-lg p-3 mb-3">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Resumo do capítulo</p>
+                    <p className="text-sm text-foreground">{lastChapterRecord.summary}</p>
+                    {lastChapterRecord.score != null && (
+                      <p className="text-xs mt-2 text-primary font-semibold">Nota parcial: {Number(lastChapterRecord.score).toFixed(1)}/10</p>
+                    )}
+                  </div>
+                )}
+                {activeRun.patient_state?.narrative_summary && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 mb-4">
+                    <p className="text-xs font-semibold text-primary mb-1">Estado atual do paciente</p>
+                    <p className="text-sm text-foreground">{activeRun.patient_state.narrative_summary}</p>
+                  </div>
+                )}
+                <Button onClick={nextChapter} disabled={chapterLoading}>
+                  {chapterLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Avançando o tempo...</> : <>Iniciar capítulo {currentChapter + 1} <ChevronRight className="w-4 h-4 ml-1" /></>}
+                </Button>
               </div>
             ) : (
               <>
@@ -218,13 +289,24 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
           {sims.map((s) => {
             const run = runs[s.id];
             const completed = run?.status === "completed";
+            const inChapterBreak = run?.status === "chapter_ended";
             return (
               <div key={s.id} className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <p className="font-display font-semibold text-foreground">{s.title}</p>
+                    <p className="font-display font-semibold text-foreground flex items-center gap-2">
+                      {s.title}
+                      {s.is_longitudinal && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                          LONGITUDINAL · {s.total_chapters} cap.
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">{s.learning_objectives}</p>
-                    <p className="text-xs text-muted-foreground mt-2">{s.max_steps} decisões</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {s.max_steps} decisões{s.is_longitudinal ? "/capítulo" : ""}
+                      {run && s.is_longitudinal && ` • progresso: capítulo ${run.chapter || 1}/${s.total_chapters}`}
+                    </p>
                     {completed && run.ai_score != null && (
                       <div className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">
                         <Award className="w-4 h-4" /> Nota: {(run.teacher_score ?? run.ai_score).toFixed(1)}/10
@@ -243,7 +325,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
                       </>
                     ) : run ? (
                       <Button size="sm" onClick={() => { setActiveSim(s); setActiveRun(run); }} disabled={loading}>
-                        Continuar <ChevronRight className="w-4 h-4 ml-1" />
+                        {inChapterBreak ? "Próximo capítulo" : "Continuar"} <ChevronRight className="w-4 h-4 ml-1" />
                       </Button>
                     ) : (
                       <Button size="sm" onClick={() => startSim(s)} disabled={loading}>
