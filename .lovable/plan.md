@@ -1,80 +1,90 @@
 
+# Funcionalidades Disruptivas — Roadmap de Inovação
 
-## Plano: Atividades em Grupo — Acesso e Pontuação Coletiva
+Abaixo estão 10 funcionalidades de alto impacto, pensadas para diferenciar o sistema no mercado de EdTech em saúde/farmácia. Cada uma se apoia na infraestrutura que já existe (Lovable Cloud, AI Fallback, Realtime, Simulações, Materiais multimodais).
 
-### Visão Geral
+---
 
-Quando o professor cria grupos de alunos numa sala, qualquer aluno dessa sala poderá optar por entrar no modo "grupo". O primeiro aluno do grupo a entrar será o líder e realizará a atividade. Ao submeter, a nota obtida pelo grupo será automaticamente replicada para todos os membros do grupo.
+## 1. Gêmeo Digital do Aluno (Digital Twin Pedagógico)
+Um modelo vivo de cada estudante, atualizado em tempo real, que prevê:
+- Probabilidade de reprovação nas próximas 2 semanas
+- Tópicos com decaimento de memória (curva de Ebbinghaus aplicada por conceito)
+- Estilo cognitivo dominante (visual, leitor, prático)
 
-### Fluxo do Aluno
+A IA usa o histórico de quizzes, simulações, tempo em materiais e padrões de erro para recomendar **micro-intervenções automáticas** (ex.: revisão de 3 min agendada antes da aula).
 
-```text
-[PIN] → [Dados + Toggle Grupo/Individual] → [Se grupo: sessão compartilhada] → [Atividade] → [Nota replicada]
-```
+**Diferencial:** nenhum LMS brasileiro entrega previsão individual + intervenção automática.
 
-1. **Tela do PIN (sem alteração)** — aluno digita o PIN normalmente.
+---
 
-2. **Tela de Dados (alterada)** — após validar o PIN, o sistema verifica se a sala possui grupos (`room_groups`). Se sim, aparece um toggle "Individual / Grupo" abaixo dos campos de nome e email.
-   - **Individual**: fluxo normal, cria sessão individual.
-   - **Grupo**: o aluno preenche nome e email, clica "Começar". O sistema verifica em qual grupo esse aluno está (via `room_group_members` → `room_students` pelo email). Se encontrado, o aluno entra como **líder do grupo**.
+## 2. Modo Debate Socrático com IA (Voz)
+Aluno entra em uma "sala" 1:1 por voz com a IA, que assume o papel de **examinador socrático**: faz perguntas progressivas, contesta respostas, força o aluno a justificar com base em evidências do material da sala. Encerra com rubrica de raciocínio clínico.
 
-3. **Sessão de Grupo** — ao entrar em modo grupo:
-   - O backend cria (ou reutiliza) uma sessão para cada membro do grupo automaticamente.
-   - A sessão do líder é marcada como a sessão "principal" do grupo (nova coluna `group_session_id` em `student_sessions` apontando para si mesma, ou campo `is_group_leader`).
-   - Os demais membros recebem sessões vinculadas ao mesmo grupo.
+**Tecnologia:** Realtime API (voz) + RAG nos materiais + AI Fallback existente.
 
-4. **Realização da Atividade** — apenas o líder responde. A StudentView mostra um banner "Atividade em Grupo — Grupo X" com os nomes dos membros.
+---
 
-5. **Submissão e Nota** — ao submeter a atividade, a nota é copiada para as sessões de todos os membros do grupo.
+## 3. Trilhas Adaptativas Geradas em Tempo Real
+Em vez de o professor montar a sequência, a IA cria uma **trilha personalizada por aluno** com base no gêmeo digital. A cada atividade concluída, a próxima é re-gerada (mais fácil, mais difícil, ou de revisão). Professor vê o "mapa coletivo" da turma.
 
-### Mudanças Técnicas
+---
 
-#### 1. Migração de Banco de Dados
+## 4. Paciente Virtual Persistente (Caso Longitudinal)
+Extensão da simulação atual: um paciente que **evolui ao longo do semestre**. Decisões do aluno na semana 2 afetam o estado clínico na semana 8. Pode ser jogado em grupo (cada aluno = um membro da equipe multiprofissional).
 
-- Adicionar colunas em `student_sessions`:
-  - `group_id UUID REFERENCES room_groups(id)` — indica que a sessão pertence a um grupo
-  - `is_group_leader BOOLEAN DEFAULT false` — marca o líder
-- Política RLS: manter as existentes (não afeta segurança pois a lógica de replicação roda no backend).
+**Gancho:** já temos simulações ramificadas — basta adicionar estado persistente entre sessões e timeline.
 
-#### 2. Tela de Entrada (`src/pages/Index.tsx`)
+---
 
-- Após buscar a sala pelo PIN, verificar se existem `room_groups` para esse `room_id`.
-- Se existirem grupos, exibir um **Switch/Toggle** "Atividade em Grupo" na tela de dados.
-- Quando ativado, ao submeter:
-  - Enviar `mode: "group"` no payload para a edge function `student-session`.
+## 5. OSCE Virtual Automatizado (Exame Estruturado)
+Estações de avaliação prática simuladas: o aluno entra em N estações cronometradas (anamnese, prescrição, comunicação com paciente, cálculo de dose). IA avalia cada estação com rubrica e gera certificado de competência.
 
-#### 3. Edge Function `student-session/index.ts`
+**Aplicação direta:** Farmacoterapia, Atenção Farmacêutica, residências.
 
-- Na action `create_session` com `mode: "group"`:
-  1. Buscar o `room_students` pelo email do aluno.
-  2. Buscar o grupo do aluno via `room_group_members`.
-  3. Se não estiver em nenhum grupo, retornar erro.
-  4. Criar sessão para o líder com `group_id` e `is_group_leader = true`.
-  5. Para cada outro membro do grupo, criar (ou reutilizar) uma sessão com o mesmo `group_id` e `is_group_leader = false`.
-  6. Retornar a sessão do líder + lista de membros do grupo.
+---
 
-- Na action `submit` (quando a sessão tem `group_id` e `is_group_leader`):
-  1. Salvar score e answers na sessão do líder.
-  2. Replicar o mesmo `score` e `answers` para todas as sessões com o mesmo `group_id`.
+## 6. Co-Autoria com IA para o Professor (Copilot Pedagógico)
+Painel onde o professor "conversa" com a IA sobre a turma:
+> "Quem está em risco em farmacocinética?"
+> "Gere 3 questões focadas nos erros recorrentes da sala B."
+> "Reescreva o feedback da Maria com tom mais acolhedor."
 
-#### 4. StudentView (`src/pages/StudentView.tsx`)
+A IA tem contexto completo (analytics + materiais + histórico) e pode **executar ações** (criar atividade, enviar e-mail, reagendar prazo) com confirmação.
 
-- Ao carregar, se a sessão tiver `group_id`, exibir banner com nome do grupo e membros.
-- Se `is_group_leader = false`, exibir mensagem "O líder do seu grupo está realizando a atividade" e desabilitar a aba de atividade (ou mostrar em modo somente leitura).
-- Se `is_group_leader = true`, fluxo normal de atividade.
+---
 
-#### 5. Feedback do Professor
+## 7. Captura Inteligente de Aula (Lecture-to-Material)
+Professor sobe um vídeo/áudio de aula presencial. A IA:
+- Transcreve e segmenta por tópico
+- Gera resumo, mapa mental, flashcards e quiz automaticamente
+- Identifica trechos em que o professor "enfatizou" (mudanças de entonação) → marca como pontos-chave
+- Cria uma versão "TikTok" (cortes de 60s legendados) para revisão móvel
 
-- No painel do professor (`RoomManage`), ao visualizar sessões de grupo, mostrar um badge indicando o grupo.
-- A nota atribuída pelo professor (feedback manual) também será replicada para todos os membros do grupo via trigger ou lógica no frontend.
+---
 
-### Resumo das Alterações por Arquivo
+## 8. Rede de Conhecimento da Disciplina (Knowledge Graph)
+Cada material, questão e conceito vira nó em um grafo. O aluno vê visualmente o que domina (verde), o que está fraco (vermelho) e como os tópicos se conectam. Clicar em um nó abre micro-conteúdo gerado pela IA sob demanda.
 
-| Arquivo | Alteração |
-|---|---|
-| Migração SQL | Adicionar `group_id` e `is_group_leader` em `student_sessions` |
-| `src/pages/Index.tsx` | Toggle grupo/individual, verificação de grupos na sala |
-| `supabase/functions/student-session/index.ts` | Lógica de criação de sessão em grupo e replicação de nota |
-| `src/pages/StudentView.tsx` | Banner de grupo, bloqueio para não-líderes |
-| `src/pages/RoomManage.tsx` | Badge de grupo nas sessões, replicação de feedback |
+**Bônus:** professor enxerga lacunas estruturais do conteúdo da disciplina inteira.
 
+---
+
+## 9. Avaliação por Pares com IA-Mediador Anti-Viés
+Evolução do peer review atual: a IA analisa **a qualidade do feedback dado** pelo revisor (não só a resposta avaliada), detecta vieses (notas infladas em amigos, retaliação), e sugere reescrita antes do envio. Gera score de "qualidade como avaliador" — competência valorizada na vida profissional.
+
+---
+
+## 10. Marketplace de Salas + Federação entre Instituições
+Professores podem **publicar uma sala como template público** (com IA anonimizando dados). Outras instituições clonam e adaptam. Modelo de receita: criador recebe % quando sua sala é assinada. Cria efeito de rede e posiciona o sistema como **GitHub da educação em saúde**.
+
+---
+
+## Próximo passo
+
+Não vou implementar tudo de uma vez. Quero que você escolha **1 ou 2 prioritárias** para eu detalhar tecnicamente (schema, edge functions, UI) e iniciar. Minhas sugestões de maior ROI imediato dado o que já existe:
+
+- **#6 Copilot Pedagógico** — aproveita 100% da infra de analytics + AI fallback, valor percebido enorme pelo professor.
+- **#2 Debate Socrático por voz** — alto "uau", diferencia o produto, usa Realtime API.
+- **#4 Paciente Virtual Persistente** — extensão natural das simulações recém-criadas.
+
+Me diga quais quer ver detalhadas em plano técnico de implementação.
