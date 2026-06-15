@@ -943,10 +943,13 @@ export type Database = {
         Row: {
           ai_feedback: string | null
           ai_score: number | null
+          chapter: number
+          chapters_history: Json
           completed_at: string | null
           created_at: string
           history: Json
           id: string
+          patient_state: Json
           simulation_id: string
           status: string
           student_session_id: string
@@ -957,10 +960,13 @@ export type Database = {
         Insert: {
           ai_feedback?: string | null
           ai_score?: number | null
+          chapter?: number
+          chapters_history?: Json
           completed_at?: string | null
           created_at?: string
           history?: Json
           id?: string
+          patient_state?: Json
           simulation_id: string
           status?: string
           student_session_id: string
@@ -971,10 +977,13 @@ export type Database = {
         Update: {
           ai_feedback?: string | null
           ai_score?: number | null
+          chapter?: number
+          chapters_history?: Json
           completed_at?: string | null
           created_at?: string
           history?: Json
           id?: string
+          patient_state?: Json
           simulation_id?: string
           status?: string
           student_session_id?: string
@@ -986,9 +995,11 @@ export type Database = {
       }
       simulations: {
         Row: {
+          baseline_state: Json
           created_at: string
           description: string | null
           id: string
+          is_longitudinal: boolean
           is_published: boolean
           learning_objectives: string | null
           material_ids: string[] | null
@@ -996,12 +1007,15 @@ export type Database = {
           room_id: string
           scenario: Json
           title: string
+          total_chapters: number
           updated_at: string
         }
         Insert: {
+          baseline_state?: Json
           created_at?: string
           description?: string | null
           id?: string
+          is_longitudinal?: boolean
           is_published?: boolean
           learning_objectives?: string | null
           material_ids?: string[] | null
@@ -1009,12 +1023,15 @@ export type Database = {
           room_id: string
           scenario?: Json
           title: string
+          total_chapters?: number
           updated_at?: string
         }
         Update: {
+          baseline_state?: Json
           created_at?: string
           description?: string | null
           id?: string
+          is_longitudinal?: boolean
           is_published?: boolean
           learning_objectives?: string | null
           material_ids?: string[] | null
@@ -1022,6 +1039,7 @@ export type Database = {
           room_id?: string
           scenario?: Json
           title?: string
+          total_chapters?: number
           updated_at?: string
         }
         Relationships: []
