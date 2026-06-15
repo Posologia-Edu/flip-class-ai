@@ -26,70 +26,143 @@ Sua função: ajudar o professor a entender o desempenho da turma, identificar a
 
 DIRETRIZES:
 - Use markdown (listas, **negrito**, tabelas) para clareza.
-- Quando citar alunos, use o nome real fornecido. Nunca invente nomes, notas ou dados.
+- Quando citar alunos, use o nome real fornecido no contexto. Nunca invente nomes, notas ou dados.
+- Ao responder sobre **alunos em risco**, baseie-se SEMPRE na seção "Alunos EM RISCO" do contexto (que considera acesso, % de materiais vistos, conclusão e tempo na plataforma) — NÃO use apenas "nota < 6". Liste cada aluno com seus motivos de risco.
+- Diferencie claramente: "nunca acessaram a sala" vs. "acessaram mas com baixo engajamento" vs. "concluíram com nota baixa".
 - Seja conciso e prático: vá direto à ação recomendada.
-- Quando faltar dado, diga claramente "não há dados suficientes" em vez de inventar.
+- Quando faltar dado, diga "não há dados suficientes" em vez de inventar.
 - Linguagem em português do Brasil, tom profissional e acolhedor.
 - Quando o professor pedir para "gerar questões", "rascunhar atividade" ou "escrever feedback", entregue o texto pronto para copiar.`;
 
 async function buildRoomContext(svc: any, roomId: string) {
-  const [{ data: room }, { data: students }, { data: activities }, { data: materials }, { data: sims }, { data: feedback }] = await Promise.all([
-    svc.from("rooms").select("id, title, description, discipline_id").eq("id", roomId).single(),
-    svc.from("student_sessions").select("id, student_name, student_email, total_score, completed_at, created_at").eq("room_id", roomId).order("created_at", { ascending: false }).limit(200),
-    svc.from("activities").select("id, title, type, is_published").eq("room_id", roomId),
-    svc.from("materials").select("id, title, type").eq("room_id", roomId),
+  const [
+    { data: room },
+    { data: sessions },
+    { data: enrolled },
+    { data: activities },
+    { data: materials },
+    { data: sims },
+    { data: feedback },
+    { data: logs },
+  ] = await Promise.all([
+    svc.from("rooms").select("id, title, description, discipline_id, unlock_at").eq("id", roomId).single(),
+    svc.from("student_sessions").select("id, student_name, student_email, total_score, completed_at, created_at").eq("room_id", roomId).order("created_at", { ascending: false }).limit(500),
+    svc.from("room_students").select("student_name, student_email").eq("room_id", roomId).limit(500),
+    svc.from("activities").select("id, title, is_published").eq("room_id", roomId),
+    svc.from("materials").select("id, title").eq("room_id", roomId),
     svc.from("simulations").select("id, title, is_longitudinal, total_chapters").eq("room_id", roomId),
-    svc.from("teacher_feedback").select("student_session_id, score, feedback_text").eq("room_id", roomId).limit(200),
+    svc.from("teacher_feedback").select("student_session_id, score").eq("room_id", roomId).limit(500),
+    svc.from("student_activity_logs").select("session_id, activity_type, material_id, duration_seconds").eq("room_id", roomId).limit(5000),
   ]);
 
-  const studentList = (students || []).map((s: any) =>
-    `- ${s.student_name}${s.student_email ? ` (${s.student_email})` : ""}: nota total ${s.total_score ?? "—"}${s.completed_at ? " ✓ concluiu" : " ⏳ em andamento"}`
-  ).join("\n");
+  const activitiesLocked = !!(room?.unlock_at && new Date(room.unlock_at) > new Date());
+  const materialsCount = (materials || []).length;
 
-  const completed = (students || []).filter((s: any) => s.completed_at);
-  const avgScore = completed.length > 0
-    ? (completed.reduce((a: number, s: any) => a + (Number(s.total_score) || 0), 0) / completed.length).toFixed(2)
-    : "n/a";
+  // Aggregate per-session engagement from logs
+  const logsBySession = new Map<string, any[]>();
+  for (const l of (logs || [])) {
+    const arr = logsBySession.get(l.session_id) || [];
+    arr.push(l);
+    logsBySession.set(l.session_id, arr);
+  }
 
-  const atRisk = completed.filter((s: any) => (Number(s.total_score) || 0) < 6).map((s: any) => s.student_name);
+  // Unify enrolled + sessions, keyed by lowercased email
+  type Row = { name: string; email: string; session: any | null };
+  const map = new Map<string, Row>();
+  for (const es of (enrolled || [])) {
+    const key = (es.student_email || "").toLowerCase();
+    if (!key) continue;
+    map.set(key, { email: es.student_email, name: es.student_name || es.student_email, session: null });
+  }
+  for (const s of (sessions || [])) {
+    const email = (s.student_email || "").toLowerCase();
+    const key = email || s.id;
+    const existing = email ? map.get(email) : undefined;
+    map.set(key, { email: s.student_email || "—", name: s.student_name || existing?.name || "—", session: s });
+  }
+  const allStudents = Array.from(map.values());
 
-  // Recent simulation sessions for diagnostic
+  // Per-student analysis matching the Analytics panel
+  const analyzed = allStudents.map((st) => {
+    const session = st.session;
+    if (!session) {
+      return { name: st.name, email: st.email, accessed: false, completed: false, score: null as number | null, minutes: 0, materialsPct: 0, risks: ["Nunca acessou a sala"] };
+    }
+    const sLogs = logsBySession.get(session.id) || [];
+    const viewed = new Set(sLogs.filter((l) => ["material_view", "material_access"].includes(l.activity_type) && l.material_id).map((l) => l.material_id));
+    const totalSec = sLogs.reduce((a, l) => a + (l.duration_seconds || 0), 0);
+    const materialsPct = materialsCount > 0 ? Math.round((viewed.size / materialsCount) * 100) : 0;
+    const risks: string[] = [];
+    if (materialsPct < 50) risks.push("Menos de 50% dos materiais vistos");
+    if (!session.completed_at && !activitiesLocked) risks.push("Atividade não concluída");
+    if (totalSec < 60) risks.push("Menos de 1 min na plataforma");
+    return {
+      name: session.student_name || st.name,
+      email: session.student_email || st.email,
+      accessed: true,
+      completed: !!session.completed_at,
+      score: session.total_score != null ? Number(session.total_score) : null,
+      minutes: +(totalSec / 60).toFixed(1),
+      materialsPct,
+      risks,
+    };
+  }).sort((a, b) => b.risks.length - a.risks.length);
+
+  const accessedCount = analyzed.filter((s) => s.accessed).length;
+  const completedCount = analyzed.filter((s) => s.completed).length;
+  const scored = analyzed.filter((s) => s.completed && s.score != null);
+  const avgScore = scored.length ? (scored.reduce((a, s) => a + (s.score as number), 0) / scored.length).toFixed(2) : "n/a";
+  const atRisk = analyzed.filter((s) => s.risks.length > 0);
+  const lowScore = scored.filter((s) => (s.score as number) < 6).map((s) => s.name);
+
   let simInsights = "";
   if (sims && sims.length > 0) {
     const { data: simRuns } = await svc.from("simulation_sessions")
-      .select("simulation_id, ai_score, chapter, status, student_session_id")
+      .select("simulation_id, ai_score")
       .in("simulation_id", sims.map((s: any) => s.id))
-      .limit(100);
-    const avgSim = (simRuns || []).filter((r: any) => r.ai_score != null);
-    if (avgSim.length > 0) {
-      const mean = (avgSim.reduce((a: number, r: any) => a + r.ai_score, 0) / avgSim.length).toFixed(2);
-      simInsights = `Simulações: ${sims.length} criadas, ${avgSim.length} concluídas, nota média IA ${mean}.`;
+      .limit(200);
+    const done = (simRuns || []).filter((r: any) => r.ai_score != null);
+    if (done.length > 0) {
+      const mean = (done.reduce((a: number, r: any) => a + r.ai_score, 0) / done.length).toFixed(2);
+      simInsights = `Simulações: ${sims.length} criadas, ${done.length} concluídas, nota média IA ${mean}.`;
     }
   }
 
+  const fmtStudent = (s: typeof analyzed[number]) => {
+    if (!s.accessed) return `- ${s.name} (${s.email}) — ❌ NUNCA acessou`;
+    const status = s.completed ? "✓ concluiu" : "⏳ em andamento";
+    const r = s.risks.length ? ` | RISCOS: ${s.risks.join("; ")}` : "";
+    return `- ${s.name} (${s.email}) — ${status} | nota: ${s.score ?? "—"} | tempo: ${s.minutes}min | materiais: ${s.materialsPct}%${r}`;
+  };
+
   return `## DADOS DA SALA: ${room?.title || "Sem título"}
 Descrição: ${room?.description || "—"}
+Atividades bloqueadas no momento: ${activitiesLocked ? "SIM (não conte 'não concluído' como risco)" : "não"}
 
 ### Resumo numérico
-- Alunos com sessão: ${(students || []).length}
-- Alunos que concluíram: ${completed.length}
+- Total de alunos (matriculados + sessões): ${analyzed.length}
+- Alunos que acessaram a sala: ${accessedCount}
+- Alunos que nunca acessaram: ${analyzed.length - accessedCount}
+- Alunos que concluíram a atividade: ${completedCount}
 - Nota média (concluídos): ${avgScore}
-- Alunos em risco (nota < 6): ${atRisk.length > 0 ? atRisk.join(", ") : "nenhum"}
+- Alunos com nota < 6: ${lowScore.length ? lowScore.join(", ") : "nenhum"}
+- **Alunos em risco (qualquer critério): ${atRisk.length}** — critérios: nunca acessou, <50% materiais vistos, atividade não concluída (quando liberada), <1min na plataforma
 - Atividades: ${(activities || []).length} (publicadas: ${(activities || []).filter((a: any) => a.is_published).length})
-- Materiais: ${(materials || []).length}
-- ${simInsights || "Nenhuma simulação criada ainda."}
+- Materiais: ${materialsCount}
+- ${simInsights || "Nenhuma simulação concluída ainda."}
+- Feedbacks lançados pelo professor: ${(feedback || []).length}
 
-### Lista de alunos (até 200)
-${studentList || "Nenhum aluno acessou ainda."}
+### Alunos EM RISCO (${atRisk.length})
+${atRisk.length ? atRisk.map(fmtStudent).join("\n") : "Nenhum aluno em risco."}
+
+### Alunos SEM risco (${analyzed.length - atRisk.length})
+${analyzed.filter((s) => s.risks.length === 0).map(fmtStudent).join("\n") || "—"}
 
 ### Atividades
-${(activities || []).map((a: any) => `- ${a.title} (${a.type})${a.is_published ? "" : " [rascunho]"}`).join("\n") || "—"}
+${(activities || []).map((a: any) => `- ${a.title}${a.is_published ? "" : " [rascunho]"}`).join("\n") || "—"}
 
 ### Materiais
-${(materials || []).map((m: any) => `- ${m.title} (${m.type})`).join("\n") || "—"}
-
-### Feedbacks já lançados
-${(feedback || []).length} feedbacks registrados.`;
+${(materials || []).map((m: any) => `- ${m.title}`).join("\n") || "—"}`;
 }
 
 serve(async (req) => {
