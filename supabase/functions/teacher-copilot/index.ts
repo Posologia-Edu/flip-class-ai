@@ -163,9 +163,11 @@ async function buildRoomContext(svc: any, roomId: string) {
     return `- ${s.name} (${s.email}) — ${status} | nota: ${s.score ?? "—"} | tempo: ${s.minutes}min | materiais: ${s.materialsPct}%${r}`;
   };
 
-  return `## DADOS DA SALA: ${room?.title || "Sem título"}
+  return `## DADOS DA SALA: ${room?.title || "Sem título"} (id \`${String(room?.id || roomId).slice(0, 8)}\`)
 Descrição: ${room?.description || "—"}
 Atividades bloqueadas no momento: ${activitiesLocked ? "SIM (não conte 'não concluído' como risco)" : "não"}
+Contagens brutas: ${(enrolled || []).length} matriculados · ${(sessions || []).length} sessões · ${(logs || []).length} logs de atividade
+${siblingsBlock}
 
 ### Resumo numérico
 - Total de alunos (matriculados + sessões): ${analyzed.length}
