@@ -47,7 +47,7 @@ async function buildRoomContext(svc: any, roomId: string) {
     { data: feedback },
     { data: logs },
   ] = await Promise.all([
-    svc.from("rooms").select("id, title, description, discipline_id, unlock_at").eq("id", roomId).single(),
+    svc.from("rooms").select("id, title, description, discipline_id, unlock_at, teacher_id").eq("id", roomId).single(),
     svc.from("student_sessions").select("id, student_name, student_email, total_score, completed_at, created_at").eq("room_id", roomId).order("created_at", { ascending: false }).limit(500),
     svc.from("room_students").select("student_name, student_email").eq("room_id", roomId).limit(500),
     svc.from("activities").select("id, title, is_published").eq("room_id", roomId),
@@ -56,6 +56,32 @@ async function buildRoomContext(svc: any, roomId: string) {
     svc.from("teacher_feedback").select("student_session_id, score").eq("room_id", roomId).limit(500),
     svc.from("student_activity_logs").select("session_id, activity_type, material_id, duration_seconds").eq("room_id", roomId).limit(5000),
   ]);
+
+  // Detect sister rooms (same title, different id) — common source of confusion
+  let siblingsBlock = "";
+  if (room?.title) {
+    const { data: siblings } = await svc
+      .from("rooms")
+      .select("id, title, teacher_id")
+      .eq("title", room.title)
+      .neq("id", roomId)
+      .limit(10);
+    if (siblings && siblings.length > 0) {
+      const sibIds = siblings.map((s: any) => s.id);
+      const { data: sibSessions } = await svc
+        .from("student_sessions")
+        .select("room_id")
+        .in("room_id", sibIds)
+        .limit(2000);
+      const counts = new Map<string, number>();
+      for (const s of (sibSessions || [])) counts.set(s.room_id, (counts.get(s.room_id) || 0) + 1);
+      siblingsBlock = `\n### ⚠️ SALAS IRMÃS (mesmo título "${room.title}")\n` +
+        siblings.map((s: any) => `- id \`${String(s.id).slice(0, 8)}\` — ${counts.get(s.id) || 0} sessões` +
+          (s.teacher_id !== room.teacher_id ? " (outro professor)" : "")).join("\n") +
+        `\nSe esta sala tem 0 acessos mas uma sala-irmã tem muitos, os alunos provavelmente entraram na outra.`;
+    }
+  }
+
 
   const activitiesLocked = !!(room?.unlock_at && new Date(room.unlock_at) > new Date());
   const materialsCount = (materials || []).length;
