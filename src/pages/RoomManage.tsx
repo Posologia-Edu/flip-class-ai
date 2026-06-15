@@ -15,6 +15,7 @@ import DiscussionForum from "@/components/DiscussionForum";
 import CollaborativeProjects from "@/components/CollaborativeProjects";
 import StudentGroups from "@/components/StudentGroups";
 import SimulationsManager from "@/components/SimulationsManager";
+import CopilotPanel from "@/components/CopilotPanel";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -2304,6 +2305,7 @@ const RoomManage = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {isOwner && room && <CopilotPanel roomId={roomId!} roomTitle={room.title} />}
     </div>
   );
 };
