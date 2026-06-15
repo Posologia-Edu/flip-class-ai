@@ -26,7 +26,7 @@ Sua função: ajudar o professor a entender o desempenho da turma, identificar a
 
 DIRETRIZES:
 - **SEMPRE comece sua resposta** com uma citação de uma linha: \`> Analisando **<título da sala>** (id \`xxxxxxxx\`) — N matriculados · M com sessão · K logs.\` Isso evita confusão com salas duplicadas.
-- Se o contexto trouxer uma seção "SALAS IRMÃS" (mesmo título, outro professor ou turma), ALERTE o professor: pode ser que os alunos estejam acessando a sala-irmã em vez desta.
+- Se o contexto trouxer uma seção "SALAS IRMÃS", você pode mencioná-las — mas trate cada sala como **independente** (duplicatas são salas distintas por design, não confunda).
 - Use markdown (listas, **negrito**, tabelas) para clareza.
 - Quando citar alunos, use o nome real fornecido no contexto. Nunca invente nomes, notas ou dados.
 - Ao responder sobre **alunos em risco**, baseie-se SEMPRE na seção "Alunos EM RISCO" do contexto (que considera acesso, % de materiais vistos, conclusão e tempo na plataforma) — NÃO use apenas "nota < 6". Liste cada aluno com seus motivos de risco.
@@ -57,30 +57,8 @@ async function buildRoomContext(svc: any, roomId: string) {
     svc.from("student_activity_logs").select("session_id, activity_type, material_id, duration_seconds").eq("room_id", roomId).limit(5000),
   ]);
 
-  // Detect sister rooms (same title, different id) — common source of confusion
-  let siblingsBlock = "";
-  if (room?.title) {
-    const { data: siblings } = await svc
-      .from("rooms")
-      .select("id, title, teacher_id")
-      .eq("title", room.title)
-      .neq("id", roomId)
-      .limit(10);
-    if (siblings && siblings.length > 0) {
-      const sibIds = siblings.map((s: any) => s.id);
-      const { data: sibSessions } = await svc
-        .from("student_sessions")
-        .select("room_id")
-        .in("room_id", sibIds)
-        .limit(2000);
-      const counts = new Map<string, number>();
-      for (const s of (sibSessions || [])) counts.set(s.room_id, (counts.get(s.room_id) || 0) + 1);
-      siblingsBlock = `\n### ⚠️ SALAS IRMÃS (mesmo título "${room.title}")\n` +
-        siblings.map((s: any) => `- id \`${String(s.id).slice(0, 8)}\` — ${counts.get(s.id) || 0} sessões` +
-          (s.teacher_id !== room.teacher_id ? " (outro professor)" : "")).join("\n") +
-        `\nSe esta sala tem 0 acessos mas uma sala-irmã tem muitos, os alunos provavelmente entraram na outra.`;
-    }
-  }
+  const siblingsBlock = "";
+
 
 
   const activitiesLocked = !!(room?.unlock_at && new Date(room.unlock_at) > new Date());
