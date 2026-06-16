@@ -31,7 +31,7 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const station = exam.stations[stationIdx];
-  const isInteractive = station && INTERACTIVE_TYPES.includes(station.type?.toLowerCase());
+  const isInteractive = true;
 
   useEffect(() => {
     if (!started || finished) return;
