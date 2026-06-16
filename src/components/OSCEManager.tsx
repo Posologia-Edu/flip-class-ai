@@ -175,14 +175,156 @@ export default function OSCEManager({ roomId, isOwner }: { roomId: string; isOwn
                   <h4 className="font-semibold text-sm mb-2 flex items-center gap-1"><FileCheck className="w-4 h-4" /> Tentativas ({attempts.length})</h4>
                   {attempts.length === 0 ? <div className="text-xs text-muted-foreground">Nenhuma tentativa ainda.</div> : (
                     <div className="space-y-1">
-                      {attempts.map(a => (
-                        <div key={a.id} className="flex justify-between items-center text-xs border rounded p-2">
-                          <span>{a.student_name || a.student_email}</span>
-                          <span>{a.total_score != null ? `${Number(a.total_score).toFixed(1)}/10` : "Em andamento"} {a.passed === true && <Badge variant="secondary" className="ml-1 text-[10px]">Aprovado</Badge>} {a.passed === false && <Badge variant="destructive" className="ml-1 text-[10px]">Reprovado</Badge>}</span>
-                        </div>
-                      ))}
+                      {attempts.map(a => {
+                        const score = a.final_score ?? a.teacher_score ?? a.total_score;
+                        return (
+                          <div key={a.id} className="flex justify-between items-center text-xs border rounded p-2 gap-2">
+                            <span className="truncate">{a.student_name || a.student_email}</span>
+                            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                              <span>{score != null ? `${Number(score).toFixed(1)}/10` : "—"}</span>
+                              {!a.completed_at && <Badge variant="outline" className="text-[10px]">Em andamento</Badge>}
+                              {a.completed_at && !a.teacher_reviewed && <Badge variant="outline" className="text-[10px]"><Hourglass className="w-2.5 h-2.5 mr-0.5" />Aguardando</Badge>}
+                              {a.released_to_student && <Badge variant="secondary" className="text-[10px]"><CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />Liberado</Badge>}
+                              {a.completed_at && previewExam && (
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => {
+                                  setReviewing({ exam: previewExam, attempt: a });
+                                  setReviewScore(String(a.teacher_score ?? a.total_score ?? ""));
+                                  setReviewFeedback(a.teacher_feedback ?? "");
+                                }}>
+                                  {a.teacher_reviewed ? "Editar" : "Revisar"}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reviewing} onOpenChange={(v) => !v && setReviewing(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {reviewing && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Revisão do OSCE — {reviewing.attempt.student_name || reviewing.attempt.student_email}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="text-xs text-muted-foreground">
+                  Avaliação inicial gerada pela IA. Ajuste a nota final e o feedback consolidado antes de liberar o relatório ao aluno.
+                </div>
+                <div className="space-y-2">
+                  {(reviewing.attempt.station_responses || []).map((r: any, i: number) => (
+                    <Card key={i} className="p-3">
+                      <div className="flex justify-between items-center text-sm mb-1">
+                        <strong>{i + 1}. {r.title} <Badge variant="outline" className="text-[10px] ml-1">{r.type}</Badge></strong>
+                        <Badge variant="secondary">IA: {Number(r.ai_score).toFixed(1)}/10</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground italic mb-2 whitespace-pre-wrap">{r.ai_feedback}</div>
+                      {r.criteria_scores?.length > 0 && (
+                        <div className="text-[11px] space-y-0.5 mb-2">
+                          {r.criteria_scores.map((c: any, j: number) => (
+                            <div key={j} className="flex justify-between gap-2">
+                              <span>• {c.criterion}</span>
+                              <span className="text-muted-foreground">{c.score}{c.max ? `/${c.max}` : ""} — {c.comment}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {r.mode === "chat" && r.transcript?.length > 0 ? (
+                        <details>
+                          <summary className="text-xs cursor-pointer text-primary"><User className="w-3 h-3 inline mr-1" />Diálogo com paciente padronizado ({r.transcript.length} turnos)</summary>
+                          <div className="mt-2 space-y-1 text-xs bg-muted/40 p-2 rounded">
+                            {r.transcript.map((t: any, j: number) => (
+                              <div key={j}><strong>{t.role === "student" ? "Aluno" : "Paciente"}:</strong> {t.text}</div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : r.response ? (
+                        <details>
+                          <summary className="text-xs cursor-pointer text-primary">Ver resposta escrita</summary>
+                          <div className="mt-2 text-xs bg-muted/40 p-2 rounded whitespace-pre-wrap">{r.response}</div>
+                        </details>
+                      ) : null}
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="space-y-2 border-t pt-3">
+                  <div>
+                    <label className="text-sm font-medium">Nota final (0-10)</label>
+                    <Input
+                      type="number" min={0} max={10} step={0.1}
+                      value={reviewScore}
+                      onChange={(e) => setReviewScore(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Feedback consolidado para o aluno</label>
+                    <Textarea
+                      rows={5}
+                      value={reviewFeedback}
+                      onChange={(e) => setReviewFeedback(e.target.value)}
+                      placeholder="Comentários, ajustes e orientações que comporão o relatório final do aluno."
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end flex-wrap">
+                    <Button variant="outline" onClick={() => setReviewing(null)}>Cancelar</Button>
+                    <Button
+                      variant="secondary"
+                      disabled={savingReview}
+                      onClick={async () => {
+                        setSavingReview(true);
+                        const sc = Number(reviewScore);
+                        const { error } = await supabase.from("osce_attempts" as any).update({
+                          teacher_score: isNaN(sc) ? null : sc,
+                          teacher_feedback: reviewFeedback || null,
+                          teacher_reviewed: true,
+                          teacher_reviewed_at: new Date().toISOString(),
+                          released_to_student: false,
+                        }).eq("id", reviewing.attempt.id);
+                        setSavingReview(false);
+                        if (error) return toast.error(error.message);
+                        toast.success("Rascunho salvo");
+                        loadAttempts(reviewing.exam.id);
+                      }}
+                    >
+                      Salvar rascunho
+                    </Button>
+                    <Button
+                      disabled={savingReview || !reviewScore}
+                      onClick={async () => {
+                        setSavingReview(true);
+                        const sc = Number(reviewScore);
+                        if (isNaN(sc)) { setSavingReview(false); return toast.error("Nota inválida"); }
+                        const passed = sc >= reviewing.exam.passing_score;
+                        const certId = passed && !reviewing.attempt.certificate_id
+                          ? `OSCE-${Date.now().toString(36).toUpperCase()}` : reviewing.attempt.certificate_id ?? null;
+                        const { error } = await supabase.from("osce_attempts" as any).update({
+                          teacher_score: sc,
+                          final_score: sc,
+                          teacher_feedback: reviewFeedback || null,
+                          teacher_reviewed: true,
+                          teacher_reviewed_at: new Date().toISOString(),
+                          released_to_student: true,
+                          passed,
+                          certificate_id: certId,
+                        }).eq("id", reviewing.attempt.id);
+                        setSavingReview(false);
+                        if (error) return toast.error(error.message);
+                        toast.success("Relatório liberado ao aluno");
+                        setReviewing(null);
+                        loadAttempts(reviewing.exam.id);
+                      }}
+                    >
+                      <Send className="w-4 h-4 mr-1" /> Liberar relatório
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>
