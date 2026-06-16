@@ -8,6 +8,12 @@ const corsHeaders = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+function transcriptToText(history: any[]): string {
+  return (history || [])
+    .map((t) => `${t.role === "student" ? "ALUNO" : "PACIENTE"}: ${t.text}`)
+    .join("\n");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -16,21 +22,41 @@ serve(async (req) => {
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const svc = createClient(url, service);
 
-    const { station, response } = await req.json();
-    if (!station || typeof response !== "string") return json({ error: "station e response obrigatórios" }, 400);
+    const { station, response, transcript } = await req.json();
+    if (!station) return json({ error: "station obrigatório" }, 400);
+
+    const studentContent =
+      Array.isArray(transcript) && transcript.length
+        ? `DIÁLOGO COM O PACIENTE PADRONIZADO:\n${transcriptToText(transcript)}`
+        : `RESPOSTA ESCRITA DO ALUNO:\n${(response || "(sem resposta)").slice(0, 8000)}`;
 
     const customKeys = await getCustomProviderKeys(svc);
     const ai = await callAiWithFallbackDetailed({
       messages: [
-        { role: "system", content: `Você é um avaliador de OSCE. Avalie a resposta do aluno com base nos critérios. Responda APENAS JSON estrito (sem markdown):
-{"score": <0-${station.max_score || 10}>, "criteria_scores": [{"criterion":"...","score":<n>,"comment":"..."}], "feedback":"<texto curto>"}` },
-        { role: "user", content: `ESTAÇÃO: ${station.title}
-TIPO: ${station.type}
-PROMPT: ${station.prompt}
-CRITÉRIOS: ${JSON.stringify(station.rubric_criteria)}
+        {
+          role: "system",
+          content: `Você é um AVALIADOR DE OSCE experiente. Avalie o desempenho do aluno na estação clínica usando os critérios da rubrica.
 
-RESPOSTA DO ALUNO:
-${response.slice(0, 8000)}` },
+Considere:
+- Se houver diálogo: qualidade da anamnese/comunicação, perguntas-chave feitas, empatia, organização, encerramento.
+- Se houver resposta escrita: precisão técnica, completude, raciocínio clínico.
+- Atribua nota por critério (proporcional ao peso) e nota global de 0 a ${station.max_score || 10}.
+- Forneça feedback construtivo em 3-5 frases, citando pontos fortes e o que melhorar.
+
+Responda APENAS JSON estrito (sem markdown):
+{"score": <0-${station.max_score || 10}>, "criteria_scores":[{"criterion":"...","score":<n>,"max":<peso>,"comment":"..."}], "feedback":"<texto>", "strengths":["..."], "improvements":["..."]}`,
+        },
+        {
+          role: "user",
+          content: `ESTAÇÃO: ${station.title}
+TIPO: ${station.type}
+PROMPT DA ESTAÇÃO:
+${station.prompt}
+
+CRITÉRIOS DA RUBRICA: ${JSON.stringify(station.rubric_criteria)}
+
+${studentContent}`,
+        },
       ],
       customProviderKeys: customKeys,
     });
@@ -40,7 +66,7 @@ ${response.slice(0, 8000)}` },
       const raw = ai.content.trim().replace(/^```json\s*|\s*```$/g, "");
       parsed = JSON.parse(raw);
     } catch {
-      parsed = { score: 0, criteria_scores: [], feedback: ai.content.slice(0, 500) };
+      parsed = { score: 0, criteria_scores: [], feedback: ai.content.slice(0, 800), strengths: [], improvements: [] };
     }
 
     return json({ success: true, ...parsed });
