@@ -6,12 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Stethoscope, Sparkles, Plus, Loader2, Eye, Trash2, FileCheck } from "lucide-react";
+import { Stethoscope, Sparkles, Plus, Loader2, Eye, Trash2, FileCheck, User, Send, CheckCircle2, Hourglass } from "lucide-react";
 import { toast } from "sonner";
 
 type Station = { id: string; type: string; title: string; prompt: string; duration_sec: number; max_score: number; rubric_criteria: Array<{ criterion: string; weight: number }> };
 type Exam = { id: string; title: string; description: string | null; stations: Station[]; passing_score: number; is_published: boolean; created_at: string };
-type Attempt = { id: string; student_email: string; student_name: string | null; total_score: number | null; passed: boolean | null; completed_at: string | null; station_responses: any[] };
+type Attempt = {
+  id: string; student_email: string; student_name: string | null; total_score: number | null;
+  passed: boolean | null; completed_at: string | null; station_responses: any[];
+  teacher_reviewed?: boolean; released_to_student?: boolean;
+  teacher_score?: number | null; teacher_feedback?: string | null; final_score?: number | null;
+  certificate_id?: string | null;
+};
 
 export default function OSCEManager({ roomId, isOwner }: { roomId: string; isOwner: boolean }) {
   const [exams, setExams] = useState<Exam[]>([]);
