@@ -12,8 +12,7 @@ type Station = { id: string; type: string; title: string; prompt: string; durati
 type Exam = { id: string; room_id: string; title: string; passing_score: number; stations: Station[] };
 type Turn = { role: "student" | "patient"; text: string };
 
-// Tipos de estação que usam paciente virtual interativo
-const INTERACTIVE_TYPES = ["anamnese", "comunicacao", "comunicação"];
+// Paciente virtual é usado em TODAS as estações
 
 export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }:
   { exam: Exam; studentName?: string; studentEmail?: string; onFinish?: () => void }) {
@@ -32,7 +31,7 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const station = exam.stations[stationIdx];
-  const isInteractive = station && INTERACTIVE_TYPES.includes(station.type?.toLowerCase());
+  const isInteractive = true;
 
   useEffect(() => {
     if (!started || finished) return;
