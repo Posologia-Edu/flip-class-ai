@@ -1576,6 +1576,14 @@ const RoomManage = () => {
 
         <SimulationsManager roomId={roomId!} materials={materials} isOwner={isOwner} />
 
+        <section className="mt-8">
+          <OSCEManager roomId={roomId!} isOwner={isOwner} />
+        </section>
+
+        <section className="mt-8">
+          <StudentTwinPanel roomId={roomId!} />
+        </section>
+
         {/* Manual Activity Dialog */}
         <Dialog open={manualActivityDialogOpen} onOpenChange={(open) => { if (!open) resetManualActivityForm(); else setManualActivityDialogOpen(true); }}>
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
