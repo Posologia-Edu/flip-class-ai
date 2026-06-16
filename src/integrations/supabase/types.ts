@@ -492,13 +492,20 @@ export type Database = {
           completed_at: string | null
           created_at: string
           exam_id: string
+          final_score: number | null
           id: string
           passed: boolean | null
+          released_to_student: boolean
           room_id: string
           started_at: string
           station_responses: Json
           student_email: string
           student_name: string | null
+          teacher_feedback: string | null
+          teacher_reviewed: boolean
+          teacher_reviewed_at: string | null
+          teacher_reviewed_by: string | null
+          teacher_score: number | null
           total_score: number | null
         }
         Insert: {
@@ -506,13 +513,20 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           exam_id: string
+          final_score?: number | null
           id?: string
           passed?: boolean | null
+          released_to_student?: boolean
           room_id: string
           started_at?: string
           station_responses?: Json
           student_email: string
           student_name?: string | null
+          teacher_feedback?: string | null
+          teacher_reviewed?: boolean
+          teacher_reviewed_at?: string | null
+          teacher_reviewed_by?: string | null
+          teacher_score?: number | null
           total_score?: number | null
         }
         Update: {
@@ -520,13 +534,20 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           exam_id?: string
+          final_score?: number | null
           id?: string
           passed?: boolean | null
+          released_to_student?: boolean
           room_id?: string
           started_at?: string
           station_responses?: Json
           student_email?: string
           student_name?: string | null
+          teacher_feedback?: string | null
+          teacher_reviewed?: boolean
+          teacher_reviewed_at?: string | null
+          teacher_reviewed_by?: string | null
+          teacher_score?: number | null
           total_score?: number | null
         }
         Relationships: [
