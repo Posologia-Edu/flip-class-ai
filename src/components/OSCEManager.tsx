@@ -29,6 +29,10 @@ export default function OSCEManager({ roomId, isOwner }: { roomId: string; isOwn
   const [generating, setGenerating] = useState(false);
   const [previewExam, setPreviewExam] = useState<Exam | null>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [reviewing, setReviewing] = useState<{ exam: Exam; attempt: Attempt } | null>(null);
+  const [reviewScore, setReviewScore] = useState<string>("");
+  const [reviewFeedback, setReviewFeedback] = useState<string>("");
+  const [savingReview, setSavingReview] = useState(false);
 
   const load = async () => {
     setLoading(true);
