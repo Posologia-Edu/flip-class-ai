@@ -1,90 +1,95 @@
+# Plano: 3 Features Disruptivas
 
-# Funcionalidades Disruptivas — Roadmap de Inovação
-
-Abaixo estão 10 funcionalidades de alto impacto, pensadas para diferenciar o sistema no mercado de EdTech em saúde/farmácia. Cada uma se apoia na infraestrutura que já existe (Lovable Cloud, AI Fallback, Realtime, Simulações, Materiais multimodais).
+Vou implementar em sequência, cada uma como módulo independente. Todas usam o AI Fallback existente (Gemini→Groq→OpenAI→OpenRouter→Anthropic) e respeitam RLS + admin bypass.
 
 ---
 
 ## 1. Gêmeo Digital do Aluno (Digital Twin Pedagógico)
-Um modelo vivo de cada estudante, atualizado em tempo real, que prevê:
-- Probabilidade de reprovação nas próximas 2 semanas
-- Tópicos com decaimento de memória (curva de Ebbinghaus aplicada por conceito)
-- Estilo cognitivo dominante (visual, leitor, prático)
 
-A IA usa o histórico de quizzes, simulações, tempo em materiais e padrões de erro para recomendar **micro-intervenções automáticas** (ex.: revisão de 3 min agendada antes da aula).
+**O que faz:** Modelo vivo por aluno que prevê risco de reprovação (2 semanas), decaimento de memória por conceito (Ebbinghaus) e estilo cognitivo dominante. Recomenda micro-intervenções.
 
-**Diferencial:** nenhum LMS brasileiro entrega previsão individual + intervenção automática.
+### Backend
+- **Tabela `student_twins`**: snapshot por (room_id, student_email) com:
+  - `risk_score` (0-100), `risk_factors` (jsonb), `predicted_at`
+  - `cognitive_style` ('visual'|'reader'|'practical'|'mixed')
+  - `style_confidence` (0-1)
+  - `memory_decay` (jsonb: `[{topic, last_seen, strength, next_review_at}]`)
+  - `recommendations` (jsonb: `[{type, topic, action, when, duration_min}]`)
+  - `updated_at`
+- **Edge function `student-twin-update`**: recebe `room_id` + `student_email` (ou batch da sala), agrega:
+  - quizzes (`student_sessions.answers`, scores, tempo)
+  - logs de materiais (`student_activity_logs`: tipo, duração)
+  - simulações (`simulation_sessions.summary`)
+  - padrões de erro (quais tópicos erra mais)
+  - Calcula risco com heurística + IA (gera `risk_factors` e `recommendations` via LLM)
+  - Estilo cognitivo: razão tempo-em-PDFs vs vídeos vs simulações
+  - Decay: para cada tópico estudado, aplica curva R = e^(-t/S), S aumenta com revisões
+- **Edge function `student-twin-batch`**: roda para todos os alunos de uma sala (botão "Atualizar Twins").
 
----
-
-## 2. Modo Debate Socrático com IA (Voz)
-Aluno entra em uma "sala" 1:1 por voz com a IA, que assume o papel de **examinador socrático**: faz perguntas progressivas, contesta respostas, força o aluno a justificar com base em evidências do material da sala. Encerra com rubrica de raciocínio clínico.
-
-**Tecnologia:** Realtime API (voz) + RAG nos materiais + AI Fallback existente.
-
----
-
-## 3. Trilhas Adaptativas Geradas em Tempo Real
-Em vez de o professor montar a sequência, a IA cria uma **trilha personalizada por aluno** com base no gêmeo digital. A cada atividade concluída, a próxima é re-gerada (mais fácil, mais difícil, ou de revisão). Professor vê o "mapa coletivo" da turma.
-
----
-
-## 4. Paciente Virtual Persistente (Caso Longitudinal)
-Extensão da simulação atual: um paciente que **evolui ao longo do semestre**. Decisões do aluno na semana 2 afetam o estado clínico na semana 8. Pode ser jogado em grupo (cada aluno = um membro da equipe multiprofissional).
-
-**Gancho:** já temos simulações ramificadas — basta adicionar estado persistente entre sessões e timeline.
+### Frontend
+- **Componente `StudentTwinPanel.tsx`** (professor): grid de cards por aluno com risco (cor verde/âmbar/vermelho), estilo cognitivo (badge), top 3 recomendações, tópicos com baixa retenção.
+- **Aba "Gêmeos Digitais"** em `RoomManage.tsx` (Analytics).
+- **Componente `MyTwinView.tsx`** (aluno): seu próprio twin — sem o risco cru, mostra "Sua próxima revisão", "Você aprende melhor por…", agenda de micro-revisões.
 
 ---
 
-## 5. OSCE Virtual Automatizado (Exame Estruturado)
-Estações de avaliação prática simuladas: o aluno entra em N estações cronometradas (anamnese, prescrição, comunicação com paciente, cálculo de dose). IA avalia cada estação com rubrica e gera certificado de competência.
+## 2. Debate Socrático com IA (Voz)
 
-**Aplicação direta:** Farmacoterapia, Atenção Farmacêutica, residências.
+**O que faz:** Sala 1:1 por voz onde IA examinadora faz perguntas progressivas, contesta respostas, exige evidências do material. Gera rubrica de raciocínio clínico.
 
----
+### Tecnologia
+- **OpenAI Realtime API** via WebRTC (precisa de `OPENAI_API_KEY` — já temos no AI Fallback). Se ausente, exibe aviso para professor configurar.
+- Token efêmero gerado por edge function (`socratic-realtime-token`) — chave nunca vai ao client.
+- RAG: edge function `socratic-context` pré-empacota até 40k chars dos materiais da sala (mesmo padrão do AI Quiz).
 
-## 6. Co-Autoria com IA para o Professor (Copilot Pedagógico)
-Painel onde o professor "conversa" com a IA sobre a turma:
-> "Quem está em risco em farmacocinética?"
-> "Gere 3 questões focadas nos erros recorrentes da sala B."
-> "Reescreva o feedback da Maria com tom mais acolhedor."
+### Backend
+- **Tabela `socratic_sessions`**:
+  - `room_id`, `student_email`, `topic`, `started_at`, `ended_at`, `duration_sec`
+  - `transcript` (jsonb: turnos)
+  - `rubric` (jsonb: `clinical_reasoning`, `evidence_use`, `clarity`, `depth` — 0-10 cada)
+  - `final_grade` (numeric), `feedback_md` (text)
+- **Edge function `socratic-realtime-token`**: gera token efêmero Realtime + injeta system prompt com instruções socráticas + contexto RAG.
+- **Edge function `socratic-end`**: recebe transcript completo, IA gera rubrica + nota + feedback markdown.
 
-A IA tem contexto completo (analytics + materiais + histórico) e pode **executar ações** (criar atividade, enviar e-mail, reagendar prazo) com confirmação.
-
----
-
-## 7. Captura Inteligente de Aula (Lecture-to-Material)
-Professor sobe um vídeo/áudio de aula presencial. A IA:
-- Transcreve e segmenta por tópico
-- Gera resumo, mapa mental, flashcards e quiz automaticamente
-- Identifica trechos em que o professor "enfatizou" (mudanças de entonação) → marca como pontos-chave
-- Cria uma versão "TikTok" (cortes de 60s legendados) para revisão móvel
-
----
-
-## 8. Rede de Conhecimento da Disciplina (Knowledge Graph)
-Cada material, questão e conceito vira nó em um grafo. O aluno vê visualmente o que domina (verde), o que está fraco (vermelho) e como os tópicos se conectam. Clicar em um nó abre micro-conteúdo gerado pela IA sob demanda.
-
-**Bônus:** professor enxerga lacunas estruturais do conteúdo da disciplina inteira.
+### Frontend
+- **Componente `SocraticDebateRoom.tsx`** (aluno): botão "Iniciar debate" → conecta WebRTC, mostra waveform, transcript ao vivo, timer (mín 5min, máx 20min). Botão "Encerrar" → mostra rubrica.
+- **Trigger no aluno**: card na lista de atividades da sala "Debate Socrático sobre [tópico]".
+- **Listagem no professor**: aba mostrando sessões com nota e transcript.
 
 ---
 
-## 9. Avaliação por Pares com IA-Mediador Anti-Viés
-Evolução do peer review atual: a IA analisa **a qualidade do feedback dado** pelo revisor (não só a resposta avaliada), detecta vieses (notas infladas em amigos, retaliação), e sugere reescrita antes do envio. Gera score de "qualidade como avaliador" — competência valorizada na vida profissional.
+## 3. OSCE Virtual Automatizado
+
+**O que faz:** N estações cronometradas (anamnese, prescrição, comunicação, cálculo de dose). IA avalia cada uma com rubrica e emite certificado.
+
+### Backend
+- **Tabela `osce_exams`** (criada pelo professor):
+  - `room_id`, `title`, `description`, `stations` (jsonb: `[{id, type, prompt, duration_sec, rubric_criteria, max_score}]`)
+  - `passing_score`, `created_by`, `unlock_at`
+- **Tabela `osce_attempts`**:
+  - `exam_id`, `student_email`, `started_at`, `completed_at`
+  - `station_responses` (jsonb: `[{station_id, response, time_used_sec, ai_score, ai_feedback}]`)
+  - `total_score`, `passed`, `certificate_id`
+- **Edge function `osce-generate`**: IA gera estações a partir de tópico (5 tipos: anamnese, prescrição, comunicação, cálculo, raciocínio). Reusa AI Fallback.
+- **Edge function `osce-evaluate-station`**: recebe resposta + rubrica → IA retorna score + feedback.
+- **Edge function `osce-certificate`**: gera PDF simples (HTML→PDF inline) com nome, exame, nota, hash.
+
+### Frontend
+- **Componente `OSCEBuilder.tsx`** (professor): cria exame, gera estações via IA, edita rubricas.
+- **Componente `OSCEPlayer.tsx`** (aluno): tela cheia, uma estação por vez com timer regressivo, auto-submit ao zerar, transição forçada (sem voltar).
+- **Componente `OSCEResults.tsx`**: mostra score por estação, rubrica detalhada, certificado para download.
+- **Aba "OSCE"** em `RoomManage.tsx`.
 
 ---
 
-## 10. Marketplace de Salas + Federação entre Instituições
-Professores podem **publicar uma sala como template público** (com IA anonimizando dados). Outras instituições clonam e adaptam. Modelo de receita: criador recebe % quando sua sala é assinada. Cria efeito de rede e posiciona o sistema como **GitHub da educação em saúde**.
+## Ordem de Execução
+
+1. Digital Twin (migration + 2 edge fns + 2 componentes) — base de dados existente, mais rápido
+2. OSCE (migration + 3 edge fns + 3 componentes) — independente, alto valor
+3. Debate Socrático (migration + 2 edge fns + 2 componentes) — depende de OPENAI_API_KEY ativa
+
+Vou implementar tudo em sequência sem interrupção. Estimativa: ~15-20 arquivos novos, ~5 edits.
 
 ---
 
-## Próximo passo
-
-Não vou implementar tudo de uma vez. Quero que você escolha **1 ou 2 prioritárias** para eu detalhar tecnicamente (schema, edge functions, UI) e iniciar. Minhas sugestões de maior ROI imediato dado o que já existe:
-
-- **#6 Copilot Pedagógico** — aproveita 100% da infra de analytics + AI fallback, valor percebido enorme pelo professor.
-- **#2 Debate Socrático por voz** — alto "uau", diferencia o produto, usa Realtime API.
-- **#4 Paciente Virtual Persistente** — extensão natural das simulações recém-criadas.
-
-Me diga quais quer ver detalhadas em plano técnico de implementação.
+**Confirma a ordem? Posso começar pelo Digital Twin?** Ou prefere outra prioridade (ex.: só Debate Socrático primeiro)?
