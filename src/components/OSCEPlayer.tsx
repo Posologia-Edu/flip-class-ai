@@ -5,29 +5,41 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Stethoscope, Clock, ChevronRight, Award, Loader2 } from "lucide-react";
+import { Stethoscope, Clock, ChevronRight, Loader2, Send, User, Hourglass } from "lucide-react";
 import { toast } from "sonner";
 
 type Station = { id: string; type: string; title: string; prompt: string; duration_sec: number; max_score: number; rubric_criteria: any[] };
 type Exam = { id: string; room_id: string; title: string; passing_score: number; stations: Station[] };
+type Turn = { role: "student" | "patient"; text: string };
+
+// Tipos de estação que usam paciente virtual interativo
+const INTERACTIVE_TYPES = ["anamnese", "comunicacao", "comunicação"];
 
 export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }:
   { exam: Exam; studentName?: string; studentEmail?: string; onFinish?: () => void }) {
   const [started, setStarted] = useState(false);
   const [stationIdx, setStationIdx] = useState(0);
   const [responses, setResponses] = useState<any[]>([]);
-  const [currentText, setCurrentText] = useState("");
+  const [transcript, setTranscript] = useState<Turn[]>([]);
+  const [draft, setDraft] = useState("");
+  const [writtenAnswer, setWrittenAnswer] = useState("");
+  const [patientThinking, setPatientThinking] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [finalResult, setFinalResult] = useState<any | null>(null);
+  const [finished, setFinished] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const stationStartRef = useRef<number>(0);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const station = exam.stations[stationIdx];
+  const isInteractive = station && INTERACTIVE_TYPES.includes(station.type?.toLowerCase());
 
   useEffect(() => {
-    if (!started || finalResult) return;
+    if (!started || finished) return;
     setTimeLeft(station.duration_sec);
+    setTranscript([]);
+    setDraft("");
+    setWrittenAnswer("");
     stationStartRef.current = Date.now();
     const iv = setInterval(() => {
       setTimeLeft((t) => {
@@ -38,6 +50,10 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationIdx, started]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript, patientThinking]);
 
   const start = async () => {
     const { data, error } = await supabase.from("osce_attempts" as any).insert({
@@ -52,44 +68,67 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
     setStarted(true);
   };
 
+  const sendToPatient = async () => {
+    const msg = draft.trim();
+    if (!msg || patientThinking) return;
+    const newTurns: Turn[] = [...transcript, { role: "student", text: msg }];
+    setTranscript(newTurns);
+    setDraft("");
+    setPatientThinking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("osce-patient", {
+        body: { station, history: newTurns, studentMessage: msg },
+      });
+      if (error) throw error;
+      setTranscript([...newTurns, { role: "patient", text: data.reply || "..." }]);
+    } catch (e: any) {
+      toast.error(e.message || "Paciente não respondeu");
+    } finally {
+      setPatientThinking(false);
+    }
+  };
+
   const submitStation = async (auto = false) => {
     if (submitting) return;
     setSubmitting(true);
     const timeUsed = Math.round((Date.now() - stationStartRef.current) / 1000);
-    const text = currentText.trim() || (auto ? "(sem resposta — tempo esgotado)" : "(em branco)");
     try {
-      const { data, error } = await supabase.functions.invoke("osce-evaluate", {
-        body: { station, response: text },
-      });
+      const body: any = { station };
+      if (isInteractive) body.transcript = transcript;
+      else body.response = writtenAnswer.trim() || (auto ? "(sem resposta — tempo esgotado)" : "(em branco)");
+
+      const { data, error } = await supabase.functions.invoke("osce-evaluate", { body });
       if (error) throw error;
+
       const stationResp = {
         station_id: station.id,
         type: station.type,
         title: station.title,
-        response: text,
+        mode: isInteractive ? "chat" : "written",
+        transcript: isInteractive ? transcript : undefined,
+        response: isInteractive ? undefined : writtenAnswer,
         time_used_sec: timeUsed,
         ai_score: data.score,
         criteria_scores: data.criteria_scores || [],
         ai_feedback: data.feedback,
+        strengths: data.strengths || [],
+        improvements: data.improvements || [],
       };
       const next = [...responses, stationResp];
       setResponses(next);
-      setCurrentText("");
 
       if (stationIdx + 1 < exam.stations.length) {
         setStationIdx(stationIdx + 1);
       } else {
         const total = next.reduce((s, r) => s + Number(r.ai_score || 0), 0) / next.length;
-        const passed = total >= exam.passing_score;
-        const certId = passed ? `OSCE-${Date.now().toString(36).toUpperCase()}` : null;
         await supabase.from("osce_attempts" as any).update({
           station_responses: next,
           total_score: total,
-          passed,
-          certificate_id: certId,
           completed_at: new Date().toISOString(),
+          teacher_reviewed: false,
+          released_to_student: false,
         }).eq("id", attemptId!);
-        setFinalResult({ total, passed, certId, responses: next });
+        setFinished(true);
       }
     } catch (e: any) {
       toast.error(e.message || "Erro ao avaliar");
@@ -100,34 +139,17 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-  if (finalResult) {
+  if (finished) {
     return (
-      <Card className="p-6 space-y-4">
-        <div className="text-center">
-          <Award className={`w-12 h-12 mx-auto ${finalResult.passed ? "text-green-600" : "text-muted-foreground"}`} />
-          <h2 className="text-2xl font-bold mt-2">{finalResult.passed ? "Aprovado!" : "Reprovado"}</h2>
-          <div className="text-4xl font-bold mt-2">{Number(finalResult.total).toFixed(1)}<span className="text-lg text-muted-foreground">/10</span></div>
-          <div className="text-xs text-muted-foreground">Nota mínima: {exam.passing_score}</div>
-          {finalResult.certId && (
-            <Card className="mt-4 p-4 bg-primary/5">
-              <div className="text-sm">Certificado de Competência</div>
-              <div className="font-mono text-xs mt-1">{finalResult.certId}</div>
-              <div className="text-xs text-muted-foreground mt-1">{studentName || studentEmail} · {exam.title}</div>
-            </Card>
-          )}
-        </div>
-        <div className="space-y-2">
-          {finalResult.responses.map((r: any, i: number) => (
-            <Card key={i} className="p-3">
-              <div className="flex justify-between text-sm">
-                <strong>{i + 1}. {r.title}</strong>
-                <Badge variant="secondary">{Number(r.ai_score).toFixed(1)}/10</Badge>
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">{r.ai_feedback}</div>
-            </Card>
-          ))}
-        </div>
-        <Button onClick={onFinish} variant="outline" className="w-full">Voltar</Button>
+      <Card className="p-6 space-y-4 text-center">
+        <Hourglass className="w-12 h-12 mx-auto text-primary" />
+        <h2 className="text-xl font-bold">OSCE concluído!</h2>
+        <p className="text-sm text-muted-foreground">
+          Sua avaliação foi gerada pela IA e enviada ao professor para revisão final.
+          O <strong>relatório de desempenho</strong> com a nota oficial e o feedback consolidado
+          ficará disponível assim que o professor concluir os ajustes.
+        </p>
+        <Button onClick={onFinish} variant="outline">Voltar</Button>
       </Card>
     );
   }
@@ -138,8 +160,10 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
         <Stethoscope className="w-10 h-10 mx-auto text-primary" />
         <h2 className="text-xl font-bold">{exam.title}</h2>
         <p className="text-sm text-muted-foreground">
-          {exam.stations.length} estações cronometradas · nota mínima {exam.passing_score}/10
-          <br/>Você não poderá voltar a uma estação após avançar. Ao zerar o tempo, a resposta é enviada automaticamente.
+          {exam.stations.length} estações cronometradas. Em estações de <strong>anamnese</strong> e
+          <strong> comunicação</strong> você conversará com um paciente padronizado virtual.
+          <br />Demais estações pedem resposta escrita (prescrição, cálculo, raciocínio).
+          <br />Ao zerar o tempo, a estação é finalizada automaticamente. O professor fará a revisão final antes da nota oficial.
         </p>
         <Button onClick={start} size="lg"><ChevronRight className="w-4 h-4 mr-1" /> Iniciar OSCE</Button>
       </Card>
@@ -160,19 +184,71 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
         </div>
       </div>
       <Progress value={((stationIdx + 1) / exam.stations.length) * 100} />
+
       <Card className="p-3 bg-muted/40">
+        <div className="text-xs font-semibold mb-1 text-muted-foreground">CASO / TAREFA</div>
         <div className="text-sm whitespace-pre-wrap">{station.prompt}</div>
       </Card>
-      <Textarea
-        value={currentText}
-        onChange={(e) => setCurrentText(e.target.value)}
-        rows={8}
-        placeholder="Sua resposta..."
-        disabled={submitting}
-      />
-      <Button onClick={() => submitStation(false)} disabled={submitting} className="w-full">
+
+      {isInteractive ? (
+        <div className="space-y-2">
+          <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+            <User className="w-3 h-3" /> Conversa com o paciente padronizado
+          </div>
+          <div className="border rounded-md bg-background max-h-[360px] overflow-y-auto p-3 space-y-2">
+            {transcript.length === 0 && !patientThinking && (
+              <div className="text-xs text-muted-foreground italic text-center py-4">
+                Comece a consulta — cumprimente o paciente e conduza a anamnese.
+              </div>
+            )}
+            {transcript.map((t, i) => (
+              <div key={i} className={`flex ${t.role === "student" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                  t.role === "student" ? "bg-primary text-primary-foreground" : "bg-muted"
+                }`}>
+                  <div className="text-[10px] opacity-70 mb-0.5">{t.role === "student" ? "Você" : "Paciente"}</div>
+                  {t.text}
+                </div>
+              </div>
+            ))}
+            {patientThinking && (
+              <div className="flex justify-start">
+                <div className="bg-muted rounded-lg px-3 py-2 text-sm">
+                  <Loader2 className="w-3 h-3 inline animate-spin mr-1" /> paciente digitando…
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="flex gap-2">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={2}
+              placeholder="Fale com o paciente..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendToPatient(); }
+              }}
+              disabled={patientThinking || submitting}
+            />
+            <Button onClick={sendToPatient} disabled={patientThinking || submitting || !draft.trim()}>
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Textarea
+          value={writtenAnswer}
+          onChange={(e) => setWrittenAnswer(e.target.value)}
+          rows={8}
+          placeholder="Sua resposta (prescrição, cálculo, raciocínio clínico)..."
+          disabled={submitting}
+        />
+      )}
+
+      <Button onClick={() => submitStation(false)} disabled={submitting} className="w-full" variant={isInteractive ? "secondary" : "default"}>
         {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ChevronRight className="w-4 h-4 mr-2" />}
-        {stationIdx + 1 < exam.stations.length ? "Próxima estação" : "Finalizar OSCE"}
+        {stationIdx + 1 < exam.stations.length ? "Encerrar estação e avançar" : "Encerrar e finalizar OSCE"}
       </Button>
     </Card>
   );
