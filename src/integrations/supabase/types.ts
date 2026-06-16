@@ -486,6 +486,116 @@ export type Database = {
           },
         ]
       }
+      osce_attempts: {
+        Row: {
+          certificate_id: string | null
+          completed_at: string | null
+          created_at: string
+          exam_id: string
+          id: string
+          passed: boolean | null
+          room_id: string
+          started_at: string
+          station_responses: Json
+          student_email: string
+          student_name: string | null
+          total_score: number | null
+        }
+        Insert: {
+          certificate_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          exam_id: string
+          id?: string
+          passed?: boolean | null
+          room_id: string
+          started_at?: string
+          station_responses?: Json
+          student_email: string
+          student_name?: string | null
+          total_score?: number | null
+        }
+        Update: {
+          certificate_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          exam_id?: string
+          id?: string
+          passed?: boolean | null
+          room_id?: string
+          started_at?: string
+          station_responses?: Json
+          student_email?: string
+          student_name?: string | null
+          total_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "osce_attempts_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "osce_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "osce_attempts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      osce_exams: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_published: boolean
+          passing_score: number
+          room_id: string
+          stations: Json
+          title: string
+          unlock_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          passing_score?: number
+          room_id: string
+          stations?: Json
+          title: string
+          unlock_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          passing_score?: number
+          room_id?: string
+          stations?: Json
+          title?: string
+          unlock_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "osce_exams_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       page_views: {
         Row: {
           created_at: string
@@ -1044,6 +1154,62 @@ export type Database = {
         }
         Relationships: []
       }
+      socratic_sessions: {
+        Row: {
+          created_at: string
+          duration_sec: number | null
+          ended_at: string | null
+          feedback_md: string | null
+          final_grade: number | null
+          id: string
+          room_id: string
+          rubric: Json | null
+          started_at: string
+          student_email: string
+          student_name: string | null
+          topic: string
+          transcript: Json
+        }
+        Insert: {
+          created_at?: string
+          duration_sec?: number | null
+          ended_at?: string | null
+          feedback_md?: string | null
+          final_grade?: number | null
+          id?: string
+          room_id: string
+          rubric?: Json | null
+          started_at?: string
+          student_email: string
+          student_name?: string | null
+          topic: string
+          transcript?: Json
+        }
+        Update: {
+          created_at?: string
+          duration_sec?: number | null
+          ended_at?: string | null
+          feedback_md?: string | null
+          final_grade?: number | null
+          id?: string
+          room_id?: string
+          rubric?: Json | null
+          started_at?: string
+          student_email?: string
+          student_name?: string | null
+          topic?: string
+          transcript?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "socratic_sessions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_activity_logs: {
         Row: {
           activity_type: string
@@ -1149,6 +1315,62 @@ export type Database = {
           },
           {
             foreignKeyName: "student_sessions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_twins: {
+        Row: {
+          cognitive_style: string | null
+          id: string
+          memory_decay: Json
+          metrics: Json
+          predicted_at: string
+          recommendations: Json
+          risk_factors: Json
+          risk_score: number
+          room_id: string
+          student_email: string
+          student_name: string | null
+          style_confidence: number | null
+          updated_at: string
+        }
+        Insert: {
+          cognitive_style?: string | null
+          id?: string
+          memory_decay?: Json
+          metrics?: Json
+          predicted_at?: string
+          recommendations?: Json
+          risk_factors?: Json
+          risk_score?: number
+          room_id: string
+          student_email: string
+          student_name?: string | null
+          style_confidence?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cognitive_style?: string | null
+          id?: string
+          memory_decay?: Json
+          metrics?: Json
+          predicted_at?: string
+          recommendations?: Json
+          risk_factors?: Json
+          risk_score?: number
+          room_id?: string
+          student_email?: string
+          student_name?: string | null
+          style_confidence?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_twins_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"
