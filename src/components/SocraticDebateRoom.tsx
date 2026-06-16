@@ -137,12 +137,25 @@ export default function SocraticDebateRoom({
           <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /><strong>Avaliação</strong></div>
           <div className="text-3xl font-bold">{Number(result.final_grade).toFixed(1)}<span className="text-base text-muted-foreground">/10</span></div>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            {result.rubric && Object.entries(result.rubric).map(([k, v]) => (
-              <div key={k} className="flex items-center justify-between border rounded px-2 py-1">
-                <span className="capitalize">{k.replace(/_/g, " ")}</span>
-                <Badge variant="secondary">{String(v)}/10</Badge>
-              </div>
-            ))}
+            {result.rubric && Object.entries(result.rubric).map(([k, v]) => {
+              const labels: Record<string, string> = {
+                clinical_reasoning: "Raciocínio Clínico",
+                evidence_use: "Uso de Evidências",
+                clarity: "Clareza",
+                depth: "Profundidade",
+                raciocinio_clinico: "Raciocínio Clínico",
+                uso_de_evidencias: "Uso de Evidências",
+                clareza: "Clareza",
+                profundidade: "Profundidade",
+              };
+              const label = labels[k] || k.replace(/_/g, " ");
+              return (
+                <div key={k} className="flex items-center justify-between border rounded px-2 py-1">
+                  <span>{label}</span>
+                  <Badge variant="secondary">{String(v)}/10</Badge>
+                </div>
+              );
+            })}
           </div>
           {result.feedback_md && <div className="text-sm whitespace-pre-wrap">{result.feedback_md}</div>}
           <Button variant="outline" onClick={() => { setResult(null); setTranscript([]); }}>Novo debate</Button>
