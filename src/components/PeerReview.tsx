@@ -379,6 +379,9 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
   const [activeQuizData, setActiveQuizData] = useState<any>(quizData);
   const [isGroupActivity, setIsGroupActivity] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [reviewerRep, setReviewerRep] = useState<{ avg_quality: number; count: number } | null>(null);
   const hasFetched = useRef(false);
 
   const fetchData = useCallback(async () => {
