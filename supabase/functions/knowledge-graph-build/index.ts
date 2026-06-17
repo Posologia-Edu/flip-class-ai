@@ -21,7 +21,7 @@ serve(async (req) => {
 
     // Fetch materials & activities
     const [{ data: materials }, { data: activities }] = await Promise.all([
-      svc.from("materials").select("id, title, transcript, content_extracted, type").eq("room_id", roomId),
+      svc.from("materials").select("id, title, content_text_for_ai, type").eq("room_id", roomId),
       svc.from("activities").select("id, title, quiz_data").eq("room_id", roomId),
     ]);
 
@@ -29,7 +29,7 @@ serve(async (req) => {
     const matSummaries = (materials || []).map((m: any) => ({
       id: m.id,
       title: m.title || "Sem título",
-      excerpt: ((m.transcript || m.content_extracted || "") + "").slice(0, 1500),
+      excerpt: ((m.content_text_for_ai || "") + "").slice(0, 1500),
     }));
 
     const questions: any[] = [];
