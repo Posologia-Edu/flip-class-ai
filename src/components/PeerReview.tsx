@@ -504,6 +504,23 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     fetchData();
   }, [fetchData]);
 
+  // Load reviewer reputation (avg AI feedback quality across own past reviews)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("peer_review_quality" as any)
+        .select("feedback_quality")
+        .eq("reviewer_session_id", sessionId);
+      const rows = (data || []) as any[];
+      if (rows.length > 0) {
+        const avg = rows.reduce((s: number, r: any) => s + (r.feedback_quality || 0), 0) / rows.length;
+        setReviewerRep({ avg_quality: avg, count: rows.length });
+      } else {
+        setReviewerRep(null);
+      }
+    })();
+  }, [sessionId, existingReview?.id]);
+
   useEffect(() => {
     const channel = supabase
       .channel(`peer-review-student:${roomId}:${sessionId}`)
