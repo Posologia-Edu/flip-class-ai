@@ -22,25 +22,33 @@ serve(async (req) => {
     const { data: node } = await svc.from("knowledge_nodes").select("*").eq("id", nodeId).maybeSingle();
     if (!node) return json({ error: "Nó não encontrado" }, 404);
 
-    // Pull room materials for grounding (truncated)
-    const { data: materials } = await svc.from("materials")
-      .select("title, transcript, content_extracted").eq("room_id", node.room_id).limit(20);
-    const corpus = (materials || []).map((m: any) =>
-      `# ${m.title}\n${((m.transcript || m.content_extracted || "") + "").slice(0, 2000)}`
-    ).join("\n\n").slice(0, 30000);
+    // Pull room materials for grounding (truncated). The canonical material text
+    // field in this project is content_text_for_ai.
+    const { data: materials, error: materialsError } = await svc.from("materials")
+      .select("title, content_text_for_ai, type")
+      .eq("room_id", node.room_id)
+      .limit(20);
+    if (materialsError) {
+      console.error("knowledge-graph-micro materials", materialsError);
+      return json({ error: "Erro ao carregar materiais da sala" }, 500);
+    }
+    const corpus = (materials || []).map((m: any) => {
+      const text = ((m.content_text_for_ai || "") + "").trim();
+      return `# ${m.title || "Material sem título"}\nTipo: ${m.type || "material"}\n${text.slice(0, 2500)}`;
+    }).join("\n\n").slice(0, 40000);
 
     const customKeys = await getCustomProviderKeys(svc);
     const ai = await callAiWithFallbackDetailed({
       messages: [
         {
           role: "system",
-          content: `Você é um tutor. Gere um MICRO-CONTEÚDO didático em markdown sobre o nó conceitual abaixo, ancorado nos materiais da disciplina. Máximo 250 palavras. Estrutura:
+          content: `Você é um tutor. Gere um MICRO-CONTEÚDO didático em markdown sobre o nó abaixo, ancorado nos materiais da disciplina e, quando o nó for uma questão, use também o enunciado/resumo do próprio nó como contexto. Máximo 250 palavras. Estrutura:
 - **Definição** (1 frase)
 - **Por que importa** (2-3 frases)
 - **Exemplo prático**
 - **Dica de revisão rápida** (1 mnemônico ou pergunta auto-teste)
 
-Não invente fatos fora dos materiais. Se o material for insuficiente, diga isso brevemente.`,
+Não invente fatos fora dos materiais nem do enunciado da questão. Só diga que os materiais estão vazios se a seção MATERIAIS DA SALA realmente estiver sem conteúdo.`,
         },
         {
           role: "user",
