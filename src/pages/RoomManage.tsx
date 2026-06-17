@@ -1587,6 +1587,10 @@ const RoomManage = () => {
           <StudentTwinPanel roomId={roomId!} />
         </section>
 
+        <section className="mt-8">
+          <KnowledgeGraph roomId={roomId!} isOwner={isOwner} />
+        </section>
+
         {/* Manual Activity Dialog */}
         <Dialog open={manualActivityDialogOpen} onOpenChange={(open) => { if (!open) resetManualActivityForm(); else setManualActivityDialogOpen(true); }}>
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
