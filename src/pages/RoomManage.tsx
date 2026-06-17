@@ -18,6 +18,7 @@ import SimulationsManager from "@/components/SimulationsManager";
 import CopilotPanel from "@/components/CopilotPanel";
 import OSCEManager from "@/components/OSCEManager";
 import StudentTwinPanel from "@/components/StudentTwinPanel";
+import KnowledgeGraph from "@/components/KnowledgeGraph";
 import { PeerReviewTeacher } from "@/components/PeerReview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
