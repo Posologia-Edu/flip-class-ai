@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock, Percent } from "lucide-react";
+import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock, Percent, Sparkles, ShieldAlert, ShieldCheck, Wand2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Json } from "@/integrations/supabase/types";
 
