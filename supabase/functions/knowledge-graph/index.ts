@@ -15,13 +15,33 @@ serve(async (req) => {
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const svc = createClient(url, service);
 
-    const { roomId, studentEmail } = await req.json();
+    const { roomId, studentEmail, autoBuild } = await req.json();
     if (!roomId) return json({ error: "roomId obrigatório" }, 400);
 
-    const [{ data: nodes }, { data: edges }] = await Promise.all([
+    let [{ data: nodes }, { data: edges }] = await Promise.all([
       svc.from("knowledge_nodes").select("*").eq("room_id", roomId),
       svc.from("knowledge_edges").select("*").eq("room_id", roomId),
     ]);
+
+    // Auto-build if empty
+    if ((!nodes || nodes.length === 0) && autoBuild !== false) {
+      try {
+        const buildUrl = `${url}/functions/v1/knowledge-graph-build`;
+        await fetch(buildUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${service}`, apikey: service },
+          body: JSON.stringify({ roomId }),
+        });
+        const r = await Promise.all([
+          svc.from("knowledge_nodes").select("*").eq("room_id", roomId),
+          svc.from("knowledge_edges").select("*").eq("room_id", roomId),
+        ]);
+        nodes = r[0].data;
+        edges = r[1].data;
+      } catch (e) {
+        console.error("auto-build failed", e);
+      }
+    }
 
     // Compute mastery per question node using teacher_feedback for this student (or aggregate across students for teacher view)
     let mastery: Record<string, number> = {}; // node_id -> 0..1
