@@ -17,6 +17,7 @@ import StudentProject from "@/components/StudentProject";
 import SimulationPlayer from "@/components/SimulationPlayer";
 import OSCEStudent from "@/components/OSCEStudent";
 import SocraticStudent from "@/components/SocraticStudent";
+import KnowledgeGraph from "@/components/KnowledgeGraph";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
