@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users, Bot, Lightbulb, Sparkles, Stethoscope, Mic } from "lucide-react";
+import { BookOpen, Video, Lock, CheckCircle2, XCircle, ChevronRight, LogOut, MessageSquare, Star, Trophy, Award, Eye, Flame, Target, TrendingUp, FileText, Headphones, Presentation, File, ExternalLink, Users, Bot, Lightbulb, Sparkles, Stethoscope, Mic, Network } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DiscussionForum from "@/components/DiscussionForum";
 import NotificationCenter from "@/components/NotificationCenter";
@@ -17,6 +17,7 @@ import StudentProject from "@/components/StudentProject";
 import SimulationPlayer from "@/components/SimulationPlayer";
 import OSCEStudent from "@/components/OSCEStudent";
 import SocraticStudent from "@/components/SocraticStudent";
+import KnowledgeGraph from "@/components/KnowledgeGraph";
 
 type Room = Tables<"rooms">;
 type Material = Tables<"materials">;
@@ -212,7 +213,7 @@ const StudentView = () => {
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [activityTitles, setActivityTitles] = useState<ActivityWithTitle[]>([]);
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review" | "assistant" | "project" | "simulations" | "osce" | "socratic">("materials");
+  const [tab, setTab] = useState<"materials" | "activity" | "progress" | "forum" | "peer-review" | "assistant" | "project" | "simulations" | "osce" | "socratic" | "graph">("materials");
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -784,6 +785,9 @@ const StudentView = () => {
           <button onClick={() => setTab("socratic")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "socratic" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Mic className="w-4 h-4" /> Debate
           </button>
+          <button onClick={() => setTab("graph")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "graph" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Network className="w-4 h-4" /> Rede
+          </button>
         </div>
       </div>
 
@@ -836,6 +840,8 @@ const StudentView = () => {
           <OSCEStudent roomId={roomId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
         ) : tab === "socratic" ? (
           <SocraticStudent roomId={roomId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
+        ) : tab === "graph" ? (
+          <KnowledgeGraph roomId={roomId!} studentEmail={sessionData?.student_email || undefined} />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />

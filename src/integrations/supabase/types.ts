@@ -391,6 +391,99 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_edges: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          room_id: string
+          source_id: string
+          target_id: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: string
+          room_id: string
+          source_id: string
+          target_id: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          room_id?: string
+          source_id?: string
+          target_id?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_edges_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_edges_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_edges_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_nodes: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          label: string
+          ref_id: string | null
+          ref_meta: Json | null
+          room_id: string
+          summary: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          label: string
+          ref_id?: string | null
+          ref_meta?: Json | null
+          room_id: string
+          summary?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          ref_id?: string | null
+          ref_meta?: Json | null
+          room_id?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_nodes_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       materials: {
         Row: {
           content_text_for_ai: string | null
@@ -689,6 +782,65 @@ export type Database = {
             columns: ["reviewer_session_id"]
             isOneToOne: false
             referencedRelation: "student_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      peer_review_quality: {
+        Row: {
+          accepted: boolean | null
+          ai_rationale: string | null
+          assignment_id: string
+          bias_score: number
+          created_at: string
+          detected_biases: Json | null
+          feedback_quality: number
+          id: string
+          review_id: string | null
+          reviewer_email: string | null
+          reviewer_session_id: string | null
+          room_id: string
+          suggested_rewrite: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepted?: boolean | null
+          ai_rationale?: string | null
+          assignment_id: string
+          bias_score?: number
+          created_at?: string
+          detected_biases?: Json | null
+          feedback_quality?: number
+          id?: string
+          review_id?: string | null
+          reviewer_email?: string | null
+          reviewer_session_id?: string | null
+          room_id: string
+          suggested_rewrite?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepted?: boolean | null
+          ai_rationale?: string | null
+          assignment_id?: string
+          bias_score?: number
+          created_at?: string
+          detected_biases?: Json | null
+          feedback_quality?: number
+          id?: string
+          review_id?: string | null
+          reviewer_email?: string | null
+          reviewer_session_id?: string | null
+          room_id?: string
+          suggested_rewrite?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peer_review_quality_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]

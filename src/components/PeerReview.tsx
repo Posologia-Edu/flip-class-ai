@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock, Percent } from "lucide-react";
+import { Users, Star, Send, Loader2, CheckCircle2, Eye, MessageSquare, Shuffle, Clock, Percent, Sparkles, ShieldAlert, ShieldCheck, Wand2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -379,6 +379,9 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
   const [activeQuizData, setActiveQuizData] = useState<any>(quizData);
   const [isGroupActivity, setIsGroupActivity] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [reviewerRep, setReviewerRep] = useState<{ avg_quality: number; count: number } | null>(null);
   const hasFetched = useRef(false);
 
   const fetchData = useCallback(async () => {
@@ -501,6 +504,23 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     fetchData();
   }, [fetchData]);
 
+  // Load reviewer reputation (avg AI feedback quality across own past reviews)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("peer_review_quality" as any)
+        .select("feedback_quality")
+        .eq("reviewer_session_id", sessionId);
+      const rows = (data || []) as any[];
+      if (rows.length > 0) {
+        const avg = rows.reduce((s: number, r: any) => s + (r.feedback_quality || 0), 0) / rows.length;
+        setReviewerRep({ avg_quality: avg, count: rows.length });
+      } else {
+        setReviewerRep(null);
+      }
+    })();
+  }, [sessionId, existingReview?.id]);
+
   useEffect(() => {
     const channel = supabase
       .channel(`peer-review-student:${roomId}:${sessionId}`)
@@ -523,10 +543,41 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     };
   }, [roomId, sessionId, fetchData]);
 
+  const analyzeWithAi = async () => {
+    if (!assignment) return;
+    setAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("peer-review-mediate", {
+        body: {
+          assignmentId: assignment.id,
+          reviewId: existingReview?.id || null,
+          criteria,
+          scores,
+          comment,
+          revieweeAnswers,
+          reviewerSessionId: sessionId,
+        },
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error || "Falha na análise");
+      setAiAnalysis(data.analysis);
+    } catch (err: any) {
+      toast({ title: "Erro na análise IA", description: err.message, variant: "destructive" });
+    }
+    setAnalyzing(false);
+  };
+
+  const acceptRewrite = () => {
+    if (aiAnalysis?.suggested_rewrite) {
+      setComment(aiAnalysis.suggested_rewrite);
+      toast({ title: "Sugestão aplicada", description: "Comentário substituído pela versão sugerida pela IA." });
+    }
+  };
+
   const submitReview = async () => {
     if (!assignment) return;
     setSubmitting(true);
     try {
+      let reviewId = existingReview?.id;
       if (existingReview) {
         await supabase
           .from("peer_reviews" as any)
@@ -537,16 +588,27 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
           } as any)
           .eq("id", existingReview.id);
       } else {
-        await supabase
+        const { data: ins } = await supabase
           .from("peer_reviews" as any)
           .insert({
             assignment_id: assignment.id,
             criteria_scores: scores as unknown as Json,
             comment,
-          } as any);
+          } as any)
+          .select("id")
+          .maybeSingle();
+        reviewId = (ins as any)?.id;
+      }
+      // If we had AI analysis, mark accepted=true on the latest record for this assignment
+      if (aiAnalysis && reviewId) {
+        await supabase
+          .from("peer_review_quality" as any)
+          .update({ accepted: true, review_id: reviewId } as any)
+          .eq("assignment_id", assignment.id)
+          .is("review_id", null);
       }
       toast({ title: "Avaliação enviada!", description: "Sua avaliação por pares foi salva com sucesso." });
-      setExistingReview({ ...existingReview, criteria_scores: scores, comment });
+      setExistingReview({ ...existingReview, id: reviewId, criteria_scores: scores, comment });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
@@ -689,10 +751,74 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
                 />
               </div>
 
-              <Button onClick={submitReview} disabled={submitting || criteria.some(c => scores[c.id] == null)}>
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
-                {existingReview ? "Atualizar Avaliação" : "Enviar Avaliação"}
-              </Button>
+              {/* Reviewer reputation */}
+              {reviewerRep && (
+                <div className="flex items-center gap-2 text-xs bg-secondary rounded-lg p-3">
+                  <ShieldCheck className={`w-4 h-4 ${reviewerRep.avg_quality >= 70 ? "text-level-easy" : reviewerRep.avg_quality >= 40 ? "text-level-medium" : "text-destructive"}`} />
+                  <span className="text-muted-foreground">Sua reputação como avaliador:</span>
+                  <span className="font-bold">{reviewerRep.avg_quality.toFixed(0)}/100</span>
+                  <span className="text-muted-foreground">({reviewerRep.count} avaliações)</span>
+                </div>
+              )}
+
+              {/* AI Mediator panel */}
+              {aiAnalysis && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="border border-primary/30 bg-primary/5 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-bold">Análise do IA-Mediador</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-background rounded-lg p-3">
+                      <p className="text-muted-foreground">Qualidade do feedback</p>
+                      <p className={`text-2xl font-bold ${aiAnalysis.feedback_quality >= 70 ? "text-level-easy" : aiAnalysis.feedback_quality >= 40 ? "text-level-medium" : "text-destructive"}`}>
+                        {aiAnalysis.feedback_quality}/100
+                      </p>
+                    </div>
+                    <div className="bg-background rounded-lg p-3">
+                      <p className="text-muted-foreground">Indício de viés</p>
+                      <p className={`text-2xl font-bold ${aiAnalysis.bias_score <= 20 ? "text-level-easy" : aiAnalysis.bias_score <= 50 ? "text-level-medium" : "text-destructive"}`}>
+                        {aiAnalysis.bias_score}/100
+                      </p>
+                    </div>
+                  </div>
+                  {Array.isArray(aiAnalysis.detected_biases) && aiAnalysis.detected_biases.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold flex items-center gap-1 text-destructive">
+                        <ShieldAlert className="w-3 h-3" /> Vieses detectados
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-0.5">
+                        {aiAnalysis.detected_biases.map((b: string, i: number) => (
+                          <li key={i}>• {b}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {aiAnalysis.ai_rationale && (
+                    <p className="text-xs italic text-muted-foreground border-l-2 border-primary pl-3">{aiAnalysis.ai_rationale}</p>
+                  )}
+                  {aiAnalysis.suggested_rewrite && aiAnalysis.suggested_rewrite !== comment && (
+                    <div className="bg-background rounded-lg p-3 space-y-2">
+                      <p className="text-xs font-semibold flex items-center gap-1"><Wand2 className="w-3 h-3 text-primary" /> Reescrita sugerida</p>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">{aiAnalysis.suggested_rewrite}</p>
+                      <Button size="sm" variant="outline" onClick={acceptRewrite}>
+                        <Wand2 className="w-3 h-3 mr-1" /> Aplicar sugestão
+                      </Button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={analyzeWithAi} disabled={analyzing || criteria.some(c => scores[c.id] == null)}>
+                  {analyzing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                  Validar com IA antes de enviar
+                </Button>
+                <Button onClick={submitReview} disabled={submitting || criteria.some(c => scores[c.id] == null)}>
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                  {existingReview ? "Atualizar Avaliação" : "Enviar Avaliação"}
+                </Button>
+              </div>
             </div>
           </div>
         </motion.div>
