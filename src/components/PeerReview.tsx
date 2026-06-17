@@ -751,10 +751,74 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
                 />
               </div>
 
-              <Button onClick={submitReview} disabled={submitting || criteria.some(c => scores[c.id] == null)}>
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
-                {existingReview ? "Atualizar Avaliação" : "Enviar Avaliação"}
-              </Button>
+              {/* Reviewer reputation */}
+              {reviewerRep && (
+                <div className="flex items-center gap-2 text-xs bg-secondary rounded-lg p-3">
+                  <ShieldCheck className={`w-4 h-4 ${reviewerRep.avg_quality >= 70 ? "text-level-easy" : reviewerRep.avg_quality >= 40 ? "text-level-medium" : "text-destructive"}`} />
+                  <span className="text-muted-foreground">Sua reputação como avaliador:</span>
+                  <span className="font-bold">{reviewerRep.avg_quality.toFixed(0)}/100</span>
+                  <span className="text-muted-foreground">({reviewerRep.count} avaliações)</span>
+                </div>
+              )}
+
+              {/* AI Mediator panel */}
+              {aiAnalysis && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="border border-primary/30 bg-primary/5 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-bold">Análise do IA-Mediador</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-background rounded-lg p-3">
+                      <p className="text-muted-foreground">Qualidade do feedback</p>
+                      <p className={`text-2xl font-bold ${aiAnalysis.feedback_quality >= 70 ? "text-level-easy" : aiAnalysis.feedback_quality >= 40 ? "text-level-medium" : "text-destructive"}`}>
+                        {aiAnalysis.feedback_quality}/100
+                      </p>
+                    </div>
+                    <div className="bg-background rounded-lg p-3">
+                      <p className="text-muted-foreground">Indício de viés</p>
+                      <p className={`text-2xl font-bold ${aiAnalysis.bias_score <= 20 ? "text-level-easy" : aiAnalysis.bias_score <= 50 ? "text-level-medium" : "text-destructive"}`}>
+                        {aiAnalysis.bias_score}/100
+                      </p>
+                    </div>
+                  </div>
+                  {Array.isArray(aiAnalysis.detected_biases) && aiAnalysis.detected_biases.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold flex items-center gap-1 text-destructive">
+                        <ShieldAlert className="w-3 h-3" /> Vieses detectados
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-0.5">
+                        {aiAnalysis.detected_biases.map((b: string, i: number) => (
+                          <li key={i}>• {b}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {aiAnalysis.ai_rationale && (
+                    <p className="text-xs italic text-muted-foreground border-l-2 border-primary pl-3">{aiAnalysis.ai_rationale}</p>
+                  )}
+                  {aiAnalysis.suggested_rewrite && aiAnalysis.suggested_rewrite !== comment && (
+                    <div className="bg-background rounded-lg p-3 space-y-2">
+                      <p className="text-xs font-semibold flex items-center gap-1"><Wand2 className="w-3 h-3 text-primary" /> Reescrita sugerida</p>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">{aiAnalysis.suggested_rewrite}</p>
+                      <Button size="sm" variant="outline" onClick={acceptRewrite}>
+                        <Wand2 className="w-3 h-3 mr-1" /> Aplicar sugestão
+                      </Button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={analyzeWithAi} disabled={analyzing || criteria.some(c => scores[c.id] == null)}>
+                  {analyzing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                  Validar com IA antes de enviar
+                </Button>
+                <Button onClick={submitReview} disabled={submitting || criteria.some(c => scores[c.id] == null)}>
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                  {existingReview ? "Atualizar Avaliação" : "Enviar Avaliação"}
+                </Button>
+              </div>
             </div>
           </div>
         </motion.div>
