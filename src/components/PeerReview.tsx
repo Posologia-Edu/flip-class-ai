@@ -526,10 +526,41 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
     };
   }, [roomId, sessionId, fetchData]);
 
+  const analyzeWithAi = async () => {
+    if (!assignment) return;
+    setAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("peer-review-mediate", {
+        body: {
+          assignmentId: assignment.id,
+          reviewId: existingReview?.id || null,
+          criteria,
+          scores,
+          comment,
+          revieweeAnswers,
+          reviewerSessionId: sessionId,
+        },
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error || "Falha na análise");
+      setAiAnalysis(data.analysis);
+    } catch (err: any) {
+      toast({ title: "Erro na análise IA", description: err.message, variant: "destructive" });
+    }
+    setAnalyzing(false);
+  };
+
+  const acceptRewrite = () => {
+    if (aiAnalysis?.suggested_rewrite) {
+      setComment(aiAnalysis.suggested_rewrite);
+      toast({ title: "Sugestão aplicada", description: "Comentário substituído pela versão sugerida pela IA." });
+    }
+  };
+
   const submitReview = async () => {
     if (!assignment) return;
     setSubmitting(true);
     try {
+      let reviewId = existingReview?.id;
       if (existingReview) {
         await supabase
           .from("peer_reviews" as any)
@@ -540,16 +571,27 @@ export const PeerReviewStudent = ({ sessionId, roomId, quizData, studentName }: 
           } as any)
           .eq("id", existingReview.id);
       } else {
-        await supabase
+        const { data: ins } = await supabase
           .from("peer_reviews" as any)
           .insert({
             assignment_id: assignment.id,
             criteria_scores: scores as unknown as Json,
             comment,
-          } as any);
+          } as any)
+          .select("id")
+          .maybeSingle();
+        reviewId = (ins as any)?.id;
+      }
+      // If we had AI analysis, mark accepted=true on the latest record for this assignment
+      if (aiAnalysis && reviewId) {
+        await supabase
+          .from("peer_review_quality" as any)
+          .update({ accepted: true, review_id: reviewId } as any)
+          .eq("assignment_id", assignment.id)
+          .is("review_id", null);
       }
       toast({ title: "Avaliação enviada!", description: "Sua avaliação por pares foi salva com sucesso." });
-      setExistingReview({ ...existingReview, criteria_scores: scores, comment });
+      setExistingReview({ ...existingReview, id: reviewId, criteria_scores: scores, comment });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
