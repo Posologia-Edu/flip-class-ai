@@ -785,6 +785,9 @@ const StudentView = () => {
           <button onClick={() => setTab("socratic")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "socratic" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Mic className="w-4 h-4" /> Debate
           </button>
+          <button onClick={() => setTab("graph")} className={`py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${tab === "graph" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Network className="w-4 h-4" /> Rede
+          </button>
         </div>
       </div>
 
