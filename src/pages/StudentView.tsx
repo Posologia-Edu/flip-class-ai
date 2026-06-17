@@ -840,6 +840,8 @@ const StudentView = () => {
           <OSCEStudent roomId={roomId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
         ) : tab === "socratic" ? (
           <SocraticStudent roomId={roomId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
+        ) : tab === "graph" ? (
+          <KnowledgeGraph roomId={roomId!} studentEmail={sessionData?.student_email || undefined} />
         ) : submitted ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
             <CheckCircle2 className="w-16 h-16 text-level-easy mx-auto mb-4" />
