@@ -214,13 +214,13 @@ export default function KnowledgeGraph({ roomId, studentEmail, isOwner }: Knowle
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando rede...
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando rede (pode levar até 1 min na primeira vez)...
         </div>
       ) : nodes.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Network className="w-8 h-8 mx-auto mb-2" />
           <p>Nenhum grafo construído ainda.</p>
-          {isOwner && <p className="text-xs mt-1">Clique em "Gerar grafo (IA)" para começar.</p>}
+          <p className="text-xs mt-1">A rede precisa de materiais e questões na sala. Clique em "Atualizar" para tentar gerar novamente.</p>
         </div>
       ) : (
         <div className="bg-secondary rounded-lg overflow-hidden border border-border">
