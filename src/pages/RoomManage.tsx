@@ -1868,7 +1868,9 @@ const RoomManage = () => {
                       <div className="flex-1">
                         {headerContent}
                         <p className="text-xs text-muted-foreground">
-                          Concluído em {new Date(representativeSession.completed_at!).toLocaleDateString("pt-BR")}
+                          {representativeSession.completed_at
+                            ? `Concluído em ${new Date(representativeSession.completed_at).toLocaleDateString("pt-BR")}`
+                            : `Em andamento • ${Object.keys((representativeSession.answers as Record<string, any>) || {}).length} resposta(s) parcial(is)`}
                           {totalPossiblePoints > 0 && (
                             <span className="ml-2 font-semibold text-primary">• {Math.round(earnedPoints * 100) / 100}/{totalPossiblePoints} pts</span>
                           )}
