@@ -395,7 +395,8 @@ serve(async (req) => {
           if (idx === -1) { signedUrls[url] = url; continue; }
           const path = url.substring(idx + storagePrefix.length);
           try {
-            const { data: signedData } = await supabase.storage.from("materials").createSignedUrl(path, 3600);
+            // 7 days TTL — matches Supabase max and avoids students hitting 404 when tab is open long
+            const { data: signedData } = await supabase.storage.from("materials").createSignedUrl(path, 60 * 60 * 24 * 7);
             signedUrls[url] = signedData?.signedUrl || url;
           } catch {
             signedUrls[url] = url;
