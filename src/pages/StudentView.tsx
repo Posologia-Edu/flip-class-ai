@@ -395,25 +395,46 @@ const StudentView = () => {
       .map(m => m.url!);
     if (storageUrls.length === 0) return;
 
+    let cancelled = false;
+    let attempt = 0;
+
     const resolveUrls = async () => {
       try {
-        const { data } = await supabase.functions.invoke("student-session", {
+        const { data, error } = await supabase.functions.invoke("student-session", {
           body: { action: "get_signed_urls", sessionId, token: getSessionToken(), data: { urls: storageUrls } },
         });
+        if (cancelled) return;
+        if (error) throw error;
         if (data?.signedUrls) {
-          setSignedUrlMap(data.signedUrls);
+          setSignedUrlMap(prev => ({ ...prev, ...data.signedUrls }));
+        } else {
+          throw new Error("no signedUrls in response");
         }
       } catch (e) {
-        console.warn("Failed to resolve signed URLs", e);
+        console.warn("Failed to resolve signed URLs (attempt " + (attempt + 1) + ")", e);
+        if (!cancelled && attempt < 3) {
+          attempt++;
+          setTimeout(resolveUrls, 1500 * attempt);
+        }
       }
     };
     resolveUrls();
+
+    // Refresh signed URLs every 6 days to avoid expiration on long sessions
+    const refresh = setInterval(resolveUrls, 1000 * 60 * 60 * 24 * 6);
+    return () => { cancelled = true; clearInterval(refresh); };
   }, [sessionId, materials, getSessionToken]);
 
-  /** Get the resolved URL for a material (signed URL if storage, original otherwise) */
+  /**
+   * Get the resolved URL for a material.
+   * - Non-storage URLs (YouTube, Spotify, external): returned as-is.
+   * - Storage URLs: returns the signed URL, or null while it is being resolved
+   *   (never falls back to the raw public URL — the bucket is private and it 404s).
+   */
   const resolveUrl = useCallback((url: string | null): string | null => {
     if (!url) return null;
-    return signedUrlMap[url] || url;
+    if (isStorageUrl(url)) return signedUrlMap[url] || null;
+    return url;
   }, [signedUrlMap]);
 
   // Fetch only teacher feedbacks (lightweight)
