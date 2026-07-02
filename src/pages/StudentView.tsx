@@ -647,6 +647,8 @@ const StudentView = () => {
     }
 
     if (mat.type === "pdf" || mat.type === "presentation") {
+      const isPrivateStorage = mat.url ? isStorageUrl(mat.url) : false;
+      const isResolving = isPrivateStorage && !matUrl;
       return (
         <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           {matUrl ? (
@@ -660,6 +662,11 @@ const StudentView = () => {
                 </div>
               </div>
             </>
+          ) : isResolving ? (
+            <div className="aspect-[4/3] flex flex-col items-center justify-center bg-secondary/30 text-muted-foreground gap-2">
+              <MatIcon className="w-10 h-10 animate-pulse" />
+              <p className="text-sm">Carregando {mat.title || "material"}...</p>
+            </div>
           ) : (
             <div className="p-6 flex items-center justify-between">
               <div className="flex items-center gap-3"><MatIcon className="w-8 h-8 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
