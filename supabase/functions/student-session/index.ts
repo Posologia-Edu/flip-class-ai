@@ -491,6 +491,42 @@ serve(async (req) => {
         });
       }
 
+      if (action === "save_progress") {
+        // Progressive save: persist partial answers without marking session as completed
+        const { data: existing } = await supabase
+          .from("student_sessions")
+          .select("completed_at, group_id, is_group_leader")
+          .eq("id", sessionId)
+          .single();
+
+        if (existing?.completed_at) {
+          return new Response(JSON.stringify({ success: true, skipped: "already_completed" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const answers = data?.answers ?? {};
+        const score = typeof data?.score === "number" ? data.score : Object.keys(answers).length;
+
+        const { error } = await supabase.from("student_sessions").update({
+          answers,
+          score,
+        }).eq("id", sessionId);
+        if (error) throw error;
+
+        // Mirror partial progress to group members if leader
+        if (existing?.group_id && existing?.is_group_leader) {
+          await supabase.from("student_sessions").update({
+            answers,
+            score,
+          }).eq("group_id", existing.group_id).neq("id", sessionId);
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       if (action === "log_activity") {
         const { error } = await supabase.from("student_activity_logs").insert({
           session_id: sessionId,

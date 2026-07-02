@@ -1822,7 +1822,11 @@ const RoomManage = () => {
           ) : (
             /* Answers tab */
             (() => {
-              const completedSessions = sessions.filter(s => s.completed_at && s.answers);
+              const completedSessions = sessions.filter(s => {
+                if (!s.answers) return false;
+                const a = s.answers as Record<string, any>;
+                return s.completed_at || (a && typeof a === "object" && Object.keys(a).length > 0);
+              });
               const hasGroupSessions = completedSessions.some(s => (s as any).group_id != null);
 
               // Helper to render a student answer card (shared between individual and group views)
@@ -1864,7 +1868,9 @@ const RoomManage = () => {
                       <div className="flex-1">
                         {headerContent}
                         <p className="text-xs text-muted-foreground">
-                          Concluído em {new Date(representativeSession.completed_at!).toLocaleDateString("pt-BR")}
+                          {representativeSession.completed_at
+                            ? `Concluído em ${new Date(representativeSession.completed_at).toLocaleDateString("pt-BR")}`
+                            : `Em andamento • ${Object.keys((representativeSession.answers as Record<string, any>) || {}).length} resposta(s) parcial(is)`}
                           {totalPossiblePoints > 0 && (
                             <span className="ml-2 font-semibold text-primary">• {Math.round(earnedPoints * 100) / 100}/{totalPossiblePoints} pts</span>
                           )}
