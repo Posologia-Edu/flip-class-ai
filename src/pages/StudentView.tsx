@@ -395,25 +395,46 @@ const StudentView = () => {
       .map(m => m.url!);
     if (storageUrls.length === 0) return;
 
+    let cancelled = false;
+    let attempt = 0;
+
     const resolveUrls = async () => {
       try {
-        const { data } = await supabase.functions.invoke("student-session", {
+        const { data, error } = await supabase.functions.invoke("student-session", {
           body: { action: "get_signed_urls", sessionId, token: getSessionToken(), data: { urls: storageUrls } },
         });
+        if (cancelled) return;
+        if (error) throw error;
         if (data?.signedUrls) {
-          setSignedUrlMap(data.signedUrls);
+          setSignedUrlMap(prev => ({ ...prev, ...data.signedUrls }));
+        } else {
+          throw new Error("no signedUrls in response");
         }
       } catch (e) {
-        console.warn("Failed to resolve signed URLs", e);
+        console.warn("Failed to resolve signed URLs (attempt " + (attempt + 1) + ")", e);
+        if (!cancelled && attempt < 3) {
+          attempt++;
+          setTimeout(resolveUrls, 1500 * attempt);
+        }
       }
     };
     resolveUrls();
+
+    // Refresh signed URLs every 6 days to avoid expiration on long sessions
+    const refresh = setInterval(resolveUrls, 1000 * 60 * 60 * 24 * 6);
+    return () => { cancelled = true; clearInterval(refresh); };
   }, [sessionId, materials, getSessionToken]);
 
-  /** Get the resolved URL for a material (signed URL if storage, original otherwise) */
+  /**
+   * Get the resolved URL for a material.
+   * - Non-storage URLs (YouTube, Spotify, external): returned as-is.
+   * - Storage URLs: returns the signed URL, or null while it is being resolved
+   *   (never falls back to the raw public URL — the bucket is private and it 404s).
+   */
   const resolveUrl = useCallback((url: string | null): string | null => {
     if (!url) return null;
-    return signedUrlMap[url] || url;
+    if (isStorageUrl(url)) return signedUrlMap[url] || null;
+    return url;
   }, [signedUrlMap]);
 
   // Fetch only teacher feedbacks (lightweight)
@@ -626,6 +647,8 @@ const StudentView = () => {
     }
 
     if (mat.type === "pdf" || mat.type === "presentation") {
+      const isPrivateStorage = mat.url ? isStorageUrl(mat.url) : false;
+      const isResolving = isPrivateStorage && !matUrl;
       return (
         <div key={mat.id} data-material-id={mat.id} onClick={() => handleMaterialInteraction(mat.id)} className="bg-card border border-border rounded-xl overflow-hidden">
           {matUrl ? (
@@ -639,6 +662,11 @@ const StudentView = () => {
                 </div>
               </div>
             </>
+          ) : isResolving ? (
+            <div className="aspect-[4/3] flex flex-col items-center justify-center bg-secondary/30 text-muted-foreground gap-2">
+              <MatIcon className="w-10 h-10 animate-pulse" />
+              <p className="text-sm">Carregando {mat.title || "material"}...</p>
+            </div>
           ) : (
             <div className="p-6 flex items-center justify-between">
               <div className="flex items-center gap-3"><MatIcon className="w-8 h-8 text-muted-foreground" /><h3 className="font-medium text-card-foreground">{mat.title || "Material"}</h3></div>
