@@ -526,9 +526,27 @@ const StudentView = () => {
     return null;
   };
 
+  const saveProgress = async (currentAnswers: Record<string, any>) => {
+    if (!sessionId) return;
+    try {
+      await supabase.functions.invoke("student-session", {
+        body: {
+          action: "save_progress",
+          sessionId,
+          token: getSessionToken(),
+          data: { answers: currentAnswers, score: Object.keys(currentAnswers).length },
+        },
+      });
+    } catch (e) {
+      console.error("save_progress failed", e);
+    }
+  };
+
   const handleSubmitAnswer = () => {
     setShowResult(false);
     setOpenAnswer("");
+    // Persist partial progress so teacher sees answers even if student doesn't finalize
+    saveProgress(answers);
     if (currentQuestion < (currentLevelData?.questions?.length || 0) - 1) {
       setCurrentQuestion((q) => q + 1);
     } else if (currentLevel < levels.length - 1) {
