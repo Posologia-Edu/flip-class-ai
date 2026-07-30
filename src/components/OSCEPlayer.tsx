@@ -14,8 +14,8 @@ type Turn = { role: "student" | "patient"; text: string };
 
 // Paciente virtual é usado em TODAS as estações
 
-export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }:
-  { exam: Exam; studentName?: string; studentEmail?: string; onFinish?: () => void }) {
+export default function OSCEPlayer({ exam, sessionId, studentName, studentEmail, onFinish }:
+  { exam: Exam; sessionId: string; studentName?: string; studentEmail?: string; onFinish?: () => void }) {
   const [started, setStarted] = useState(false);
   const [stationIdx, setStationIdx] = useState(0);
   const [responses, setResponses] = useState<any[]>([]);
