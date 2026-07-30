@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { studentApi } from "@/lib/student-api";
+
 import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2, Award, ChevronRight, CheckCircle2, MessageSquare, RotateCcw, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
