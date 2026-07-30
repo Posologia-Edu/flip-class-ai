@@ -17,7 +17,7 @@ type Attempt = {
   station_responses?: any[];
 };
 
-export default function OSCEStudent({ roomId, studentName, studentEmail }: { roomId: string; studentName?: string; studentEmail?: string }) {
+export default function OSCEStudent({ roomId, sessionId, studentName, studentEmail }: { roomId: string; sessionId: string; studentName?: string; studentEmail?: string }) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,26 +33,25 @@ export default function OSCEStudent({ roomId, studentName, studentEmail }: { roo
       .eq("is_published", true)
       .order("created_at", { ascending: false });
     setExams(((exData as any) || []) as Exam[]);
-    if (studentEmail) {
-      const { data: atData } = await supabase
-        .from("osce_attempts" as any)
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("student_email", studentEmail.toLowerCase());
-      setAttempts(((atData as any) || []) as Attempt[]);
+    try {
+      const res = await studentApi<{ attempts: Attempt[] }>("list_osce_attempts", sessionId);
+      setAttempts(res.attempts || []);
+    } catch {
+      setAttempts([]);
     }
     setLoading(false);
   };
-  useEffect(() => { load(); }, [roomId, studentEmail]);
+  useEffect(() => { load(); }, [roomId, sessionId]);
 
   if (active) {
     return (
       <div className="space-y-3">
         <Button variant="ghost" size="sm" onClick={() => { setActive(null); load(); }}>← Voltar à lista</Button>
-        <OSCEPlayer exam={active} studentName={studentName} studentEmail={studentEmail} onFinish={() => { setActive(null); load(); }} />
+        <OSCEPlayer exam={active} sessionId={sessionId} studentName={studentName} studentEmail={studentEmail} onFinish={() => { setActive(null); load(); }} />
       </div>
     );
   }
+
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
