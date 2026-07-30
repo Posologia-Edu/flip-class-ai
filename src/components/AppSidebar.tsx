@@ -17,7 +17,7 @@ import {
   Building2,
   MessageSquare,
 } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeatureGate } from "@/hooks/useFeatureGate";

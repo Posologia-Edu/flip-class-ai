@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { motion } from "framer-motion";
 import {
   BookOpen, Users, Sparkles, ArrowLeft, GraduationCap, FileText,

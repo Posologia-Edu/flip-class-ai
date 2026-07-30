@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PublicFooter } from "@/components/PublicFooter";
