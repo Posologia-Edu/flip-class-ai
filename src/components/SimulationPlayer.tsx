@@ -117,7 +117,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
       if ((data as any)?.error) throw new Error((data as any).error);
       const updated = { ...((data as any).run as Run), status: "in_progress" };
       // Force in_progress (server returns updated row; chapter_intro lives inside patient_state)
-      await supabase.from("simulation_sessions").update({ status: "in_progress" }).eq("id", updated.id);
+      await studentApi("update_simulation_run", sessionId, { run_id: updated.id, status: "in_progress" });
       setActiveRun(updated);
       setRuns(prev => ({ ...prev, [updated.simulation_id]: updated }));
     } catch (e: any) {
@@ -131,7 +131,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
     if (!confirm("Iniciar nova tentativa? A anterior será mantida no histórico.")) return;
     setLoading(true);
     try {
-      await supabase.from("simulation_sessions").delete().eq("id", runs[sim.id].id);
+      await studentApi("delete_simulation_run", sessionId, { run_id: runs[sim.id].id });
       setRuns(prev => { const n = { ...prev }; delete n[sim.id]; return n; });
       await startSim(sim);
     } finally {
