@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { studentApi } from "@/lib/student-api";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,8 +16,8 @@ type Turn = { role: "student" | "patient"; text: string };
 
 // Paciente virtual é usado em TODAS as estações
 
-export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }:
-  { exam: Exam; studentName?: string; studentEmail?: string; onFinish?: () => void }) {
+export default function OSCEPlayer({ exam, sessionId, studentName, studentEmail, onFinish }:
+  { exam: Exam; sessionId: string; studentName?: string; studentEmail?: string; onFinish?: () => void }) {
   const [started, setStarted] = useState(false);
   const [stationIdx, setStationIdx] = useState(0);
   const [responses, setResponses] = useState<any[]>([]);
@@ -55,17 +57,18 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
   }, [transcript, patientThinking]);
 
   const start = async () => {
-    const { data, error } = await supabase.from("osce_attempts" as any).insert({
-      exam_id: exam.id,
-      room_id: exam.room_id,
-      student_email: (studentEmail || "anon@anon").toLowerCase(),
-      student_name: studentName,
-      station_responses: [],
-    }).select().single();
-    if (error) { toast.error(error.message); return; }
-    setAttemptId((data as any).id);
-    setStarted(true);
+    try {
+      const res = await studentApi<{ attempt: { id: string } }>("create_osce_attempt", sessionId, {
+        exam_id: exam.id,
+        student_name: studentName,
+      });
+      setAttemptId(res.attempt.id);
+      setStarted(true);
+    } catch (e: any) {
+      toast.error(e.message || "Não foi possível iniciar o OSCE");
+    }
   };
+
 
   const sendToPatient = async () => {
     const msg = draft.trim();
@@ -120,13 +123,12 @@ export default function OSCEPlayer({ exam, studentName, studentEmail, onFinish }
         setStationIdx(stationIdx + 1);
       } else {
         const total = next.reduce((s, r) => s + Number(r.ai_score || 0), 0) / next.length;
-        await supabase.from("osce_attempts" as any).update({
+        await studentApi("update_osce_attempt", sessionId, {
+          attempt_id: attemptId!,
           station_responses: next,
           total_score: total,
-          completed_at: new Date().toISOString(),
-          teacher_reviewed: false,
-          released_to_student: false,
-        }).eq("id", attemptId!);
+        });
+
         setFinished(true);
       }
     } catch (e: any) {

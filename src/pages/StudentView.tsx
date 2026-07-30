@@ -883,9 +883,10 @@ const StudentView = () => {
         ) : tab === "simulations" ? (
           <SimulationPlayer roomId={roomId!} sessionId={sessionId!} />
         ) : tab === "osce" ? (
-          <OSCEStudent roomId={roomId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
+          <OSCEStudent roomId={roomId!} sessionId={sessionId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
         ) : tab === "socratic" ? (
-          <SocraticStudent roomId={roomId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
+          <SocraticStudent roomId={roomId!} sessionId={sessionId!} studentName={sessionData?.student_name || undefined} studentEmail={sessionData?.student_email || undefined} />
+
         ) : tab === "graph" ? (
           <KnowledgeGraph roomId={roomId!} studentEmail={sessionData?.student_email || undefined} />
         ) : submitted ? (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { studentApi } from "@/lib/student-api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import SocraticDebateRoom from "./SocraticDebateRoom";
 
 type Session = { id: string; topic: string; final_grade: number | null; ended_at: string | null; started_at: string };
 
-export default function SocraticStudent({ roomId, studentName, studentEmail }: { roomId: string; studentName?: string; studentEmail?: string }) {
+export default function SocraticStudent({ roomId, sessionId, studentName, studentEmail }: { roomId: string; sessionId: string; studentName?: string; studentEmail?: string }) {
   const [topic, setTopic] = useState("");
   const [started, setStarted] = useState(false);
   const [history, setHistory] = useState<Session[]>([]);
@@ -17,18 +17,16 @@ export default function SocraticStudent({ roomId, studentName, studentEmail }: {
 
   const load = async () => {
     setLoading(true);
-    if (studentEmail) {
-      const { data } = await supabase
-        .from("socratic_sessions" as any)
-        .select("id,topic,final_grade,ended_at,started_at")
-        .eq("room_id", roomId)
-        .eq("student_email", studentEmail.toLowerCase())
-        .order("started_at", { ascending: false });
-      setHistory(((data as any) || []) as Session[]);
+    try {
+      const res = await studentApi<{ sessions: Session[] }>("list_socratic_sessions", sessionId);
+      setHistory(res.sessions || []);
+    } catch {
+      setHistory([]);
     }
     setLoading(false);
   };
-  useEffect(() => { load(); }, [roomId, studentEmail]);
+  useEffect(() => { load(); }, [roomId, sessionId]);
+
 
   if (started) {
     return (

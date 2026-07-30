@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { studentApi } from "@/lib/student-api";
+
 import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2, Award, ChevronRight, CheckCircle2, MessageSquare, RotateCcw, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -54,11 +56,10 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
       .order("created_at", { ascending: false });
     setSims((s as any) || []);
     if (s && s.length > 0) {
-      const { data: r } = await supabase
-        .from("simulation_sessions")
-        .select("*")
-        .eq("student_session_id", sessionId)
-        .in("simulation_id", s.map((x: any) => x.id));
+      const { runs: r } = await studentApi<{ runs: any[] }>("list_simulation_runs", sessionId, {
+        simulation_ids: s.map((x: any) => x.id),
+      }).catch(() => ({ runs: [] as any[] }));
+
       const map: Record<string, Run> = {};
       (r || []).forEach((x: any) => { map[x.simulation_id] = x; });
       setRuns(map);
@@ -116,7 +117,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
       if ((data as any)?.error) throw new Error((data as any).error);
       const updated = { ...((data as any).run as Run), status: "in_progress" };
       // Force in_progress (server returns updated row; chapter_intro lives inside patient_state)
-      await supabase.from("simulation_sessions").update({ status: "in_progress" }).eq("id", updated.id);
+      await studentApi("update_simulation_run", sessionId, { run_id: updated.id, status: "in_progress" });
       setActiveRun(updated);
       setRuns(prev => ({ ...prev, [updated.simulation_id]: updated }));
     } catch (e: any) {
@@ -130,7 +131,7 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
     if (!confirm("Iniciar nova tentativa? A anterior será mantida no histórico.")) return;
     setLoading(true);
     try {
-      await supabase.from("simulation_sessions").delete().eq("id", runs[sim.id].id);
+      await studentApi("delete_simulation_run", sessionId, { run_id: runs[sim.id].id });
       setRuns(prev => { const n = { ...prev }; delete n[sim.id]; return n; });
       await startSim(sim);
     } finally {
