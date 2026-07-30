@@ -123,13 +123,12 @@ export default function OSCEPlayer({ exam, sessionId, studentName, studentEmail,
         setStationIdx(stationIdx + 1);
       } else {
         const total = next.reduce((s, r) => s + Number(r.ai_score || 0), 0) / next.length;
-        await supabase.from("osce_attempts" as any).update({
+        await studentApi("update_osce_attempt", sessionId, {
+          attempt_id: attemptId!,
           station_responses: next,
           total_score: total,
-          completed_at: new Date().toISOString(),
-          teacher_reviewed: false,
-          released_to_student: false,
-        }).eq("id", attemptId!);
+        });
+
         setFinished(true);
       }
     } catch (e: any) {
