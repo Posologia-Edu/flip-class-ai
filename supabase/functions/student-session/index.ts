@@ -544,6 +544,116 @@ serve(async (req) => {
         });
       }
 
+      // --- Owner context for OSCE / Socratic / Simulation proxies ---
+      const { data: ownerSession } = await supabase
+        .from("student_sessions")
+        .select("id, room_id, student_email")
+        .eq("id", sessionId)
+        .single();
+
+      if (!ownerSession) {
+        return new Response(JSON.stringify({ error: "Session not found" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404,
+        });
+      }
+      const ownerEmail = (ownerSession.student_email || "").toLowerCase();
+
+      if (action === "list_osce_attempts") {
+        if (!ownerEmail) return json({ attempts: [] });
+        const { data: attempts } = await supabase
+          .from("osce_attempts").select("*")
+          .eq("room_id", ownerSession.room_id)
+          .eq("student_email", ownerEmail);
+        return json({ attempts: attempts || [] });
+      }
+
+      if (action === "create_osce_attempt") {
+        const examId = data?.exam_id;
+        if (!examId) return json({ error: "exam_id required" }, 400);
+        const { data: exam } = await supabase
+          .from("osce_exams").select("id, room_id, is_published").eq("id", examId).single();
+        if (!exam || !exam.is_published || exam.room_id !== ownerSession.room_id) {
+          return json({ error: "Exame indisponível" }, 403);
+        }
+        const { data: attempt, error } = await supabase.from("osce_attempts").insert({
+          exam_id: examId,
+          room_id: ownerSession.room_id,
+          student_email: ownerEmail || "anon@anon",
+          student_name: typeof data?.student_name === "string" ? data.student_name.slice(0, 100) : null,
+          station_responses: [],
+        }).select().single();
+        if (error) throw error;
+        return json({ attempt });
+      }
+
+      if (action === "update_osce_attempt") {
+        const attemptId = data?.attempt_id;
+        if (!attemptId) return json({ error: "attempt_id required" }, 400);
+        const { data: attempt } = await supabase
+          .from("osce_attempts").select("id, room_id, student_email, teacher_reviewed")
+          .eq("id", attemptId).single();
+        if (!attempt || attempt.room_id !== ownerSession.room_id ||
+            (attempt.student_email || "").toLowerCase() !== ownerEmail) {
+          return json({ error: "Não autorizado" }, 403);
+        }
+        if (attempt.teacher_reviewed) return json({ error: "Tentativa já revisada" }, 403);
+        const { error } = await supabase.from("osce_attempts").update({
+          station_responses: data?.station_responses ?? [],
+          total_score: data?.total_score ?? null,
+          completed_at: new Date().toISOString(),
+          teacher_reviewed: false,
+          released_to_student: false,
+        }).eq("id", attemptId);
+        if (error) throw error;
+        return json({ success: true });
+      }
+
+      if (action === "list_socratic_sessions") {
+        if (!ownerEmail) return json({ sessions: [] });
+        const { data: rows } = await supabase
+          .from("socratic_sessions")
+          .select("id,topic,final_grade,ended_at,started_at,rubric,feedback_md")
+          .eq("room_id", ownerSession.room_id)
+          .eq("student_email", ownerEmail)
+          .order("started_at", { ascending: false });
+        return json({ sessions: rows || [] });
+      }
+
+      if (action === "list_simulation_runs") {
+        const ids: string[] = Array.isArray(data?.simulation_ids) ? data.simulation_ids : [];
+        if (ids.length === 0) return json({ runs: [] });
+        const { data: runs } = await supabase
+          .from("simulation_sessions").select("*")
+          .eq("student_session_id", sessionId)
+          .in("simulation_id", ids);
+        return json({ runs: runs || [] });
+      }
+
+      if (action === "update_simulation_run") {
+        const runId = data?.run_id;
+        if (!runId) return json({ error: "run_id required" }, 400);
+        const { data: run } = await supabase
+          .from("simulation_sessions").select("id, student_session_id").eq("id", runId).single();
+        if (!run || run.student_session_id !== sessionId) return json({ error: "Não autorizado" }, 403);
+        const { error } = await supabase.from("simulation_sessions")
+          .update({ status: data?.status === "in_progress" ? "in_progress" : "in_progress" })
+          .eq("id", runId);
+        if (error) throw error;
+        return json({ success: true });
+      }
+
+      if (action === "delete_simulation_run") {
+        const runId = data?.run_id;
+        if (!runId) return json({ error: "run_id required" }, 400);
+        const { data: run } = await supabase
+          .from("simulation_sessions").select("id, student_session_id").eq("id", runId).single();
+        if (!run || run.student_session_id !== sessionId) return json({ error: "Não autorizado" }, 403);
+        const { error } = await supabase.from("simulation_sessions").delete().eq("id", runId);
+        if (error) throw error;
+        return json({ success: true });
+      }
+
+
       return new Response(JSON.stringify({ error: "Unknown action" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
