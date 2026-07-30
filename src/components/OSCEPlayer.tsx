@@ -55,17 +55,18 @@ export default function OSCEPlayer({ exam, sessionId, studentName, studentEmail,
   }, [transcript, patientThinking]);
 
   const start = async () => {
-    const { data, error } = await supabase.from("osce_attempts" as any).insert({
-      exam_id: exam.id,
-      room_id: exam.room_id,
-      student_email: (studentEmail || "anon@anon").toLowerCase(),
-      student_name: studentName,
-      station_responses: [],
-    }).select().single();
-    if (error) { toast.error(error.message); return; }
-    setAttemptId((data as any).id);
-    setStarted(true);
+    try {
+      const res = await studentApi<{ attempt: { id: string } }>("create_osce_attempt", sessionId, {
+        exam_id: exam.id,
+        student_name: studentName,
+      });
+      setAttemptId(res.attempt.id);
+      setStarted(true);
+    } catch (e: any) {
+      toast.error(e.message || "Não foi possível iniciar o OSCE");
+    }
   };
+
 
   const sendToPatient = async () => {
     const msg = draft.trim();
