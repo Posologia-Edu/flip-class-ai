@@ -54,11 +54,10 @@ export default function SimulationPlayer({ roomId, sessionId }: Props) {
       .order("created_at", { ascending: false });
     setSims((s as any) || []);
     if (s && s.length > 0) {
-      const { data: r } = await supabase
-        .from("simulation_sessions")
-        .select("*")
-        .eq("student_session_id", sessionId)
-        .in("simulation_id", s.map((x: any) => x.id));
+      const { runs: r } = await studentApi<{ runs: any[] }>("list_simulation_runs", sessionId, {
+        simulation_ids: s.map((x: any) => x.id),
+      }).catch(() => ({ runs: [] as any[] }));
+
       const map: Record<string, Run> = {};
       (r || []).forEach((x: any) => { map[x.simulation_id] = x; });
       setRuns(map);
