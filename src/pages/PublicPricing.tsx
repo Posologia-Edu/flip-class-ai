@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { BookOpen } from "lucide-react";
 import { PublicFooter } from "@/components/PublicFooter";
 import FloatingAuth from "@/components/FloatingAuth";

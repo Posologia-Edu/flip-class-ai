@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { Lock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

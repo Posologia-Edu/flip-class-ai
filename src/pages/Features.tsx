@@ -1,4 +1,4 @@
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BookOpen, Brain, ClipboardCheck, BarChart3, MessageSquare, Shield,
