@@ -400,7 +400,7 @@ const StudentView = () => {
     }
   }, [roomId, sessionId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (tokenReady) fetchData(); }, [fetchData, tokenReady]);
 
   // Resolve private storage URLs to signed URLs for student access
   useEffect(() => {
