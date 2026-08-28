@@ -448,6 +448,33 @@ serve(async (req) => {
         });
       }
 
+      // restore_token: re-issues an HMAC token for an existing session.
+      // Needed because the token lives in sessionStorage and is lost when the
+      // student reopens the room link in a new tab/day — without it every
+      // save_progress/submit call was silently rejected with 403.
+      if (action === "restore_token") {
+        if (!sessionId) {
+          return new Response(JSON.stringify({ error: "sessionId is required" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400,
+          });
+        }
+        const { data: existingSession } = await supabase
+          .from("student_sessions")
+          .select("id, room_id")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (!existingSession || (roomId && existingSession.room_id !== roomId)) {
+          return new Response(JSON.stringify({ error: "Session not found" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404,
+          });
+        }
+        const restored = await generateSessionToken(existingSession.id);
+        return new Response(JSON.stringify({ token: restored }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+
       if (!sessionId) {
         return new Response(JSON.stringify({ error: "sessionId is required" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
