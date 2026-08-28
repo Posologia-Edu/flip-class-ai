@@ -9,6 +9,7 @@ import DiscussionForum from "@/components/DiscussionForum";
 import NotificationCenter from "@/components/NotificationCenter";
 import { PeerReviewStudent } from "@/components/PeerReview";
 import { isStorageUrl } from "@/lib/storage-utils";
+import { ensureStudentToken } from "@/lib/student-api";
 import type { Tables, Json } from "@/integrations/supabase/types";
 import QuestionRenderer, { isInteractiveType, gradeInteractiveQuestion } from "@/components/interactive-questions/QuestionRenderer";
 import type { InteractiveQuestion } from "@/components/interactive-questions/types";
