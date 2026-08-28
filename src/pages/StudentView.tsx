@@ -569,7 +569,7 @@ const StudentView = () => {
         body: {
           action: "save_progress",
           sessionId,
-          token: getSessionToken(),
+          token: await ensureStudentToken(sessionId, roomId),
           data: { answers: currentAnswers, score: Object.keys(currentAnswers).length },
         },
       });
