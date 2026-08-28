@@ -9,6 +9,7 @@ import DiscussionForum from "@/components/DiscussionForum";
 import NotificationCenter from "@/components/NotificationCenter";
 import { PeerReviewStudent } from "@/components/PeerReview";
 import { isStorageUrl } from "@/lib/storage-utils";
+import { ensureStudentToken } from "@/lib/student-api";
 import type { Tables, Json } from "@/integrations/supabase/types";
 import QuestionRenderer, { isInteractiveType, gradeInteractiveQuestion } from "@/components/interactive-questions/QuestionRenderer";
 import type { InteractiveQuestion } from "@/components/interactive-questions/types";
@@ -241,9 +242,23 @@ const StudentView = () => {
   useEffect(() => { tabRef.current = tab; }, [tab]);
   useEffect(() => { activeMaterialIdRef.current = activeMaterialId; }, [activeMaterialId]);
 
+  const [tokenReady, setTokenReady] = useState(false);
+
   const getSessionToken = useCallback(() => {
     return sessionId ? sessionStorage.getItem(`session_token_${sessionId}`) || "" : "";
   }, [sessionId]);
+
+  // Re-issue the HMAC token when it's missing (new tab / returning student),
+  // otherwise every save/submit would be rejected and answers lost.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!sessionId) { setTokenReady(true); return; }
+      await ensureStudentToken(sessionId, roomId);
+      if (!cancelled) setTokenReady(true);
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, roomId]);
 
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
@@ -385,7 +400,7 @@ const StudentView = () => {
     }
   }, [roomId, sessionId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (tokenReady) fetchData(); }, [fetchData, tokenReady]);
 
   // Resolve private storage URLs to signed URLs for student access
   useEffect(() => {
@@ -554,7 +569,7 @@ const StudentView = () => {
         body: {
           action: "save_progress",
           sessionId,
-          token: getSessionToken(),
+          token: await ensureStudentToken(sessionId, roomId),
           data: { answers: currentAnswers, score: Object.keys(currentAnswers).length },
         },
       });
@@ -602,12 +617,23 @@ const StudentView = () => {
     setSessionData(prev => prev ? { ...prev, completed_at: new Date().toISOString(), score: Object.keys(answers).length, answers: answers as any } : prev);
 
     if (sessionId) {
-      await supabase.functions.invoke("student-session", {
+      const token = await ensureStudentToken(sessionId, roomId);
+      const { data: res, error } = await supabase.functions.invoke("student-session", {
         body: {
-          action: "submit", sessionId, token: getSessionToken(),
+          action: "submit", sessionId, token,
           data: { score: Object.keys(answers).length, answers },
         },
       });
+      const failed = !!error || ((res as any)?.error && (res as any).error !== "Session already completed");
+      if (failed) {
+        setSubmitted(false);
+        toast({
+          variant: "destructive",
+          title: "Não foi possível enviar",
+          description: "Suas respostas não foram salvas. Verifique sua conexão e tente enviar novamente.",
+        });
+        return;
+      }
     }
     toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
