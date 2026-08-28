@@ -241,9 +241,23 @@ const StudentView = () => {
   useEffect(() => { tabRef.current = tab; }, [tab]);
   useEffect(() => { activeMaterialIdRef.current = activeMaterialId; }, [activeMaterialId]);
 
+  const [tokenReady, setTokenReady] = useState(false);
+
   const getSessionToken = useCallback(() => {
     return sessionId ? sessionStorage.getItem(`session_token_${sessionId}`) || "" : "";
   }, [sessionId]);
+
+  // Re-issue the HMAC token when it's missing (new tab / returning student),
+  // otherwise every save/submit would be rejected and answers lost.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!sessionId) { setTokenReady(true); return; }
+      await ensureStudentToken(sessionId, roomId);
+      if (!cancelled) setTokenReady(true);
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, roomId]);
 
   const logActivity = useCallback(async (activityType: string, materialId?: string, durationSeconds?: number) => {
     if (!sessionId || !roomId) return;
