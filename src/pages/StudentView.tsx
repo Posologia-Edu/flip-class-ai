@@ -617,12 +617,23 @@ const StudentView = () => {
     setSessionData(prev => prev ? { ...prev, completed_at: new Date().toISOString(), score: Object.keys(answers).length, answers: answers as any } : prev);
 
     if (sessionId) {
-      await supabase.functions.invoke("student-session", {
+      const token = await ensureStudentToken(sessionId, roomId);
+      const { data: res, error } = await supabase.functions.invoke("student-session", {
         body: {
-          action: "submit", sessionId, token: getSessionToken(),
+          action: "submit", sessionId, token,
           data: { score: Object.keys(answers).length, answers },
         },
       });
+      const failed = !!error || ((res as any)?.error && (res as any).error !== "Session already completed");
+      if (failed) {
+        setSubmitted(false);
+        toast({
+          variant: "destructive",
+          title: "Não foi possível enviar",
+          description: "Suas respostas não foram salvas. Verifique sua conexão e tente enviar novamente.",
+        });
+        return;
+      }
     }
     toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
