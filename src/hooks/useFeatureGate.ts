@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,11 +76,13 @@ export function useFeatureGate() {
     fetchAiUsage();
   }, [fetchAiUsage]);
 
-  // Real-time AI usage updates
+  // Real-time AI usage updates — use a unique channel name per hook instance
+  // to avoid collisions when multiple components mount useFeatureGate simultaneously.
+  const channelIdRef = useRef<string>(`ai-usage:${crypto.randomUUID()}`);
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
-      .channel(`ai-usage:${user.id}`)
+      .channel(channelIdRef.current)
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
