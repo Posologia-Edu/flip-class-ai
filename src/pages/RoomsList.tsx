@@ -82,6 +82,8 @@ const RoomsList = () => {
   const [renameTitle, setRenameTitle] = useState("");
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [activeYear, setActiveYear] = useState<Record<string, string>>({});
+
 
   const navigate = useNavigate();
   const { toast } = useToast();
