@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { groupBySubject, groupByYear, getRoomYear } from "@/lib/room-grouping";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms"> & { discipline_id?: string | null };
@@ -80,6 +82,8 @@ const RoomsList = () => {
   const [renameTitle, setRenameTitle] = useState("");
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [activeYear, setActiveYear] = useState<Record<string, string>>({});
+
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -456,9 +460,7 @@ const RoomsList = () => {
             <p className="text-muted-foreground">Crie uma nova sala ou vincule uma existente.</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {discRooms.map(room => renderRoomCard(room))}
-          </div>
+          renderRoomsByYearAndSubject(discRooms, `disc-${disciplineId}`)
         )}
 
         {/* Rename dialog */}
@@ -553,6 +555,53 @@ const RoomsList = () => {
           {creating ? "Criando..." : "Criar Sala"}
         </Button>
       </div>
+    );
+  }
+
+  function renderRoomsByYearAndSubject(list: Room[], storageKey: string) {
+    if (list.length === 0) return null;
+    const years = groupByYear(list as any);
+    const current = years.includes(activeYear[storageKey] || "") ? activeYear[storageKey] : years[0];
+    return (
+      <Tabs
+        value={current}
+        onValueChange={(v) => setActiveYear((prev) => ({ ...prev, [storageKey]: v }))}
+      >
+        <TabsList className="mb-4 flex-wrap h-auto">
+          {years.map((y) => (
+            <TabsTrigger key={y} value={y}>
+              {y}
+              <span className="ml-1.5 text-xs opacity-70">
+                ({list.filter((r) => getRoomYear(r.created_at) === y).length})
+              </span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {years.map((y) => {
+          const yearRooms = list.filter((r) => getRoomYear(r.created_at) === y);
+          const groups = groupBySubject(yearRooms);
+          return (
+            <TabsContent key={y} value={y} className="space-y-8 mt-0">
+              {groups.map((g) => (
+                <div key={g.subject}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <h3 className="font-display text-sm font-bold uppercase tracking-wide text-muted-foreground">
+                      {g.subject}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {g.rooms.length} sala{g.rooms.length !== 1 ? "s" : ""}
+                    </span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {g.rooms.map((room) => renderRoomCard(room))}
+                  </div>
+                </div>
+              ))}
+            </TabsContent>
+          );
+        })}
+      </Tabs>
     );
   }
 
@@ -792,16 +841,14 @@ const RoomsList = () => {
             </div>
           )}
 
-          {/* Unlinked rooms */}
-          {unlinkedRooms.length > 0 && (
+          {/* All rooms organized by year and subject */}
+          {rooms.length > 0 && (
             <div className="mt-2">
               <h2 className="font-display text-lg font-bold text-foreground flex items-center gap-2 mb-4">
                 <BookOpen className="w-5 h-5 text-muted-foreground" />
-                Salas sem disciplina
+                Todas as salas por ano
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {unlinkedRooms.map(room => renderRoomCard(room))}
-              </div>
+              {renderRoomsByYearAndSubject(rooms, "all")}
             </div>
           )}
         </>
