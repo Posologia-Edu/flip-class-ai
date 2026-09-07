@@ -148,21 +148,106 @@ export function RoomStudents({ roomId }: { roomId: string }) {
     toast({ title: "Aluno removido" });
   };
 
+  const loadOtherRooms = async () => {
+    setLoadingRooms(true);
+    const [roomsRes, enrolledRes] = await Promise.all([
+      supabase.from("rooms").select("id, title, created_at").order("created_at", { ascending: false }),
+      supabase.from("room_students").select("room_id"),
+    ]);
+    const enrolled = enrolledRes.data || [];
+    const list = ((roomsRes.data as any[]) || [])
+      .filter((r) => r.id !== roomId)
+      .map((r) => ({
+        id: r.id,
+        title: r.title as string,
+        studentCount: enrolled.filter((e: any) => e.room_id === r.id).length,
+      }))
+      .filter((r) => r.studentCount > 0);
+    setOtherRooms(list);
+    setLoadingRooms(false);
+  };
+
+  const importFromRoom = async (sourceRoomId: string) => {
+    setImportingFrom(sourceRoomId);
+    const { data: source } = await supabase
+      .from("room_students")
+      .select("student_email, student_name")
+      .eq("room_id", sourceRoomId);
+    const existing = new Set(students.map((s) => s.student_email.toLowerCase()));
+    const toInsert = (source || [])
+      .filter((s) => !existing.has(s.student_email.toLowerCase()))
+      .map((s) => ({ room_id: roomId, student_email: s.student_email, student_name: s.student_name }));
+    if (toInsert.length === 0) {
+      toast({ title: "Nada a importar", description: "Todos os alunos dessa sala já estão cadastrados aqui." });
+      setImportingFrom(null);
+      return;
+    }
+    const { error } = await supabase.from("room_students").insert(toInsert as any);
+    if (error) {
+      toast({ title: "Erro ao importar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Alunos importados!", description: `${toInsert.length} aluno(s) adicionado(s).` });
+      setImportOpen(false);
+      fetchStudents();
+    }
+    setImportingFrom(null);
+  };
+
   return (
     <section className="bg-card rounded-xl border border-border p-6">
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-display text-lg font-semibold flex items-center gap-2">
           <Users className="w-5 h-5 text-primary" /> Alunos Cadastrados
         </h2>
-        <Button
-          variant={bulkMode ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setBulkMode(!bulkMode)}
-        >
-          <Upload className="w-4 h-4 mr-1" />
-          {bulkMode ? "Cadastro individual" : "Cadastro em lote"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Dialog open={importOpen} onOpenChange={(v) => { setImportOpen(v); if (v) loadOtherRooms(); }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Copy className="w-4 h-4 mr-1" /> Importar de outra sala
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-display">Importar alunos de outra sala</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2 pt-2 max-h-80 overflow-y-auto">
+                {loadingRooms ? (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando salas...
+                  </p>
+                ) : otherRooms.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma outra sala com alunos cadastrados.</p>
+                ) : (
+                  otherRooms.map((r) => (
+                    <button
+                      key={r.id}
+                      disabled={!!importingFrom}
+                      onClick={() => importFromRoom(r.id)}
+                      className="w-full text-left border border-border rounded-lg p-3 hover:bg-accent transition-colors flex items-center justify-between disabled:opacity-60"
+                    >
+                      <span className="font-medium text-foreground text-sm">{r.title}</span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        {importingFrom === r.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {r.studentCount} aluno(s)
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Alunos já cadastrados nesta sala são ignorados.</p>
+            </DialogContent>
+          </Dialog>
+          <Button
+            variant={bulkMode ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setBulkMode(!bulkMode)}
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            {bulkMode ? "Cadastro individual" : "Cadastro em lote"}
+          </Button>
+        </div>
       </div>
+
       <p className="text-sm text-muted-foreground mb-4">
         Apenas alunos com email cadastrado poderão acessar esta sala.
       </p>
