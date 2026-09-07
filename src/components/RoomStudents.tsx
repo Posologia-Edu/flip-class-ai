@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Mail, Users, Upload, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { UserPlus, Trash2, Mail, Users, Upload, Loader2, Copy } from "lucide-react";
 
 interface RoomStudent {
   id: string;
@@ -12,6 +13,12 @@ interface RoomStudent {
   student_email: string;
   student_name: string | null;
   created_at: string;
+}
+
+interface OtherRoom {
+  id: string;
+  title: string;
+  studentCount: number;
 }
 
 export function RoomStudents({ roomId }: { roomId: string }) {
@@ -22,7 +29,12 @@ export function RoomStudents({ roomId }: { roomId: string }) {
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkAdding, setBulkAdding] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [otherRooms, setOtherRooms] = useState<OtherRoom[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [importingFrom, setImportingFrom] = useState<string | null>(null);
   const { toast } = useToast();
+
 
   const fetchStudents = useCallback(async () => {
     const { data } = await supabase
