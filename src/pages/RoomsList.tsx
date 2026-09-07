@@ -460,9 +460,7 @@ const RoomsList = () => {
             <p className="text-muted-foreground">Crie uma nova sala ou vincule uma existente.</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {discRooms.map(room => renderRoomCard(room))}
-          </div>
+          renderRoomsByYearAndSubject(discRooms, `disc-${disciplineId}`)
         )}
 
         {/* Rename dialog */}
