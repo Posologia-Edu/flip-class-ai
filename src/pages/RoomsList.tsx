@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { groupBySubject, groupByYear, getRoomYear } from "@/lib/room-grouping";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Room = Tables<"rooms"> & { discipline_id?: string | null };
