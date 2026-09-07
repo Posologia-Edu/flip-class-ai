@@ -841,16 +841,14 @@ const RoomsList = () => {
             </div>
           )}
 
-          {/* Unlinked rooms */}
-          {unlinkedRooms.length > 0 && (
+          {/* All rooms organized by year and subject */}
+          {rooms.length > 0 && (
             <div className="mt-2">
               <h2 className="font-display text-lg font-bold text-foreground flex items-center gap-2 mb-4">
                 <BookOpen className="w-5 h-5 text-muted-foreground" />
-                Salas sem disciplina
+                Todas as salas por ano
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {unlinkedRooms.map(room => renderRoomCard(room))}
-              </div>
+              {renderRoomsByYearAndSubject(rooms, "all")}
             </div>
           )}
         </>
