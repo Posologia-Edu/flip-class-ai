@@ -528,13 +528,12 @@ const Documentation = () => {
                   <li><strong className="text-foreground">Banco de dados</strong> — PostgreSQL gerenciado com backups automáticos.</li>
                   <li><strong className="text-foreground">Edge Functions</strong> — deploy automático a cada commit (runtime Deno).</li>
                   <li><strong className="text-foreground">Pagamentos</strong> — Stripe para assinaturas recorrentes (checkout e portal do cliente).</li>
-                  <li><strong className="text-foreground">Emails transacionais</strong> — Resend com templates customizados em React Email.</li>
+                  <li><strong className="text-foreground">Emails transacionais</strong> — entrega gerenciada pela Lovable com templates customizados em React Email.</li>
                   <li><strong className="text-foreground">Monitoramento</strong> — Hub de métricas via edge function para acompanhamento externo.</li>
                 </ul>
                 <p><strong className="text-foreground">Secrets configurados:</strong></p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">STRIPE_SECRET_KEY</code> — chave secreta do Stripe para pagamentos.</li>
-                  <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">RESEND_API_KEY</code> — chave da Resend para envio de emails.</li>
                   <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">LOVABLE_API_KEY</code> — chave do gateway Lovable AI.</li>
                   <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">HUB_METRICS_KEY</code> — chave de autenticação do hub de métricas.</li>
                   <li><code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">HUB_SERVICE_KEY / HUB_SERVICE_ID</code> — credenciais do serviço hub.</li>
