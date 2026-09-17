@@ -496,12 +496,12 @@ serve(async (req) => {
           ? Math.min(Math.max(Math.round(rawQuizDuration), 0), 24 * 60 * 60)
           : 0;
 
-        const saveQuizCompletionLog = async () => {
+        const saveQuizCompletionLog = async (targetSessionId: string, targetRoomId: string) => {
           if (quizDuration <= 0) return;
           const { data: existingLog, error: existingLogError } = await supabase
             .from("student_activity_logs")
             .select("id, duration_seconds")
-            .eq("session_id", sessionId)
+            .eq("session_id", targetSessionId)
             .eq("activity_type", "quiz_complete")
             .order("created_at", { ascending: false })
             .limit(1)
@@ -520,8 +520,8 @@ serve(async (req) => {
           }
 
           const { error: insertLogError } = await supabase.from("student_activity_logs").insert({
-            session_id: sessionId,
-            room_id: roomId,
+            session_id: targetSessionId,
+            room_id: targetRoomId,
             activity_type: "quiz_complete",
             material_id: null,
             duration_seconds: quizDuration,
@@ -536,7 +536,7 @@ serve(async (req) => {
           .single();
 
         if (existing?.completed_at) {
-          await saveQuizCompletionLog();
+          await saveQuizCompletionLog(sessionId, existing.room_id);
           return new Response(JSON.stringify({ success: true, already_completed: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -551,7 +551,7 @@ serve(async (req) => {
 
         if (error) throw error;
 
-        await saveQuizCompletionLog();
+        await saveQuizCompletionLog(sessionId, existing.room_id);
 
         // If this is a group leader, replicate score/answers to all group members
         if (existing?.group_id && existing?.is_group_leader) {
@@ -560,6 +560,15 @@ serve(async (req) => {
             answers: data.answers,
             completed_at: completedAt,
           }).eq("group_id", existing.group_id).neq("id", sessionId);
+
+          const { data: groupSessions } = await supabase
+            .from("student_sessions")
+            .select("id")
+            .eq("group_id", existing.group_id)
+            .neq("id", sessionId);
+          for (const groupSession of groupSessions || []) {
+            await saveQuizCompletionLog(groupSession.id, existing.room_id);
+          }
         }
 
         return new Response(JSON.stringify({ success: true }), {
