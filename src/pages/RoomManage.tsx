@@ -124,7 +124,7 @@ const extractPdfTextInBrowser = async (fileUrl: string) => {
   if (!response.ok) throw new Error(`Falha ao baixar PDF: ${response.status}`);
 
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false }).promise;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
