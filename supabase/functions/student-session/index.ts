@@ -491,16 +491,54 @@ serve(async (req) => {
       }
 
       if (action === "submit") {
+        const rawQuizDuration = Number(data?.quiz_duration_seconds);
+        const quizDuration = Number.isFinite(rawQuizDuration)
+          ? Math.min(Math.max(Math.round(rawQuizDuration), 0), 24 * 60 * 60)
+          : 0;
+
+        const saveQuizCompletionLog = async () => {
+          if (quizDuration <= 0) return;
+          const { data: existingLog, error: existingLogError } = await supabase
+            .from("student_activity_logs")
+            .select("id, duration_seconds")
+            .eq("session_id", sessionId)
+            .eq("activity_type", "quiz_complete")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (existingLogError) throw existingLogError;
+
+          if (existingLog) {
+            if ((existingLog.duration_seconds || 0) < quizDuration) {
+              const { error: updateLogError } = await supabase
+                .from("student_activity_logs")
+                .update({ duration_seconds: quizDuration })
+                .eq("id", existingLog.id);
+              if (updateLogError) throw updateLogError;
+            }
+            return;
+          }
+
+          const { error: insertLogError } = await supabase.from("student_activity_logs").insert({
+            session_id: sessionId,
+            room_id: roomId,
+            activity_type: "quiz_complete",
+            material_id: null,
+            duration_seconds: quizDuration,
+          });
+          if (insertLogError) throw insertLogError;
+        };
+
         const { data: existing } = await supabase
           .from("student_sessions")
-          .select("completed_at, group_id, is_group_leader")
+          .select("completed_at, group_id, is_group_leader, room_id")
           .eq("id", sessionId)
           .single();
 
         if (existing?.completed_at) {
-          return new Response(JSON.stringify({ error: "Session already completed" }), {
+          await saveQuizCompletionLog();
+          return new Response(JSON.stringify({ success: true, already_completed: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 400,
           });
         }
 
@@ -512,6 +550,8 @@ serve(async (req) => {
         }).eq("id", sessionId);
 
         if (error) throw error;
+
+        await saveQuizCompletionLog();
 
         // If this is a group leader, replicate score/answers to all group members
         if (existing?.group_id && existing?.is_group_leader) {

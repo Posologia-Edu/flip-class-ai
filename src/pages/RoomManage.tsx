@@ -1001,8 +1001,26 @@ const RoomManage = () => {
       if (l.material_id) materialsWithTime.add(l.material_id);
     });
     const materialsViewed = materialsWithTime.size;
-    const quizTime = sessionLogs.filter(l => l.activity_type === "quiz_start" || l.activity_type === "quiz_complete")
+    const recordedQuizTime = sessionLogs
+      .filter(l => l.activity_type === "quiz_complete")
       .reduce((s, l) => s + (l.duration_seconds || 0), 0);
+    const quizStart = sessionLogs
+      .filter(l => l.activity_type === "quiz_start")
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
+    const completedAt = session.completed_at ? new Date(session.completed_at).getTime() : null;
+    const quizStartAt = quizStart ? new Date(quizStart.created_at).getTime() : null;
+    const activeQuizFallback = quizStartAt
+      ? sessionLogs
+          .filter(l => {
+            const createdAt = new Date(l.created_at).getTime();
+            return l.activity_type === "page_active" && !l.material_id && createdAt >= quizStartAt && (!completedAt || createdAt <= completedAt);
+          })
+          .reduce((s, l) => s + (l.duration_seconds || 0), 0)
+      : 0;
+    const elapsedFallback = quizStartAt && completedAt && completedAt > quizStartAt
+      ? Math.min(Math.round((completedAt - quizStartAt) / 1000), 24 * 60 * 60)
+      : 0;
+    const quizTime = recordedQuizTime > 0 ? recordedQuizTime : activeQuizFallback > 0 ? activeQuizFallback : elapsedFallback;
     return { session, totalTime, materialsViewed, quizTime };
   });
 
