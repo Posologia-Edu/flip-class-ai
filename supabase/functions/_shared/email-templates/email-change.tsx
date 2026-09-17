@@ -16,6 +16,11 @@ import {
 
 interface EmailChangeEmailProps {
   siteName: string
+  // oldEmail is the user's current address (HookData.OldEmail). For the
+  // NEW-recipient half of a secure email_change fanout, `email` equals the
+  // recipient (NEW), so the "from" line must render oldEmail to read
+  // "from OLD to NEW" instead of "from NEW to NEW".
+  oldEmail: string
   email: string
   newEmail: string
   confirmationUrl: string
@@ -23,7 +28,7 @@ interface EmailChangeEmailProps {
 
 export const EmailChangeEmail = ({
   siteName,
-  email,
+  oldEmail,
   newEmail,
   confirmationUrl,
 }: EmailChangeEmailProps) => (
@@ -32,17 +37,14 @@ export const EmailChangeEmail = ({
     <Preview>Confirme a alteração do seu email no FlipClass</Preview>
     <Body style={main}>
       <Container style={container}>
-        <div style={logoBar}>
-          <div style={logoIconBox}>📚</div>
-          <span style={logoText}>FlipClass</span>
-        </div>
+        <Text style={brand}>📚 FlipClass</Text>
         <Heading style={h1}>Confirmar alteração de email</Heading>
         <Text style={text}>
-          Você solicitou a alteração do seu email no FlipClass de{' '}
-          <Link href={`mailto:${email}`} style={link}>
-            {email}
+          Você solicitou a alteração do seu email no {siteName} de{' '}
+          <Link href={`mailto:${oldEmail}`} style={link}>
+            {oldEmail}
           </Link>{' '}
-          para{' '}
+          to{' '}
           <Link href={`mailto:${newEmail}`} style={link}>
             {newEmail}
           </Link>
@@ -62,13 +64,28 @@ export const EmailChangeEmail = ({
 
 export default EmailChangeEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: "'Inter', 'Space Grotesk', Arial, sans-serif" }
+const main = { backgroundColor: '#ffffff', fontFamily: "'Inter', Arial, sans-serif" }
 const container = { padding: '32px 28px', maxWidth: '480px', margin: '0 auto' }
-const logoBar = { marginBottom: '24px' }
-const logoIconBox = { fontSize: '24px', display: 'inline' as const, marginRight: '8px' }
-const logoText = { fontSize: '20px', fontWeight: 'bold' as const, color: '#0d8b7c', fontFamily: "'Space Grotesk', Arial, sans-serif" }
-const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#1a2332', margin: '0 0 20px', fontFamily: "'Space Grotesk', Arial, sans-serif" }
-const text = { fontSize: '14px', color: '#64748b', lineHeight: '1.6', margin: '0 0 20px' }
+const brand = { fontSize: '20px', fontWeight: 'bold' as const, color: '#0d8b7c', margin: '0 0 24px' }
+const h1 = {
+  fontSize: '22px',
+  fontWeight: 'bold' as const,
+  color: '#1a2332',
+  margin: '0 0 20px',
+}
+const text = {
+  fontSize: '14px',
+  color: '#64748b',
+  lineHeight: '1.5',
+  margin: '0 0 25px',
+}
 const link = { color: '#0d8b7c', textDecoration: 'underline' }
-const button = { backgroundColor: '#0d8b7c', color: '#ffffff', fontSize: '14px', fontWeight: '600' as const, borderRadius: '12px', padding: '12px 24px', textDecoration: 'none' }
-const footer = { fontSize: '12px', color: '#94a3b8', margin: '28px 0 0' }
+const button = {
+  backgroundColor: '#0d8b7c',
+  color: '#ffffff',
+  fontSize: '14px',
+  borderRadius: '8px',
+  padding: '12px 24px',
+  textDecoration: 'none',
+}
+const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }

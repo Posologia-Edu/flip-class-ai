@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendTemplateEmail } from "../_shared/transactional-email-templates/send-email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,60 +8,6 @@ const corsHeaders = {
 };
 
 const MAX_TEACHERS = 10;
-
-async function sendEmailWithFallback({
-  to,
-  subject,
-  html,
-}: {
-  to: string;
-  subject: string;
-  html: string;
-}) {
-  const resendApiKey = Deno.env.get("RESEND_API_KEY");
-  if (!resendApiKey) {
-    return { ok: false, error: "RESEND_API_KEY not configured" };
-  }
-
-  const primaryFrom = Deno.env.get("RESEND_FROM_EMAIL") || "FlipClass <noreply@tbl.posologia.app>";
-  const fallbackFrom = "FlipClass <onboarding@resend.dev>";
-
-  const send = async (from: string) => {
-    return await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-      }),
-    });
-  };
-
-  const firstTry = await send(primaryFrom);
-  if (firstTry.ok) return { ok: true, usedFrom: primaryFrom };
-
-  const firstError = await firstTry.text();
-  console.error("Resend primary sender error:", firstTry.status, firstError);
-
-  if (primaryFrom === fallbackFrom) {
-    return { ok: false, error: firstError };
-  }
-
-  const secondTry = await send(fallbackFrom);
-  if (secondTry.ok) {
-    console.warn("Email sent using fallback sender:", fallbackFrom);
-    return { ok: true, usedFrom: fallbackFrom, warning: "Email enviado com remetente alternativo temporário." };
-  }
-
-  const secondError = await secondTry.text();
-  console.error("Resend fallback sender error:", secondTry.status, secondError);
-  return { ok: false, error: secondError };
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -285,45 +232,16 @@ Deno.serve(async (req) => {
           .update({ approval_status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
           .eq("user_id", existingUser.id);
 
-        // Send notification email via Resend (with fallback sender)
         const loginUrl = `${origin}/auth`;
-        const emailHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"></head>
-            <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Roboto,sans-serif;">
-              <div style="max-width:520px;margin:40px auto;padding:32px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
-                <div style="text-align:center;margin-bottom:24px;">
-                  <h1 style="font-size:24px;color:#0d9488;margin:0;">FlipClass</h1>
-                </div>
-                <h2 style="font-size:18px;color:#111827;margin-bottom:16px;">Você foi adicionado a uma instituição!</h2>
-                <p style="font-size:15px;color:#374151;line-height:1.6;">
-                  Sua conta na plataforma <strong>FlipClass</strong> foi vinculada ao plano Institucional.
-                  Você já pode acessar todos os recursos disponíveis.
-                </p>
-                <div style="text-align:center;margin:32px 0;">
-                  <a href="${loginUrl}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
-                    Acessar FlipClass
-                  </a>
-                </div>
-                <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-                <p style="font-size:12px;color:#9ca3af;text-align:center;">
-                  FlipClass — Plataforma de Sala de Aula Invertida
-                </p>
-              </div>
-            </body>
-            </html>
-          `;
 
         try {
-          const sendResult = await sendEmailWithFallback({
-            to: email,
-            subject: "Você foi adicionado ao FlipClass!",
-            html: emailHtml,
+          const sendResult = await sendTemplateEmail("institutional-account-added", email, {
+            templateData: { loginUrl },
+            idempotencyKey: `institutional-account-added-${anyExisting?.id || existingUser.id}`,
           });
 
-          if (!sendResult.ok) {
-            console.error("Error sending email to existing user:", sendResult.error);
+          if (!sendResult.sent) {
+            console.warn("Institutional account email suppressed");
           }
         } catch (emailErr) {
           console.error("Error sending email to existing user:", emailErr);
@@ -366,50 +284,18 @@ Deno.serve(async (req) => {
 
       console.log("[INVITE] Link generated successfully for:", email);
 
-      // Step 2: Send invite email directly via Resend (same pipeline that works for existing users)
-      const inviteEmailHtml = `
-        <!DOCTYPE html>
-        <html lang="pt-BR">
-        <head><meta charset="utf-8"></head>
-        <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Roboto,sans-serif;">
-          <div style="max-width:520px;margin:40px auto;padding:32px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
-            <div style="text-align:center;margin-bottom:24px;">
-              <span style="font-size:24px;">📚</span>
-              <h1 style="font-size:24px;color:#0d9488;margin:4px 0 0;display:inline-block;vertical-align:middle;margin-left:8px;">FlipClass</h1>
-            </div>
-            <h2 style="font-size:18px;color:#111827;margin-bottom:16px;">Você foi convidado! 🎉</h2>
-            <p style="font-size:15px;color:#374151;line-height:1.6;">
-              Você recebeu um convite para se juntar ao <strong>FlipClass</strong>.
-              Clique no botão abaixo para definir sua senha e acessar a plataforma.
-            </p>
-            <div style="text-align:center;margin:32px 0;">
-              <a href="${confirmationUrl}" style="display:inline-block;padding:14px 32px;background-color:#0d9488;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
-                Definir Minha Senha
-              </a>
-            </div>
-            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-            <p style="font-size:12px;color:#9ca3af;text-align:center;">
-              Se você não esperava este convite, pode ignorar este email com segurança.
-            </p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      const sendResult = await sendEmailWithFallback({
-        to: email,
-        subject: "Convite para o FlipClass — Defina sua Senha",
-        html: inviteEmailHtml,
+      const sendResult = await sendTemplateEmail("institutional-invite", email, {
+        templateData: { confirmationUrl },
+        idempotencyKey: `institutional-invite-${linkData.user?.id || email}`,
       });
 
-      if (!sendResult.ok) {
-        console.error("[INVITE] Email delivery FAILED for:", email, "Error:", sendResult.error);
+      if (!sendResult.sent) {
         return new Response(JSON.stringify({ error: `Convite criado, mas o email não pôde ser enviado. Tente reenviar.` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      console.log("[INVITE] Email sent successfully to:", email, "via:", sendResult.usedFrom);
+      console.log("[INVITE] Email sent successfully");
 
       // Step 3: Save invite as pending — idempotent by email
       const { error: insertError } = await adminClient
@@ -438,12 +324,7 @@ Deno.serve(async (req) => {
           }, { onConflict: "user_id" });
       }
 
-      const responsePayload: any = { success: true };
-      if (sendResult.warning) {
-        responsePayload.warning = sendResult.warning;
-      }
-
-      return new Response(JSON.stringify(responsePayload), {
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -550,7 +431,8 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("institutional-dashboard error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    const message = err instanceof Error ? err.message : "Erro interno";
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

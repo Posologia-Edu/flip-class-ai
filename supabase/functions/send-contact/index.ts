@@ -1,5 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "npm:zod@3.23.8";
+import { sendTemplateEmail } from "../_shared/transactional-email-templates/send-email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,14 +8,40 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
+const BodySchema = z.object({
+  subject: z.string().trim().min(1).max(200),
+  message: z.string().trim().min(1).max(5000),
+  sender_name: z.string().trim().min(1).max(100).optional(),
+  sender_email: z.string().trim().email().max(255).optional(),
+});
+
+const requests = new Map<string, number[]>();
+
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { subject, message, sender_name, sender_email } = await req.json();
-    if (!subject || !message) throw new Error("Assunto e mensagem são obrigatórios");
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error.flatten().fieldErrors }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { subject, message, sender_name, sender_email } = parsed.data;
+
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    const recent = (requests.get(clientIp) || []).filter((timestamp) => timestamp > cutoff);
+    if (recent.length >= 5) {
+      return new Response(JSON.stringify({ error: "Muitas mensagens. Tente novamente mais tarde." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    requests.set(clientIp, [...recent, Date.now()]);
 
     let fromEmail: string | undefined;
     let fromName: string | undefined;
@@ -47,36 +74,13 @@ serve(async (req) => {
       fromName = sender_name;
     }
 
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    if (!RESEND_API_KEY) throw new Error("Chave de e-mail não configurada");
-
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "FlipClass Contato <noreply@tbl.posologia.app>",
-        to: ["sergio.araujo@ufrn.br"],
-        subject: `[FlipClass Contato] ${subject}`,
-        reply_to: fromEmail,
-        html: `
-          <h2>Nova mensagem de contato - FlipClass</h2>
-          <p><strong>De:</strong> ${fromName} (${fromEmail})</p>
-          <p><strong>Assunto:</strong> ${subject}</p>
-          <hr/>
-          <p>${message.replace(/\n/g, "<br/>")}</p>
-        `,
-      }),
+    const result = await sendTemplateEmail("contact-message", "sergio.araujo@ufrn.br", {
+      templateData: { senderName: fromName, senderEmail: fromEmail, subject, message },
+      idempotencyKey: `contact-${crypto.randomUUID()}`,
+      replyTo: fromEmail,
     });
 
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Falha ao enviar e-mail: ${errBody}`);
-    }
-
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: result.sent, reason: result.sent ? undefined : result.reason }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {

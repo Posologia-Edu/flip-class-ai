@@ -124,7 +124,7 @@ const extractPdfTextInBrowser = async (fileUrl: string) => {
   if (!response.ok) throw new Error(`Falha ao baixar PDF: ${response.status}`);
 
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false }).promise;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -759,27 +759,21 @@ const RoomManage = () => {
       const totalPossible = questions.reduce((s, q) => s + q.maxPoints, 0);
       const totalEarned = questions.reduce((s, q) => s + (q.grade ?? 0), 0);
 
-      const { data, error } = await supabase.functions.invoke("send-transactional-email", {
+      const { data, error } = await supabase.functions.invoke("send-feedback-email", {
         body: {
-          templateName: "feedback-completed",
-          recipientEmail: studentEmail,
-          idempotencyKey: `feedback-${session.id}-${Date.now()}`,
-          templateData: {
-            studentName: session.student_name,
-            roomTitle: room?.title || "Atividade",
-            totalEarned,
-            totalPossible,
-            questions,
-          },
+          sessionId: session.id,
+          totalEarned,
+          totalPossible,
+          questions,
         },
       });
       if (error) {
         console.error("Send feedback email error:", error, data);
         throw error;
       }
-      // Mark session as feedback email sent
-      await supabase.from("student_sessions").update({ feedback_email_sent_at: new Date().toISOString() } as any).eq("id", session.id);
-      setSessions(prev => prev.map(ss => ss.id === session.id ? { ...ss, feedback_email_sent_at: new Date().toISOString() } as any : ss));
+      if (!data?.success) throw new Error("O endereço do aluno não pode receber este e-mail.");
+      const sentAt = data.sentAt || new Date().toISOString();
+      setSessions(prev => prev.map(ss => ss.id === session.id ? { ...ss, feedback_email_sent_at: sentAt } as any : ss));
       toast({ title: "E-mail enviado!", description: `Feedback enviado para ${studentEmail}.` });
     } catch (err: any) {
       toast({ title: "Erro ao enviar e-mail", description: err.message, variant: "destructive" });
