@@ -491,16 +491,55 @@ serve(async (req) => {
       }
 
       if (action === "submit") {
+        const rawQuizDuration = Number(data?.quiz_duration_seconds);
+        const quizDuration = Number.isFinite(rawQuizDuration)
+          ? Math.min(Math.max(Math.round(rawQuizDuration), 0), 24 * 60 * 60)
+          : 0;
+
+        const saveQuizCompletionLog = async (targetSessionId: string, targetRoomId: string) => {
+          if (quizDuration <= 0) return;
+          const { data: existingLog, error: existingLogError } = await supabase
+            .from("student_activity_logs")
+            .select("id, duration_seconds")
+            .eq("session_id", targetSessionId)
+            .eq("activity_type", "quiz_complete")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (existingLogError) throw existingLogError;
+
+          if (existingLog) {
+            if ((existingLog.duration_seconds || 0) < quizDuration) {
+              const { error: updateLogError } = await supabase
+                .from("student_activity_logs")
+                .update({ duration_seconds: quizDuration, metadata: { timing_mode: "atomic_submit" } })
+                .eq("id", existingLog.id);
+              if (updateLogError) throw updateLogError;
+            }
+            return;
+          }
+
+          const { error: insertLogError } = await supabase.from("student_activity_logs").insert({
+            session_id: targetSessionId,
+            room_id: targetRoomId,
+            activity_type: "quiz_complete",
+            material_id: null,
+            duration_seconds: quizDuration,
+            metadata: { timing_mode: "atomic_submit" },
+          });
+          if (insertLogError) throw insertLogError;
+        };
+
         const { data: existing } = await supabase
           .from("student_sessions")
-          .select("completed_at, group_id, is_group_leader")
+          .select("completed_at, group_id, is_group_leader, room_id")
           .eq("id", sessionId)
           .single();
 
         if (existing?.completed_at) {
-          return new Response(JSON.stringify({ error: "Session already completed" }), {
+          await saveQuizCompletionLog(sessionId, existing.room_id);
+          return new Response(JSON.stringify({ success: true, already_completed: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 400,
           });
         }
 
@@ -513,6 +552,8 @@ serve(async (req) => {
 
         if (error) throw error;
 
+        await saveQuizCompletionLog(sessionId, existing.room_id);
+
         // If this is a group leader, replicate score/answers to all group members
         if (existing?.group_id && existing?.is_group_leader) {
           await supabase.from("student_sessions").update({
@@ -520,6 +561,15 @@ serve(async (req) => {
             answers: data.answers,
             completed_at: completedAt,
           }).eq("group_id", existing.group_id).neq("id", sessionId);
+
+          const { data: groupSessions } = await supabase
+            .from("student_sessions")
+            .select("id")
+            .eq("group_id", existing.group_id)
+            .neq("id", sessionId);
+          for (const groupSession of groupSessions || []) {
+            await saveQuizCompletionLog(groupSession.id, existing.room_id);
+          }
         }
 
         return new Response(JSON.stringify({ success: true }), {

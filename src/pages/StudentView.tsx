@@ -87,7 +87,9 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
   const quizProgress = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
   const finalQuizProgress = isCompleted ? 100 : quizProgress;
 
-  const totalTimeSeconds = activityLogs.reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
+  const totalTimeSeconds = activityLogs
+    .filter((l: any) => l.activity_type !== "quiz_complete")
+    .reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
   const totalMinutes = Math.round(totalTimeSeconds / 60);
 
   let highestLevel = 0;
@@ -229,8 +231,9 @@ const StudentView = () => {
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   const [signedUrlMap, setSignedUrlMap] = useState<Record<string, string>>({});
   const [activeMaterialId, setActiveMaterialId] = useState<string | null>(null);
-  const quizStartTime = useRef<number>(0);
-  const activeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const quizElapsedSeconds = useRef(0);
+  const quizStarted = useRef(false);
+  const submittedRef = useRef(false);
   const viewedMaterials = useRef<Set<string>>(new Set());
   const accessedMaterials = useRef<Set<string>>(new Set());
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
@@ -241,6 +244,14 @@ const StudentView = () => {
   const logActivityRef = useRef<((activityType: string, materialId?: string, durationSeconds?: number) => Promise<void>) | null>(null);
   useEffect(() => { tabRef.current = tab; }, [tab]);
   useEffect(() => { activeMaterialIdRef.current = activeMaterialId; }, [activeMaterialId]);
+  useEffect(() => { submittedRef.current = submitted; }, [submitted]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const elapsed = Number(sessionStorage.getItem(`quiz_elapsed_${sessionId}`) || "0");
+    quizElapsedSeconds.current = Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0;
+    quizStarted.current = sessionStorage.getItem(`quiz_started_${sessionId}`) === "true";
+  }, [sessionId]);
 
   const [tokenReady, setTokenReady] = useState(false);
 
@@ -302,6 +313,25 @@ const StudentView = () => {
 
     return () => clearInterval(tickTimer);
   }, [sessionId, roomId]);
+
+  // Persist active quiz time so reloads, tab changes and repeated clicks do not reset it.
+  useEffect(() => {
+    if (!sessionId) return;
+    const TIMER_TICK_SECONDS = 5;
+    const timer = setInterval(() => {
+      if (
+        quizStarted.current &&
+        !submittedRef.current &&
+        tabRef.current === "activity" &&
+        document.visibilityState === "visible"
+      ) {
+        quizElapsedSeconds.current += TIMER_TICK_SECONDS;
+        sessionStorage.setItem(`quiz_elapsed_${sessionId}`, String(quizElapsedSeconds.current));
+      }
+    }, TIMER_TICK_SECONDS * 1000);
+
+    return () => clearInterval(timer);
+  }, [sessionId]);
 
   // Track material interaction explicitly for future page_active attribution
   const handleMaterialInteraction = useCallback((materialId: string) => {
@@ -595,7 +625,9 @@ const StudentView = () => {
 
   const handleStartQuiz = () => {
     setTab("activity");
-    quizStartTime.current = Date.now();
+    if (!sessionId || submittedRef.current || quizStarted.current) return;
+    quizStarted.current = true;
+    sessionStorage.setItem(`quiz_started_${sessionId}`, "true");
     logActivity("quiz_start");
   };
 
@@ -610,8 +642,8 @@ const StudentView = () => {
 
   const submitQuiz = async () => {
     setSubmitted(true);
-    const quizDuration = Math.round((Date.now() - quizStartTime.current) / 1000);
-    logActivity("quiz_complete", undefined, quizDuration);
+    submittedRef.current = true;
+    const quizDuration = Math.max(1, Math.round(quizElapsedSeconds.current));
 
     // Update sessionData locally so progress bar reflects completion immediately
     setSessionData(prev => prev ? { ...prev, completed_at: new Date().toISOString(), score: Object.keys(answers).length, answers: answers as any } : prev);
@@ -621,12 +653,13 @@ const StudentView = () => {
       const { data: res, error } = await supabase.functions.invoke("student-session", {
         body: {
           action: "submit", sessionId, token,
-          data: { score: Object.keys(answers).length, answers },
+          data: { score: Object.keys(answers).length, answers, quiz_duration_seconds: quizDuration },
         },
       });
       const failed = !!error || ((res as any)?.error && (res as any).error !== "Session already completed");
       if (failed) {
         setSubmitted(false);
+        submittedRef.current = false;
         toast({
           variant: "destructive",
           title: "Não foi possível enviar",
@@ -634,6 +667,8 @@ const StudentView = () => {
         });
         return;
       }
+      sessionStorage.removeItem(`quiz_elapsed_${sessionId}`);
+      sessionStorage.removeItem(`quiz_started_${sessionId}`);
     }
     toast({ title: "Atividade concluída!", description: "Suas respostas foram enviadas ao professor para avaliação." });
   };
