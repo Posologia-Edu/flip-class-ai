@@ -53,6 +53,29 @@ interface StudentStats {
   quizTime: number;
 }
 
+const ACTIVITY_LOG_PAGE_SIZE = 1000;
+
+const fetchAllRoomActivityLogs = async (roomId: string): Promise<ActivityLog[]> => {
+  const allLogs: ActivityLog[] = [];
+
+  for (let from = 0; ; from += ACTIVITY_LOG_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("student_activity_logs")
+      .select("activity_type, material_id, duration_seconds, session_id, created_at")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true })
+      .range(from, from + ACTIVITY_LOG_PAGE_SIZE - 1);
+
+    if (error) throw error;
+
+    const page = (data as ActivityLog[]) || [];
+    allLogs.push(...page);
+    if (page.length < ACTIVITY_LOG_PAGE_SIZE) break;
+  }
+
+  return allLogs;
+};
+
 interface QuizQuestion {
   question: string;
   type: string;
@@ -220,7 +243,7 @@ const RoomManage = () => {
       supabase.from("materials").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("activities").select("*").eq("room_id", roomId).order("created_at"),
       supabase.from("student_sessions").select("*").eq("room_id", roomId).order("created_at"),
-      supabase.from("student_activity_logs").select("activity_type, material_id, duration_seconds, session_id, created_at").eq("room_id", roomId),
+      fetchAllRoomActivityLogs(roomId),
       supabase.from("room_students").select("student_email, student_name").eq("room_id", roomId),
       supabase.from("room_groups").select("id, group_name").eq("room_id", roomId),
     ]);
@@ -228,7 +251,7 @@ const RoomManage = () => {
     setMaterials(matRes.data || []);
     setActivities(actRes.data || []);
     setSessions(sessRes.data || []);
-    setActivityLogs((logsRes.data as ActivityLog[]) || []);
+    setActivityLogs(logsRes);
     setEnrolledStudents((enrolledRes.data || []) as { student_email: string; student_name: string | null }[]);
     // Build group name map
     const gMap: Record<string, string> = {};
