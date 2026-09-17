@@ -645,9 +645,6 @@ const StudentView = () => {
     submittedRef.current = true;
     const quizDuration = Math.max(1, Math.round(quizElapsedSeconds.current));
 
-    // Update sessionData locally so progress bar reflects completion immediately
-    setSessionData(prev => prev ? { ...prev, completed_at: new Date().toISOString(), score: Object.keys(answers).length, answers: answers as any } : prev);
-
     if (sessionId) {
       const token = await ensureStudentToken(sessionId, roomId);
       const { data: res, error } = await supabase.functions.invoke("student-session", {
@@ -667,6 +664,12 @@ const StudentView = () => {
         });
         return;
       }
+      setSessionData(prev => prev ? {
+        ...prev,
+        completed_at: new Date().toISOString(),
+        score: Object.keys(answers).length,
+        answers: answers as any,
+      } : prev);
       sessionStorage.removeItem(`quiz_elapsed_${sessionId}`);
       sessionStorage.removeItem(`quiz_started_${sessionId}`);
     }

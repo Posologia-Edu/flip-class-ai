@@ -492,12 +492,47 @@ serve(async (req) => {
 
       if (action === "submit") {
         const rawQuizDuration = Number(data?.quiz_duration_seconds);
-        const quizDuration = Number.isFinite(rawQuizDuration)
+        const clientQuizDuration = Number.isFinite(rawQuizDuration)
           ? Math.min(Math.max(Math.round(rawQuizDuration), 0), 24 * 60 * 60)
           : 0;
 
+        const resolveQuizDuration = async (targetSessionId: string) => {
+          if (clientQuizDuration > 0) {
+            return { duration: clientQuizDuration, timingMode: "atomic_submit" };
+          }
+
+          const { data: timingLogs, error: timingLogsError } = await supabase
+            .from("student_activity_logs")
+            .select("activity_type, duration_seconds, created_at, material_id")
+            .eq("session_id", targetSessionId)
+            .in("activity_type", ["quiz_start", "page_active"])
+            .order("created_at", { ascending: true });
+          if (timingLogsError) throw timingLogsError;
+
+          const firstQuizStart = (timingLogs || []).find((log: any) => log.activity_type === "quiz_start");
+          const quizStartMs = firstQuizStart ? new Date(firstQuizStart.created_at).getTime() : null;
+          const activeSeconds = (timingLogs || [])
+            .filter((log: any) => {
+              const logMs = new Date(log.created_at).getTime();
+              return log.activity_type === "page_active" && !log.material_id && (!quizStartMs || logMs >= quizStartMs);
+            })
+            .reduce((sum: number, log: any) => sum + Math.max(Number(log.duration_seconds) || 0, 0), 0);
+          if (activeSeconds > 0) {
+            return { duration: Math.min(Math.round(activeSeconds), 24 * 60 * 60), timingMode: "server_active_fallback" };
+          }
+
+          if (quizStartMs) {
+            const elapsedSeconds = Math.round((Date.now() - quizStartMs) / 1000);
+            if (elapsedSeconds > 0) {
+              return { duration: Math.min(elapsedSeconds, 24 * 60 * 60), timingMode: "server_elapsed_fallback" };
+            }
+          }
+
+          return { duration: 1, timingMode: "server_minimum_fallback" };
+        };
+
         const saveQuizCompletionLog = async (targetSessionId: string, targetRoomId: string) => {
-          if (quizDuration <= 0) return;
+          const { duration: quizDuration, timingMode } = await resolveQuizDuration(targetSessionId);
           const { data: existingLog, error: existingLogError } = await supabase
             .from("student_activity_logs")
             .select("id, duration_seconds")
@@ -512,7 +547,7 @@ serve(async (req) => {
             if ((existingLog.duration_seconds || 0) < quizDuration) {
               const { error: updateLogError } = await supabase
                 .from("student_activity_logs")
-                .update({ duration_seconds: quizDuration, metadata: { timing_mode: "atomic_submit" } })
+                .update({ duration_seconds: quizDuration, metadata: { timing_mode: timingMode } })
                 .eq("id", existingLog.id);
               if (updateLogError) throw updateLogError;
             }
@@ -525,7 +560,7 @@ serve(async (req) => {
             activity_type: "quiz_complete",
             material_id: null,
             duration_seconds: quizDuration,
-            metadata: { timing_mode: "atomic_submit" },
+            metadata: { timing_mode: timingMode },
           });
           if (insertLogError) throw insertLogError;
         };
