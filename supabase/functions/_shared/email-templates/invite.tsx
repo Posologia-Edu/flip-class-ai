@@ -25,28 +25,28 @@ export const InviteEmail = ({
   siteUrl,
   confirmationUrl,
 }: InviteEmailProps) => (
-  <Html lang="pt-BR" dir="ltr">
-    <Head />
-    <Preview>Você foi convidado para o FlipClass!</Preview>
+  <Html lang="en" dir="ltr">
+    <Head>
+      <style>{darkModeCss}</style>
+    </Head>
+    <Preview>You've been invited to join {siteName}</Preview>
     <Body style={main}>
       <Container style={container}>
-        <div style={logoBar}>
-          <div style={logoIconBox}>📚</div>
-          <span style={logoText}>FlipClass</span>
-        </div>
-        <Heading style={h1}>Você foi convidado! 🎉</Heading>
+        <Heading style={h1}>You've been invited</Heading>
         <Text style={text}>
-          Você recebeu um convite para se juntar ao{' '}
+          You've been invited to join{' '}
           <Link href={siteUrl} style={link}>
-            <strong>FlipClass</strong>
+            <strong>{siteName}</strong>
           </Link>
-          . Clique no botão abaixo para definir sua senha e acessar a plataforma.
+          . Click the button below to accept the invitation and create your
+          account.
         </Text>
-        <Button style={button} href={confirmationUrl}>
-          Definir Minha Senha
+        <Button className="dm-btn" style={button} href={confirmationUrl}>
+          Accept Invitation
         </Button>
         <Text style={footer}>
-          Se você não esperava este convite, pode ignorar este email com segurança.
+          If you weren't expecting this invitation, you can safely ignore this
+          email.
         </Text>
       </Container>
     </Body>
@@ -55,13 +55,36 @@ export const InviteEmail = ({
 
 export default InviteEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: "'Inter', 'Space Grotesk', Arial, sans-serif" }
-const container = { padding: '32px 28px', maxWidth: '480px', margin: '0 auto' }
-const logoBar = { marginBottom: '24px' }
-const logoIconBox = { fontSize: '24px', display: 'inline' as const, marginRight: '8px' }
-const logoText = { fontSize: '20px', fontWeight: 'bold' as const, color: '#0d8b7c', fontFamily: "'Space Grotesk', Arial, sans-serif" }
-const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#1a2332', margin: '0 0 20px', fontFamily: "'Space Grotesk', Arial, sans-serif" }
-const text = { fontSize: '14px', color: '#64748b', lineHeight: '1.6', margin: '0 0 20px' }
-const link = { color: '#0d8b7c', textDecoration: 'underline' }
-const button = { backgroundColor: '#0d8b7c', color: '#ffffff', fontSize: '14px', fontWeight: '600' as const, borderRadius: '12px', padding: '12px 24px', textDecoration: 'none' }
-const footer = { fontSize: '12px', color: '#94a3b8', margin: '28px 0 0' }
+const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
+const container = { padding: '20px 25px' }
+const h1 = {
+  fontSize: '22px',
+  fontWeight: 'bold' as const,
+  color: '#000000',
+  margin: '0 0 20px',
+}
+const text = {
+  fontSize: '14px',
+  color: '#55575d',
+  lineHeight: '1.5',
+  margin: '0 0 25px',
+}
+const link = { color: 'inherit', textDecoration: 'underline' }
+const button = {
+  backgroundColor: '#000000',
+  color: '#ffffff',
+  fontSize: '14px',
+  border: '1px solid #000000',
+  borderRadius: '8px',
+  padding: '12px 20px',
+  textDecoration: 'none',
+}
+const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+// Rendered as a text child, which React may HTML-escape: keep this CSS free of >, &, and quotes.
+const darkModeCss = `
+  @media (prefers-color-scheme: dark) {
+    .dm-btn { background-color: #ffffff !important; color: #000000 !important; }
+  }
+  [data-ogsc] .dm-btn { background-color: #ffffff !important; color: #000000 !important; }
+  [data-ogsb] .dm-btn { background-color: #ffffff !important; color: #000000 !important; }
+`
