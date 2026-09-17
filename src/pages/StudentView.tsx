@@ -87,7 +87,9 @@ const ProgressDashboard = ({ materials, activityLogs, sessionData, quizData, ans
   const quizProgress = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
   const finalQuizProgress = isCompleted ? 100 : quizProgress;
 
-  const totalTimeSeconds = activityLogs.reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
+  const totalTimeSeconds = activityLogs
+    .filter((l: any) => l.activity_type !== "quiz_complete")
+    .reduce((s: number, l: any) => s + (l.duration_seconds || 0), 0);
   const totalMinutes = Math.round(totalTimeSeconds / 60);
 
   let highestLevel = 0;

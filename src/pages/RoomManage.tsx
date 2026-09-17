@@ -994,7 +994,9 @@ const RoomManage = () => {
 
   const studentStats: StudentStats[] = sessions.map(session => {
     const sessionLogs = activityLogs.filter(l => l.session_id === session.id);
-    const totalTime = sessionLogs.reduce((s, l) => s + (l.duration_seconds || 0), 0);
+    const totalTime = sessionLogs
+      .filter(l => l.activity_type !== "quiz_complete")
+      .reduce((s, l) => s + (l.duration_seconds || 0), 0);
     const materialViews = sessionLogs.filter(l => l.activity_type === "material_view" && l.material_id);
     const materialsWithTime = new Set<string>();
     materialViews.forEach(l => {

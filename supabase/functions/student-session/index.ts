@@ -525,6 +525,7 @@ serve(async (req) => {
             activity_type: "quiz_complete",
             material_id: null,
             duration_seconds: quizDuration,
+            metadata: { timing_mode: "atomic_submit" },
           });
           if (insertLogError) throw insertLogError;
         };
