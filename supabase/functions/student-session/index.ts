@@ -512,7 +512,7 @@ serve(async (req) => {
             if ((existingLog.duration_seconds || 0) < quizDuration) {
               const { error: updateLogError } = await supabase
                 .from("student_activity_logs")
-                .update({ duration_seconds: quizDuration })
+                .update({ duration_seconds: quizDuration, metadata: { timing_mode: "atomic_submit" } })
                 .eq("id", existingLog.id);
               if (updateLogError) throw updateLogError;
             }
