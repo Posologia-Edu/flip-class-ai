@@ -11,8 +11,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronDown } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
-const FloatingAuth = () => {
+type FloatingAuthProps = {
+  className?: string;
+  showChevron?: boolean;
+};
+
+const FloatingAuth = ({ className, showChevron = true }: FloatingAuthProps) => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
@@ -101,8 +107,8 @@ const FloatingAuth = () => {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="font-medium gap-1.5">
-          Entrar <ChevronDown className="w-3.5 h-3.5" />
+        <Button variant="outline" className={cn("font-medium gap-1.5", className)}>
+          Entrar {showChevron && <ChevronDown className="w-3.5 h-3.5" />}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end" sideOffset={8}>

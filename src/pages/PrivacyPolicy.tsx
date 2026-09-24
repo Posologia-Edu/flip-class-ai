@@ -1,22 +1,11 @@
 import { Link } from "react-router-dom";
-import { BookOpen, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { PublicHeader } from "@/components/PublicHeader";
 import { PublicFooter } from "@/components/PublicFooter";
 
 export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <BookOpen className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-display text-lg font-bold text-foreground">FlipClass</span>
-        </Link>
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/"><ArrowLeft className="w-4 h-4 mr-1" /> Início</Link>
-        </Button>
-      </header>
+      <PublicHeader />
 
       <main className="flex-1 max-w-3xl mx-auto px-6 py-12 prose prose-sm dark:prose-invert">
         <h1 className="font-display text-3xl font-bold text-foreground mb-2">Política de Privacidade</h1>

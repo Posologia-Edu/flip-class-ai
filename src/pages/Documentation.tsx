@@ -70,30 +70,31 @@ const navItems = [
   { id: "tech-deploy", label: "Deploy & Infra" },
 ];
 
-const Documentation = () => {
+const Documentation = ({ showHeader = true }: { showHeader?: boolean }) => {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <BookOpen className="w-4 h-4 text-primary-foreground" />
+      {showHeader && (
+        <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+          <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                  <BookOpen className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <span className="font-display text-lg font-bold text-foreground">FlipClass — Documentação</span>
               </div>
-              <span className="font-display text-lg font-bold text-foreground">FlipClass — Documentação</span>
             </div>
+            <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+              Voltar ao Início
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={() => navigate("/")}>
-            Voltar ao Início
-          </Button>
-        </div>
-      </header>
+        </header>
+      )}
 
       <div className="max-w-7xl mx-auto flex gap-8 px-6 py-8">
         {/* Sidebar Nav */}

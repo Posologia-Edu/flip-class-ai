@@ -1,13 +1,13 @@
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  BookOpen, Brain, ClipboardCheck, BarChart3, MessageSquare, Shield,
+  Brain, ClipboardCheck, BarChart3, MessageSquare, Shield,
   Upload, Calendar, FolderOpen, Building2, ArrowRight, Sparkles,
   Users, Bell, Star, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PublicFooter } from "@/components/PublicFooter";
-import FloatingAuth from "@/components/FloatingAuth";
+import { PublicHeader } from "@/components/PublicHeader";
 
 const features = [
   {
@@ -80,16 +80,7 @@ export default function Features() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <BookOpen className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-display text-lg font-bold text-foreground">FlipClass</span>
-        </Link>
-        <FloatingAuth />
-      </header>
+      <PublicHeader />
 
       {/* Hero */}
       <section className="py-16 px-6 text-center">

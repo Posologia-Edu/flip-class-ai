@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { BookOpen, Send, Loader2 } from "lucide-react";
+import { Send, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PublicFooter } from "@/components/PublicFooter";
-import FloatingAuth from "@/components/FloatingAuth";
+import { PublicHeader } from "@/components/PublicHeader";
 
 export default function PublicContact() {
   const { toast } = useToast();
@@ -54,15 +53,7 @@ export default function PublicContact() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <BookOpen className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-display text-lg font-bold text-foreground">FlipClass</span>
-        </Link>
-        <FloatingAuth />
-      </header>
+      <PublicHeader />
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <Card className="w-full max-w-xl">

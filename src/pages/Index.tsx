@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  BookOpen, Users, Sparkles, ArrowRight, FileText, Brain,
+  Users, Sparkles, ArrowRight, FileText, Brain,
   BarChart3, Shield, MessageSquare, ClipboardCheck, Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import FloatingAuth from "@/components/FloatingAuth";
+import { PublicHeader } from "@/components/PublicHeader";
 import { PublicFooter } from "@/components/PublicFooter";
 
 const features = [
@@ -147,15 +147,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <BookOpen className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-display text-lg font-bold text-foreground">FlipClass</span>
-        </div>
-        <FloatingAuth />
-      </header>
+      <PublicHeader />
 
       {/* Hero */}
       <section id="enter-room" className="flex-1 flex items-center justify-center px-6 py-12 md:py-0 scroll-mt-20">
