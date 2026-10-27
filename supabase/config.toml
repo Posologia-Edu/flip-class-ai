@@ -37,3 +37,5 @@ project_id = "qxqvttkcemshgsdobgfe"
     verify_jwt = false
   [functions.simulation-step]
     verify_jwt = false
+  [functions.generate-highlights]
+    verify_jwt = false
