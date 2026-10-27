@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, BookOpen, Users, Clock, Trash2, Eye, BarChart3, Lock,
   CalendarClock, Users2, Download, FileText, ClipboardList,
-  FolderOpen, ArrowLeft, Palette, Pencil, Copy, Link,
+  FolderOpen, ArrowLeft, Palette, Pencil, Copy, Link, Sparkles,
   MoreVertical, RotateCcw,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -70,6 +70,7 @@ const RoomsList = () => {
   const [importStudents, setImportStudents] = useState(true);
   const [importMaterials, setImportMaterials] = useState(false);
   const [importActivities, setImportActivities] = useState(false);
+  const [importHighlights, setImportHighlights] = useState(false);
 
   // Discipline management
   const [discDialogOpen, setDiscDialogOpen] = useState(false);
@@ -257,6 +258,14 @@ const RoomsList = () => {
             importResults.push(`${activities.length} atividade(s)`);
           }
         }
+        if (importHighlights) {
+          const { data: hl } = await supabase.from("room_highlights").select("highlights").eq("room_id", importFromRoomId).maybeSingle();
+          const list = Array.isArray(hl?.highlights) ? hl.highlights : [];
+          if (list.length > 0) {
+            await supabase.from("room_highlights").insert({ room_id: newRoom.id, highlights: hl!.highlights });
+            importResults.push(`${list.length} highlight(s)`);
+          }
+        }
         if (importResults.length > 0) toast({ title: "Sala criada!", description: `Importado: ${importResults.join(", ")}.` });
         else toast({ title: "Sala criada!", description: "Nenhum item encontrado para importar." });
       } else {
@@ -268,6 +277,7 @@ const RoomsList = () => {
       setImportStudents(true);
       setImportMaterials(false);
       setImportActivities(false);
+      setImportHighlights(false);
       setSelectedDisciplineForRoom("");
       setDialogOpen(false);
       fetchRooms();
@@ -299,11 +309,13 @@ const RoomsList = () => {
       return;
     }
     // Copy materials, activities, students
-    const [{ data: mats }, { data: acts }, { data: studs }] = await Promise.all([
+    const [{ data: mats }, { data: acts }, { data: studs }, { data: hl }] = await Promise.all([
       supabase.from("materials").select("title, type, url, thumbnail_url, content_text_for_ai, is_published").eq("room_id", room.id),
       supabase.from("activities").select("material_id, quiz_data, is_published, title, peer_review_enabled, peer_review_criteria").eq("room_id", room.id),
       supabase.from("room_students").select("student_email, student_name").eq("room_id", room.id),
+      supabase.from("room_highlights").select("highlights").eq("room_id", room.id).maybeSingle(),
     ]);
+    if (hl && Array.isArray(hl.highlights) && hl.highlights.length > 0) await supabase.from("room_highlights").insert({ room_id: newRoom.id, highlights: hl.highlights });
     if (studs && studs.length > 0) await supabase.from("room_students").insert(studs.map(s => ({ room_id: newRoom.id, student_email: s.student_email, student_name: s.student_name })));
     if (mats && mats.length > 0) await supabase.from("materials").insert(mats.map(m => ({ room_id: newRoom.id, ...m })));
     if (acts && acts.length > 0) {
@@ -521,7 +533,7 @@ const RoomsList = () => {
         {rooms.length > 0 && (
           <div className="space-y-3">
             <Label className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Importar de outra sala (opcional)</Label>
-            <Select value={importFromRoomId} onValueChange={(v) => { setImportFromRoomId(v); if (v === "none") { setImportStudents(true); setImportMaterials(false); setImportActivities(false); } }}>
+            <Select value={importFromRoomId} onValueChange={(v) => { setImportFromRoomId(v); if (v === "none") { setImportStudents(true); setImportMaterials(false); setImportActivities(false); setImportHighlights(false); } }}>
               <SelectTrigger><SelectValue placeholder="Nenhuma — começar vazia" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Nenhuma — começar vazia</SelectItem>
@@ -546,6 +558,10 @@ const RoomsList = () => {
                 <div className="flex items-center gap-2">
                   <Checkbox id="import-activities" checked={importActivities} onCheckedChange={(v) => setImportActivities(!!v)} />
                   <label htmlFor="import-activities" className="text-sm flex items-center gap-1.5 cursor-pointer"><ClipboardList className="w-3.5 h-3.5 text-muted-foreground" /> Atividades</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id="import-highlights" checked={importHighlights} onCheckedChange={(v) => setImportHighlights(!!v)} />
+                  <label htmlFor="import-highlights" className="text-sm flex items-center gap-1.5 cursor-pointer"><Sparkles className="w-3.5 h-3.5 text-muted-foreground" /> Highlights</label>
                 </div>
               </div>
             )}
