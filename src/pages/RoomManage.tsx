@@ -16,6 +16,7 @@ import CollaborativeProjects from "@/components/CollaborativeProjects";
 import StudentGroups from "@/components/StudentGroups";
 import SimulationsManager from "@/components/SimulationsManager";
 import CopilotPanel from "@/components/CopilotPanel";
+import HighlightsPanel from "@/components/HighlightsPanel";
 import OSCEManager from "@/components/OSCEManager";
 import StudentTwinPanel from "@/components/StudentTwinPanel";
 import KnowledgeGraph from "@/components/KnowledgeGraph";
@@ -1135,6 +1136,8 @@ const RoomManage = () => {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold">Materiais</h2>
+            <div className="flex items-center gap-2">
+            {roomId && materials.length > 0 && <HighlightsPanel roomId={roomId} />}
             {isOwner && (
             <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetMaterialForm(); }}>
               <DialogTrigger asChild>
@@ -1225,6 +1228,7 @@ const RoomManage = () => {
               </DialogContent>
             </Dialog>
             )}
+            </div>
           </div>
 
           {materials.length === 0 ? (

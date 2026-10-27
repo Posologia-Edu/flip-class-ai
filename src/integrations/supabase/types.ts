@@ -1146,6 +1146,35 @@ export type Database = {
           },
         ]
       }
+      room_highlights: {
+        Row: {
+          created_at: string
+          highlights: Json
+          room_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          highlights?: Json
+          room_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          highlights?: Json
+          room_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_highlights_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_students: {
         Row: {
           created_at: string
